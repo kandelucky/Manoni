@@ -1,0 +1,22 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+
+# OS / editor junk
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+
+# App runtime output (deleted photos are moved here)
+_deleted/
