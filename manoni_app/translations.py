@@ -58,10 +58,16 @@ CATALOG_EN = {
 
     # --- Focus blur tool (focus.py) ---------------------------------------
     "ბლური": "Blur",
+    "წრე": "Circle",
+    "ხაზი": "Line",
     "გადაათრიე წრე ფოკუსისთვის; კიდე ზომას ცვლის. "
     "შიგნით მკვეთრია, გარეთ — ბლური.":
         "Drag the circle to set the focus; the edge resizes it. "
         "Sharp inside, blurred outside.",
+    "გადაათრიე ზოლი ფოკუსისთვის; კიდე სიგანეს ცვლის, "
+    "ბოლო წერტილი — კუთხეს. ზოლში მკვეთრია, გარეთ — ბლური.":
+        "Drag the band to set the focus; an edge changes its width, "
+        "the end dot rotates it. Sharp in the band, blurred outside.",
     "ბლურის სიძლიერე": "Blur strength",
     "გადასვლის სიფაფუკე": "Transition softness",
     "ბლურის მოშორება": "Remove blur",
@@ -165,6 +171,23 @@ CATALOG_EN = {
         "The whole image is selected — nothing changes",
     "მოიჭრა → {w}×{h}px  ·  შენახვა ფაილში ჩასაწერად":
         "Cropped → {w}×{h}px  ·  Save to write it to a file",
+    "შენი ზომები": "My sizes",
+    "ორიგ.": "Orig.",
+    "საკუთ.": "Custom",
+    "Instagram პორტრეტი": "Instagram portrait",
+    "პოსტი · ვერტიკალური": "Post · vertical",
+    "სრული ეკრანი": "Full screen",
+    "ჰორიზონტალური": "Horizontal",
+    "გაზიარების ბანერი": "Share banner",
+    "შენი ზომა": "Your size",
+    "შენი საზომის დამატება სიაში": "Add your size to the list",
+    "ჯერ ზომები არ გაქვს": "No sizes yet",
+    "ზომის შექმნა": "Create size",
+    "ზომის რედაქტირება": "Edit size",
+    "საკუთარი ფორმა": "Custom shape",
+    "დაარქვი სახელი და მიუთითე სიგანე : სიმაღლე (პიქსელი ან პროპორცია, მაგ. 4:5).":
+        "Name it and set width : height (pixels or a ratio, e.g. 4:5).",
+    "ზომა — სიგანე : სიმაღლე": "Size — Width : Height",
 
     # --- Retouch / heal tool (heal.py) ------------------------------------
     "ავტო შეკეთება": "Auto heal",

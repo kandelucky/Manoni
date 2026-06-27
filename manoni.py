@@ -146,9 +146,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.sepia = 0.0         # sepia: blend toward a warm-toned monochrome (0 = colour)
         self.vignette = 1.0      # vignette: <1 lightens corners, >1 darkens; 1 = off
         self._vig_cache = {}     # geometry key -> mask; reused across slider drags
-        # Selective focus blur (Fotor-style depth of field): a draggable circle
-        # kept sharp while the rest blurs. None = off, else {cx, cy, r (source px),
-        # blur, feather}. A LIVE non-destructive effect like the vignette.
+        # Selective focus blur (Fotor-style depth of field): a draggable shape
+        # kept sharp while the rest blurs. None = off, else a dict with shape
+        # "circle" {cx, cy, r} or "line" {cx, cy, angle, width} (all source px),
+        # plus blur + feather. A LIVE non-destructive effect like the vignette.
         self.focus = None
         self._focus_cache = {}   # geometry key -> mask; reused across blur drags
         self._focus_drag = None  # in-progress circle drag state, or None

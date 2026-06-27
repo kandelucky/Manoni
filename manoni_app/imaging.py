@@ -225,16 +225,19 @@ def apply_vignette(img, amount, scale, src_box, full_size, cache=None):
 # --- Selective focus blur (depth of field) -----------------------------------
 
 def apply_focus_blur(img, focus, scale, src_box, cache=None):
-    """Keep a circle sharp and Gaussian-blur everything outside it — the classic
-    portrait / tilt-shift depth effect (Fotor's "blur" tool).
+    """Keep a SHAPE sharp and Gaussian-blur everything outside it — the classic
+    portrait / tilt-shift depth effect (Fotor's "blur" tool). Two shapes:
 
-    `focus` = {cx, cy, r, blur, feather}. cx/cy/r are in FULL-RES SOURCE pixels
-    (like the crop box), so the circle stays anchored to the photo through zoom
-    and pan. They are mapped into this region's display pixels via `src_box` +
-    `scale`, exactly like the vignette — so the small preview and the full-res
-    save composite identically. `blur` (0..1) sets the blur radius; `feather`
-    (0..1) softens the sharp→blurred transition. The mask depends only on the
-    geometry, so it is cached across blur-slider drags via the optional `cache`."""
+      • "circle" — a round in-focus area  {cx, cy, r}
+      • "line"   — a straight in-focus band {cx, cy, angle, width}  (tilt-shift)
+
+    All coordinates are FULL-RES SOURCE pixels (like the crop box), so the shape
+    stays anchored to the photo through zoom and pan. They are mapped into this
+    region's display pixels via `src_box` + `scale`, exactly like the vignette —
+    so the small preview and the full-res save composite identically. `blur`
+    (0..1) sets the blur radius; `feather` (0..1) softens the sharp→blurred
+    transition. The mask depends only on the geometry, so it is cached across
+    blur-slider drags via the optional `cache`."""
     blur_amt = float(focus.get("blur", 0.0))
     if blur_amt <= 0.0:
         return img
@@ -245,19 +248,45 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
     sx0, sy0, _sx1, _sy1 = src_box
     cx = (focus["cx"] - sx0) * scale
     cy = (focus["cy"] - sy0) * scale
-    rx = max(1.0, focus["r"] * scale)
     feather = focus.get("feather", 0.4)
+    shape = focus.get("shape", "circle")
 
-    key = (w, h, round(cx, 1), round(cy, 1), round(rx, 1), round(feather, 3))
+    if shape == "line":
+        hw = max(1.0, focus.get("width", 0.0) * 0.5 * scale)   # half-band, display px
+        angle = focus.get("angle", 0.0)
+        key = (w, h, round(cx, 1), round(cy, 1), round(hw, 1),
+               round(angle, 4), round(feather, 3), "line")
+    else:
+        rx = max(1.0, focus["r"] * scale)
+        key = (w, h, round(cx, 1), round(cy, 1), round(rx, 1),
+               round(feather, 3), "circle")
+
     mask = cache.get(key) if cache is not None else None
     if mask is None:
         # Low-frequency mask: build it small, then scale up (cheap on a big save).
         f = min(1.0, FOCUS_MASK_MAX / max(w, h))
         mw, mh = max(1, round(w * f)), max(1, round(h * f))
         mask = Image.new("L", (mw, mh), 0)
-        bbox = [(cx - rx) * f, (cy - rx) * f, (cx + rx) * f, (cy + rx) * f]
-        ImageDraw.Draw(mask).ellipse(bbox, fill=255)    # 255 inside = stays sharp
-        soft = max(0.5, feather * rx * f)
+        draw = ImageDraw.Draw(mask)
+        if shape == "line":
+            # The sharp band: a long quad centred on the line, ±half-width across
+            # it. Drawn far past the image both ways along the line so it spans
+            # the frame at any angle. 255 inside the band = stays sharp.
+            ux, uy = math.cos(angle), math.sin(angle)       # along the line
+            nx, ny = -uy, ux                                # across (perpendicular)
+            L = (mw + mh) * 2 + 10
+            ccx, ccy, hwf = cx * f, cy * f, hw * f
+            draw.polygon([
+                (ccx + ux * L + nx * hwf, ccy + uy * L + ny * hwf),
+                (ccx - ux * L + nx * hwf, ccy - uy * L + ny * hwf),
+                (ccx - ux * L - nx * hwf, ccy - uy * L - ny * hwf),
+                (ccx + ux * L - nx * hwf, ccy + uy * L - ny * hwf),
+            ], fill=255)
+            soft = max(0.5, feather * hwf)
+        else:
+            bbox = [(cx - rx) * f, (cy - rx) * f, (cx + rx) * f, (cy + rx) * f]
+            draw.ellipse(bbox, fill=255)                     # 255 inside = sharp
+            soft = max(0.5, feather * rx * f)
         mask = mask.filter(ImageFilter.GaussianBlur(soft))
         if (mw, mh) != (w, h):
             mask = mask.resize((w, h), Image.BILINEAR)
@@ -265,7 +294,7 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
             cache.clear()            # keep only the latest geometry (single slot)
             cache[key] = mask
     blurred = img.filter(ImageFilter.GaussianBlur(radius))
-    # Inside the circle (mask=255) keep the sharp img; outside, the blurred copy.
+    # Inside the shape (mask=255) keep the sharp img; outside, the blurred copy.
     return Image.composite(img, blurred, mask)
 
 
