@@ -6,138 +6,582 @@ shared `self`, so behaviour is identical to when it lived on the class.
 import os
 import math
 import tkinter as tk
+import tkinter.ttk as ttk
 
 from ..config import (ACCENT, BAR, BG, FG, FG_DIM, HOVER,
-                      EDIT_PANEL_W, EDIT_PAD, CHIP_GAP)
+                      EDIT_PANEL_W, EDIT_PAD)
 from ..widgets import Tooltip
 from ..i18n import t
+
+
+# Local palette for the crop panel (kept here so the rest of the app is unaffected).
+CHIP_BG   = "#2f2f2f"   # neutral preset / row background
+SEG_TRACK = "#202020"   # segmented-control trough
+SEL_BG    = "#26415c"   # accent-tinted fill for a selected row
+DARK_BTN  = "#141414"   # the black "გაუქმება" button
+GLYPH     = "#cfcfcf"   # ratio-shape stroke on a neutral chip
+GLYPH_DIM = "#bdbdbd"   # ratio-shape stroke on the small ratio cards
 
 
 class CropMixin:
     # --- Crop tool (col 3 panel + interactive overlay on the preview) --------
 
-    # Aspect-ratio presets. ratio: None = free, "orig" = the photo's own ratio,
-    # "custom" = ask the user for a width:height, else a width/height float. Every
-    # ratio is listed once — platforms that share a ratio share one chip.
-    CROP_COMMON = [("თავისუფ.", None), ("ორიგინ.", "orig"), ("საკუთარი", "custom"),
-                   ("1:1", 1.0), ("4:3", 4 / 3), ("3:2", 3 / 2), ("5:4", 5 / 4)]
-    CROP_SOCIAL = [("IG პორტრ. 4:5", 4 / 5), ("Story·Reels·TikTok 9:16", 9 / 16),
-                   ("YouTube·X 16:9", 16 / 9), ("FB·LinkedIn 1.91", 1.91)]
+    # Standard aspect-ratio cards (label, w/h). Listed once each.
+    CROP_RATIO_CARDS = [("1:1", 1.0), ("4:3", 4 / 3), ("3:2", 3 / 2), ("5:4", 5 / 4)]
+    # Social presets: (name, subtitle, ratio label, w/h). Platforms that share a
+    # ratio share one row. name/subtitle go through t() at build time.
+    CROP_SOCIAL = [
+        ("Instagram პორტრეტი", "პოსტი · ვერტიკალური", "4:5", 4 / 5),
+        ("Story · Reels · TikTok", "სრული ეკრანი", "9:16", 9 / 16),
+        ("YouTube · X", "ჰორიზონტალური", "16:9", 16 / 9),
+        ("FB · LinkedIn", "გაზიარების ბანერი", "1.91", 1.91),
+    ]
 
     def _build_crop_section(self, parent):
-        "Crop tool panel: a hint, ratio presets (common + social), flip + apply."
+        "Crop panel: form segment + ratio cards + social rows + saved sizes + apply."
         f = tk.Frame(parent, bg=BAR)
-        self._crop_chips = []
-        wrap = self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)
-        tk.Label(f, text=t("ჩავათრიე კუთხეები; აირჩიე ფორმა ან სოც. ქსელი"),
-                 bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), justify="left",
-                 anchor="w", wraplength=wrap).pack(fill="x", padx=EDIT_PAD,
-                                                   pady=(10, 4))
+        # Every selectable element registers a (widget, paint) pair so one of them
+        # can be shown active at a time. Fixed selectors (segment/cards/social) are
+        # built once; the saved-size rows are rebuilt as that list changes.
+        self._crop_selectors = []
+        self._size_selectors = []
+        self._crop_btn_active = None
 
-        self._crop_chip_grid(f, "ფორმა", self.CROP_COMMON)
-        self._crop_chip_grid(f, "სოციალური ქსელები", self.CROP_SOCIAL)
+        self._crop_group_header(f, "ratio", t("ფორმა"))
+        self._build_crop_segment(f)
+        self._build_ratio_cards(f)
 
-        flip = tk.Label(f, text=t("⇄ გადატრიალება (3:4 ⇄ 4:3)"), bg=BAR, fg=FG_DIM,
-                        cursor="hand2", anchor="w", font=("Segoe UI", 9))
-        flip.bind("<Enter>", lambda e: flip.configure(fg=FG))
-        flip.bind("<Leave>", lambda e: flip.configure(fg=FG_DIM))
-        flip.bind("<Button-1>", lambda e: self._flip_crop_ratio())
-        flip.pack(fill="x", padx=EDIT_PAD, pady=(12, 4))
-        flip._tip = Tooltip(flip, t("მონიშვნის 90°-ით გადატრიალება"))
+        self._crop_group_header(f, "share-2", t("სოციალური ქსელები"))
+        self._build_social_rows(f)
 
-        apply_btn = tk.Label(f, text=t("მოჭრა"), bg=ACCENT, fg="#0b0b0b",
-                             cursor="hand2", font=("Segoe UI", 10, "bold"),
-                             padx=14, pady=8)
-        apply_btn.bind("<Enter>", lambda e: apply_btn.configure(bg="#5ab0ff"))
-        apply_btn.bind("<Leave>", lambda e: apply_btn.configure(bg=ACCENT))
-        apply_btn.bind("<Button-1>", lambda e: self.apply_crop())
-        apply_btn.pack(side="top", fill="x", padx=EDIT_PAD, pady=(6, 4))
+        self._crop_group_header(f, "ruler", t("შენი ზომები"))
+        self._build_my_sizes(f)
 
-        reset = tk.Label(f, text=t("გაუქმება"), bg=BAR, fg=FG_DIM, cursor="hand2",
-                         anchor="w", font=("Segoe UI", 9))
-        reset.bind("<Enter>", lambda e: reset.configure(fg=FG))
-        reset.bind("<Leave>", lambda e: reset.configure(fg=FG_DIM))
-        reset.bind("<Button-1>", lambda e: self._reset_crop())
-        reset.pack(fill="x", padx=EDIT_PAD, pady=(2, 8))
-        reset._tip = Tooltip(reset, t("მონიშვნის სრულ სურათზე დაბრუნება"))
+        self._build_crop_actions(f)
         return f
 
-    def _crop_chip_grid(self, parent, title, presets):
-        "A titled 2-column grid of crop-ratio preset chips."
-        tk.Label(parent, text=t(title), bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
-                                                    pady=(8, 2))
-        grid = tk.Frame(parent, bg=BAR)
-        grid.pack(side="top", fill="x", padx=EDIT_PAD)
-        grid.columnconfigure(0, weight=1, uniform="crop")
-        grid.columnconfigure(1, weight=1, uniform="crop")
-        for i, (label, ratio) in enumerate(presets):
-            chip = tk.Label(grid, text=t(label), bg="#2f2f2f", fg=FG, cursor="hand2",
-                            font=("Segoe UI", 8), padx=4, pady=5)
-            chip._ratio = ratio
-            chip.bind("<Button-1>", lambda e, c=chip: self._pick_crop_ratio(c))
-            chip.bind("<Enter>", lambda e, c=chip: self._crop_chip_hover(c, True))
-            chip.bind("<Leave>", lambda e, c=chip: self._crop_chip_hover(c, False))
-            colpad = (0, CHIP_GAP // 2) if i % 2 == 0 else (CHIP_GAP // 2, 0)
-            chip.grid(row=i // 2, column=i % 2, sticky="ew", padx=colpad, pady=2)
-            self._crop_chips.append(chip)
+    # --- Active-state registry ----------------------------------------------
 
-    def _crop_chip_hover(self, chip, entering):
-        "Brighten a preset chip on hover; the active one keeps its accent fill."
-        if chip is self._crop_btn_active:
-            return
-        chip.configure(bg=HOVER if entering else "#2f2f2f")
+    def _crop_register(self, widget, paint):
+        "Register a selectable element + its paint(active) callback; start inactive."
+        self._crop_selectors.append((widget, paint))
+        paint(False)
 
     def _restyle_crop_chips(self):
-        "Repaint the preset chips so the active one is accent-filled, rest neutral."
-        for c in self._crop_chips:
-            active = c is self._crop_btn_active
-            c.configure(bg=ACCENT if active else "#2f2f2f",
-                        fg="#0b0b0b" if active else FG)
+        "Repaint every selector so only `_crop_btn_active` reads as selected."
+        active = self._crop_btn_active
+        for w, paint in self._crop_selectors + getattr(self, "_size_selectors", []):
+            try:
+                paint(w is active)
+            except tk.TclError:
+                pass   # widget was destroyed (e.g. a rebuilt size row)
 
-    def _pick_crop_ratio(self, chip):
-        "A preset chip was clicked: lock the box to its ratio and highlight it."
+    def _pick_simple(self, widget, ratio):
+        "Select a ratio preset (card / social / saved size): highlight + lock box."
         if self.current_pil is None:
             return
-        ratio = chip._ratio
-        if ratio == "custom":
-            wh = self._ask_custom_ratio()
-            if wh is None:
-                return                       # cancelled → keep the current box
-            w, h = wh
-            ratio = w / h
-            chip.configure(text=self._fmt_ratio_label(w, h))
-        elif ratio == "orig":
-            iw, ih = self.current_pil.size
-            ratio = iw / ih
-        self._crop_btn_active = chip
+        self._crop_btn_active = widget
         self._restyle_crop_chips()
         self._set_crop_ratio(ratio)
 
-    def _fmt_ratio_label(self, w, h):
-        "Compact chip label for a custom ratio, reduced to lowest terms if whole."
+    # --- Ratio-shape glyph (a small rectangle drawn at the right proportions) -
+
+    def _ratio_glyph(self, parent, ratio, box=24, bg=CHIP_BG, stroke=GLYPH):
+        "A tiny canvas holding a rectangle of aspect `ratio`, centered in `box` px."
+        px = self._edit_dpi_w(box)
+        cv = tk.Canvas(parent, width=px, height=px, bg=bg,
+                       highlightthickness=0, bd=0)
+        self._draw_ratio_glyph(cv, ratio, stroke)
+        return cv
+
+    def _draw_ratio_glyph(self, cv, ratio, stroke):
+        "(Re)draw a ratio rectangle on its canvas in `stroke` (outline only)."
+        cv.delete("all")
+        px = int(cv["width"])
+        m = px * 0.84
+        if ratio >= 1.0:
+            w, h = m, m / ratio
+        else:
+            w, h = m * ratio, m
+        x0, y0 = (px - w) / 2, (px - h) / 2
+        cv.create_rectangle(x0, y0, x0 + w, y0 + h, outline=stroke,
+                            width=max(1, self._edit_dpi_w(1.4)))
+
+    # --- Group header (small icon + dim caption) ----------------------------
+
+    def _crop_group_header(self, parent, icon_name, text):
+        "A small icon + dim bold caption that titles a group in the crop panel."
+        row = tk.Frame(parent, bg=BAR)
+        row.pack(fill="x", padx=EDIT_PAD, pady=(13, 6))
+        img = self.icon(icon_name, size=12)
+        if img is not None:
+            ic = tk.Label(row, image=img, bg=BAR)
+            ic.pack(side="left", padx=(0, 6))
+        tk.Label(row, text=text, bg=BAR, fg=FG_DIM, anchor="w",
+                 font=("Segoe UI", 8, "bold")).pack(side="left")
+
+    # --- Form segment: თავისუფ. / ორიგ. / საკუთ. ----------------------------
+
+    def _build_crop_segment(self, parent):
+        "Segmented control for the crop kind (free / original / one-off custom)."
+        track = tk.Frame(parent, bg=SEG_TRACK)
+        track.pack(fill="x", padx=EDIT_PAD, pady=(0, 5))
+        for icon_name, label, kind in [("maximize", t("თავისუფ."), None),
+                                       ("image", t("ორიგ."), "orig"),
+                                       ("scaling", t("საკუთ."), "custom")]:
+            self._segment_button(track, icon_name, label, kind)
+
+    def _segment_button(self, track, icon_name, label, kind):
+        "One segment cell (icon over label); active = filled, like a tab."
+        cell = tk.Frame(track, bg=SEG_TRACK, cursor="hand2")
+        cell.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+        img = self.icon(icon_name, size=15)
+        ic = (tk.Label(cell, image=img, bg=SEG_TRACK) if img is not None
+              else tk.Label(cell, text="□", bg=SEG_TRACK, fg=FG))
+        ic.pack(pady=(6, 1))
+        tx = tk.Label(cell, text=label, bg=SEG_TRACK, fg=FG_DIM,
+                      font=("Segoe UI", 8))
+        tx.pack(pady=(0, 6))
+
+        def paint(active):
+            bg = CHIP_BG if active else SEG_TRACK
+            cell.configure(bg=bg)
+            ic.configure(bg=bg)
+            tx.configure(bg=bg, fg=FG if active else FG_DIM)
+
+        def hover(on):
+            if cell is self._crop_btn_active:
+                return
+            bg = "#2a2a2a" if on else SEG_TRACK
+            cell.configure(bg=bg)
+            ic.configure(bg=bg)
+            tx.configure(bg=bg)
+
+        for w in (cell, ic, tx):
+            w.bind("<Button-1>", lambda e: self._pick_segment(cell, kind))
+            w.bind("<Enter>", lambda e: hover(True))
+            w.bind("<Leave>", lambda e: hover(False))
+        self._crop_register(cell, paint)
+
+    def _pick_segment(self, cell, kind):
+        "Segment clicked: free, the photo's own ratio, or a one-off custom ratio."
+        if self.current_pil is None:
+            return
+        if kind is None:
+            ratio = None
+        elif kind == "orig":
+            iw, ih = self.current_pil.size
+            ratio = iw / ih
+        else:                                # one-off custom ratio (not saved)
+            res = self._ask_size_dialog("საკუთარი ფორმა", with_name=False)
+            if res is None:
+                return
+            _, w, h = res
+            ratio = w / h
+        self._crop_btn_active = cell
+        self._restyle_crop_chips()
+        self._set_crop_ratio(ratio)
+
+    # --- Standard ratio cards (1:1 · 4:3 · 3:2 · 5:4) -----------------------
+
+    def _build_ratio_cards(self, parent):
+        "A 4-column row of small ratio cards (shape + label)."
+        grid = tk.Frame(parent, bg=BAR)
+        grid.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+        for i in range(len(self.CROP_RATIO_CARDS)):
+            grid.columnconfigure(i, weight=1, uniform="rc")
+        for i, (label, ratio) in enumerate(self.CROP_RATIO_CARDS):
+            self._ratio_card(grid, label, ratio, i)
+
+    def _ratio_card(self, grid, label, ratio, col):
+        "One ratio card: a proportion shape over its label; active = accent fill."
+        card = tk.Frame(grid, bg=CHIP_BG, cursor="hand2")
+        card.grid(row=0, column=col, sticky="ew", padx=2, pady=2)
+        glyph = self._ratio_glyph(card, ratio, box=22, bg=CHIP_BG, stroke=GLYPH_DIM)
+        glyph.pack(pady=(8, 3))
+        tx = tk.Label(card, text=label, bg=CHIP_BG, fg=FG_DIM,
+                      font=("Segoe UI", 8))
+        tx.pack(pady=(0, 7))
+
+        def paint(active):
+            bg = ACCENT if active else CHIP_BG
+            card.configure(bg=bg)
+            glyph.configure(bg=bg)
+            self._draw_ratio_glyph(glyph, ratio, "#0b0b0b" if active else GLYPH_DIM)
+            tx.configure(bg=bg, fg="#0b0b0b" if active else FG_DIM)
+
+        def hover(on):
+            if card is self._crop_btn_active:
+                return
+            bg = HOVER if on else CHIP_BG
+            card.configure(bg=bg)
+            glyph.configure(bg=bg)
+            self._draw_ratio_glyph(glyph, ratio, GLYPH_DIM)
+            tx.configure(bg=bg)
+
+        for w in (card, glyph, tx):
+            w.bind("<Button-1>", lambda e: self._pick_simple(card, ratio))
+            w.bind("<Enter>", lambda e: hover(True))
+            w.bind("<Leave>", lambda e: hover(False))
+        self._crop_register(card, paint)
+
+    # --- Social rows (name + subtitle + ratio, full width) ------------------
+
+    def _build_social_rows(self, parent):
+        "A vertical list of social-network presets, each a full-width row."
+        wrap = tk.Frame(parent, bg=BAR)
+        wrap.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+        for name, sub, rlabel, ratio in self.CROP_SOCIAL:
+            self._preset_row(wrap, t(name), t(sub), rlabel, ratio)
+
+    def _preset_row(self, parent, name, sub, rlabel, ratio):
+        "One social row: shape · name/subtitle · ratio. Active = accent-tinted."
+        row = tk.Frame(parent, bg=CHIP_BG, cursor="hand2")
+        row.pack(fill="x", pady=2)
+        glyph = self._ratio_glyph(row, ratio, box=24, bg=CHIP_BG, stroke=GLYPH)
+        glyph.pack(side="left", padx=(8, 10), pady=6)
+        txt = tk.Frame(row, bg=CHIP_BG)
+        txt.pack(side="left", fill="x", expand=True)
+        t1 = tk.Label(txt, text=name, bg=CHIP_BG, fg=FG, anchor="w",
+                      font=("Segoe UI", 9))
+        t1.pack(fill="x")
+        t2 = tk.Label(txt, text=sub, bg=CHIP_BG, fg=FG_DIM, anchor="w",
+                      font=("Segoe UI", 7))
+        t2.pack(fill="x")
+        rl = tk.Label(row, text=rlabel, bg=CHIP_BG, fg=FG_DIM,
+                      font=("Segoe UI", 8))
+        rl.pack(side="right", padx=10)
+        cells = (row, txt, t2)
+
+        def paint(active):
+            bg = SEL_BG if active else CHIP_BG
+            for w in cells:
+                w.configure(bg=bg)
+            t1.configure(bg=bg, fg="#ffffff" if active else FG)
+            rl.configure(bg=bg, fg=ACCENT if active else FG_DIM)
+            glyph.configure(bg=bg)
+            self._draw_ratio_glyph(glyph, ratio, ACCENT if active else GLYPH)
+
+        def hover(on):
+            if row is self._crop_btn_active:
+                return
+            bg = HOVER if on else CHIP_BG
+            for w in (row, txt, t1, t2, rl):
+                w.configure(bg=bg)
+            glyph.configure(bg=bg)
+            self._draw_ratio_glyph(glyph, ratio, GLYPH)
+
+        for w in (row, glyph, txt, t1, t2, rl):
+            w.bind("<Button-1>", lambda e: self._pick_simple(row, ratio))
+            w.bind("<Enter>", lambda e: hover(True))
+            w.bind("<Leave>", lambda e: hover(False))
+        self._crop_register(row, paint)
+
+    # --- "შენი ზომები": add button + scrollable saved-size list --------------
+
+    def _build_my_sizes(self, parent):
+        "The '+ შენი ზომა' add button plus the scrollable list of saved sizes."
+        add = tk.Frame(parent, bg=BAR, cursor="hand2",
+                       highlightbackground="#3d3d3d", highlightthickness=1)
+        add.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
+        inner = tk.Frame(add, bg=BAR)
+        inner.pack(pady=6)
+        plus = tk.Label(inner, text="＋", bg=BAR, fg=ACCENT,
+                        font=("Segoe UI", 11, "bold"))
+        plus.pack(side="left", padx=(0, 5))
+        lbl = tk.Label(inner, text=t("შენი ზომა"), bg=BAR, fg=ACCENT,
+                       font=("Segoe UI", 8, "bold"))
+        lbl.pack(side="left")
+        addparts = (add, inner, plus, lbl)
+
+        def add_hover(on):
+            bg = "#202b38" if on else BAR
+            for w in addparts:
+                w.configure(bg=bg)
+            add.configure(highlightbackground=ACCENT if on else "#3d3d3d")
+
+        for w in addparts:
+            w.bind("<Button-1>", lambda e: self._add_custom_size())
+            w.bind("<Enter>", lambda e: add_hover(True))
+            w.bind("<Leave>", lambda e: add_hover(False))
+        add._tip = Tooltip(add, t("შენი საზომის დამატება სიაში"))
+
+        # Scroll area: a fixed-height canvas + inner frame + slim scrollbar. The
+        # canvas height tracks the content up to a cap, then the list scrolls.
+        self._sizes_max_h = self._edit_dpi_w(116)
+        holder = tk.Frame(parent, bg=BAR)
+        holder.pack(fill="x", padx=EDIT_PAD)
+        cv = tk.Canvas(holder, bg=BAR, highlightthickness=0, bd=0,
+                       height=self._sizes_max_h)
+        sb = ttk.Scrollbar(holder, orient="vertical", command=cv.yview,
+                           style="Sidebar.Vertical.TScrollbar")
+        cv.configure(yscrollcommand=sb.set)
+        inner = tk.Frame(cv, bg=BAR)
+        win = cv.create_window((0, 0), window=inner, anchor="nw")
+        cv.pack(side="left", fill="x", expand=True)
+
+        def on_inner(_e=None):
+            cv.configure(scrollregion=cv.bbox("all"))
+            need = inner.winfo_reqheight()
+            cv.configure(height=min(need, self._sizes_max_h))
+            if need > self._sizes_max_h:
+                if not sb.winfo_ismapped():
+                    sb.pack(side="right", fill="y", before=cv)
+            else:
+                sb.pack_forget()
+                cv.yview_moveto(0)
+
+        inner.bind("<Configure>", on_inner)
+        cv.bind("<Configure>", lambda e: cv.itemconfigure(win, width=e.width))
+        self._sizes_canvas = cv
+        self._sizes_inner = inner
+        self._bind_sizes_wheel(cv)
+        self._rebuild_my_sizes_list()
+
+    def _bind_sizes_wheel(self, widget):
+        "Wheel over the saved-size list scrolls it (and not the photo behind it)."
+        widget.bind("<MouseWheel>", self._sizes_wheel)
+
+    def _sizes_wheel(self, e):
+        "Scroll the saved-size list if it overflows; swallow the event either way."
+        cv = self._sizes_canvas
+        if self._sizes_inner.winfo_reqheight() > int(cv["height"]):
+            cv.yview_scroll(-1 if e.delta > 0 else 1, "units")
+        return "break"
+
+    def _rebuild_my_sizes_list(self):
+        "Repopulate the saved-size rows from self.crop_sizes (called on any change)."
+        inner = self._sizes_inner
+        for w in inner.winfo_children():
+            w.destroy()
+        self._size_selectors = []
+        if not self.crop_sizes:
+            ph = tk.Label(inner, text=t("ჯერ ზომები არ გაქვს"),
+                          bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), anchor="w",
+                          justify="left",
+                          wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD - 10))
+            ph.pack(fill="x", pady=(2, 4))
+            self._bind_sizes_wheel(ph)
+        else:
+            for i, sz in enumerate(self.crop_sizes):
+                self._size_row(inner, i, sz)
+        inner.update_idletasks()
+
+    def _size_row(self, parent, idx, sz):
+        "One saved-size row: shape · name/dimensions · edit · delete. Selectable."
+        ratio = sz["w"] / sz["h"]
+        row = tk.Frame(parent, bg=CHIP_BG, cursor="hand2")
+        row.pack(fill="x", pady=2)
+        glyph = self._ratio_glyph(row, ratio, box=22, bg=CHIP_BG, stroke=GLYPH)
+        glyph.pack(side="left", padx=(8, 10), pady=5)
+        acts = tk.Frame(row, bg=CHIP_BG)
+        acts.pack(side="right", padx=(0, 6))
+        edit = self._size_action(acts, "pencil", "#2c3b4f", t("რედაქტირება"),
+                                 lambda: self._edit_custom_size(idx))
+        edit.pack(side="left")
+        dele = self._size_action(acts, "trash-2", "#4a2b2b", t("წაშლა"),
+                                 lambda: self._delete_custom_size(idx))
+        dele.pack(side="left")
+        txt = tk.Frame(row, bg=CHIP_BG)
+        txt.pack(side="left", fill="x", expand=True)
+        t1 = tk.Label(txt, text=sz["name"] or self._size_dims(sz), bg=CHIP_BG,
+                      fg=FG, anchor="w", font=("Segoe UI", 9))
+        t1.pack(fill="x")
+        t2 = tk.Label(txt, text=self._size_caption(sz), bg=CHIP_BG, fg=FG_DIM,
+                      anchor="w", font=("Segoe UI", 7))
+        t2.pack(fill="x")
+
+        def paint(active):
+            bg = SEL_BG if active else CHIP_BG
+            for w in (row, txt, t2, acts):
+                w.configure(bg=bg)
+            t1.configure(bg=bg, fg="#ffffff" if active else FG)
+            glyph.configure(bg=bg)
+            self._draw_ratio_glyph(glyph, ratio, ACCENT if active else GLYPH)
+            edit.configure(bg=bg)
+            dele.configure(bg=bg)
+
+        def hover(on):
+            if row is self._crop_btn_active:
+                return
+            bg = HOVER if on else CHIP_BG
+            for w in (row, txt, t1, t2, acts, edit, dele):
+                w.configure(bg=bg)
+            glyph.configure(bg=bg)
+            self._draw_ratio_glyph(glyph, ratio, GLYPH)
+
+        for w in (row, glyph, txt, t1, t2):
+            w.bind("<Button-1>", lambda e: self._pick_simple(row, ratio))
+            w.bind("<Enter>", lambda e: hover(True))
+            w.bind("<Leave>", lambda e: hover(False))
+        for w in (row, glyph, txt, t1, t2, acts, edit, dele):
+            self._bind_sizes_wheel(w)
+        self._size_selectors.append((row, paint))
+
+    def _size_action(self, parent, icon_name, hov, tip, command):
+        "A small edit/delete icon button inside a saved-size row."
+        img = self.icon(icon_name, size=13)
+        b = (tk.Label(parent, image=img, bg=CHIP_BG, cursor="hand2") if img
+             is not None else tk.Label(parent, text="·", bg=CHIP_BG, fg=FG_DIM,
+                                       cursor="hand2"))
+        b.bind("<Button-1>", lambda e: command())
+        b.bind("<Enter>", lambda e: b.configure(bg=hov))
+        b.bind("<Leave>", lambda e: b.configure(bg=CHIP_BG))
+        b._tip = Tooltip(b, tip)
+        return b
+
+    # --- Saved-size formatting + CRUD ---------------------------------------
+
+    @staticmethod
+    def _num(x):
+        "A stored dimension as a compact string (whole numbers drop the decimals)."
+        return str(int(round(x))) if abs(x - round(x)) < 1e-6 else f"{x:g}"
+
+    def _size_dims(self, sz):
+        "The 'W × H' dimensions string for a saved size."
+        return f"{self._num(sz['w'])} × {self._num(sz['h'])}"
+
+    def _ratio_text(self, w, h):
+        "A short ratio label: lowest-terms 'a:b' when whole, else a 2-dp decimal."
         if abs(w - round(w)) < 1e-6 and abs(h - round(h)) < 1e-6:
             iw, ih = int(round(w)), int(round(h))
             g = math.gcd(iw, ih) or 1
-            return f"{t('საკ.')} {iw // g}:{ih // g}"
-        return f"{t('საკ.')} {w:g}:{h:g}"
+            return f"{iw // g}:{ih // g}"
+        return f"{w / h:.2f}".rstrip("0").rstrip(".")
 
-    def _ask_custom_ratio(self):
-        "Modal dark dialog: ask for a custom width:height. Returns (w, h) or None."
+    def _size_caption(self, sz):
+        "The dim line under a saved size's name: 'W × H · ratio'."
+        return f"{self._size_dims(sz)} · {self._ratio_text(sz['w'], sz['h'])}"
+
+    def _add_custom_size(self):
+        "Open the create dialog; on save, add the size to the top of the list."
+        res = self._ask_size_dialog("ზომის შექმნა", with_name=True)
+        if res is None:
+            return
+        name, w, h = res
+        self.crop_sizes.insert(0, {"name": name, "w": w, "h": h})
+        self._save_state()
+        self._rebuild_my_sizes_list()
+        self._apply_size_index(0)         # select + lock the box to the new size
+
+    def _edit_custom_size(self, idx):
+        "Open the same dialog prefilled; on save, update that saved size in place."
+        if not (0 <= idx < len(self.crop_sizes)):
+            return
+        sz = self.crop_sizes[idx]
+        res = self._ask_size_dialog("ზომის რედაქტირება", name=sz["name"],
+                                    w=self._num(sz["w"]), h=self._num(sz["h"]),
+                                    with_name=True)
+        if res is None:
+            return
+        name, w, h = res
+        self.crop_sizes[idx] = {"name": name, "w": w, "h": h}
+        self._save_state()
+        self._rebuild_my_sizes_list()
+        self._apply_size_index(idx)
+
+    def _delete_custom_size(self, idx):
+        "Remove a saved size and clear the selection if it was the active one."
+        if not (0 <= idx < len(self.crop_sizes)):
+            return
+        del self.crop_sizes[idx]
+        self._save_state()
+        self._crop_btn_active = None
+        self._rebuild_my_sizes_list()
+        self._restyle_crop_chips()
+
+    def _apply_size_index(self, idx):
+        "Highlight the saved-size row at `idx` and lock the crop box to its ratio."
+        if not (0 <= idx < len(self._size_selectors)):
+            return
+        widget, _ = self._size_selectors[idx]
+        sz = self.crop_sizes[idx]
+        self._crop_btn_active = widget
+        self._restyle_crop_chips()
+        if self.current_pil is not None:
+            self._set_crop_ratio(sz["w"] / sz["h"])
+
+    # --- Bottom actions: flip + apply + cancel ------------------------------
+
+    def _build_crop_actions(self, parent):
+        "Flip (icon) + მოჭრა (accent) on one row, then the black გაუქმება button."
+        bar = tk.Frame(parent, bg=BAR)
+        bar.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
+
+        flip = tk.Frame(bar, bg=CHIP_BG, cursor="hand2")
+        flip.pack(side="left", fill="y")
+        fimg = self.icon("arrow-left-right", size=17)
+        fic = (tk.Label(flip, image=fimg, bg=CHIP_BG) if fimg is not None
+               else tk.Label(flip, text="⇄", bg=CHIP_BG, fg=FG,
+                             font=("Segoe UI", 13)))
+        fic.pack(padx=13, pady=10)
+        for w in (flip, fic):
+            w.bind("<Button-1>", lambda e: self._flip_crop_ratio())
+            w.bind("<Enter>", lambda e: [x.configure(bg=HOVER) for x in (flip, fic)])
+            w.bind("<Leave>", lambda e: [x.configure(bg=CHIP_BG) for x in (flip, fic)])
+        flip._tip = Tooltip(flip, t("მონიშვნის 90°-ით გადატრიალება"))
+
+        apply_btn = tk.Frame(bar, bg=ACCENT, cursor="hand2")
+        apply_btn.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        atx = tk.Label(apply_btn, text=t("მოჭრა"), bg=ACCENT, fg="#0b0b0b",
+                       font=("Segoe UI", 10, "bold"))
+        atx.pack(expand=True, pady=10)
+        for w in (apply_btn, atx):
+            w.bind("<Button-1>", lambda e: self.apply_crop())
+            w.bind("<Enter>", lambda e: [x.configure(bg="#5ab0ff")
+                                         for x in (apply_btn, atx)])
+            w.bind("<Leave>", lambda e: [x.configure(bg=ACCENT)
+                                         for x in (apply_btn, atx)])
+
+        cancel = tk.Frame(parent, bg=DARK_BTN, cursor="hand2",
+                          highlightbackground="#2e2e2e", highlightthickness=1)
+        cancel.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
+        cinner = tk.Frame(cancel, bg=DARK_BTN)
+        cinner.pack(pady=8)
+        ximg = self.icon("x", size=13)
+        if ximg is not None:
+            tk.Label(cinner, image=ximg, bg=DARK_BTN).pack(side="left", padx=(0, 6))
+        ctx = tk.Label(cinner, text=t("გაუქმება"), bg=DARK_BTN, fg=FG_DIM,
+                       font=("Segoe UI", 9))
+        ctx.pack(side="left")
+        cparts = [cancel, cinner] + list(cinner.winfo_children())
+        for w in cparts:
+            w.bind("<Button-1>", lambda e: self._reset_crop())
+            w.bind("<Enter>", lambda e: [p.configure(bg="#0d0d0d") for p in cparts])
+            w.bind("<Leave>", lambda e: [p.configure(bg=DARK_BTN) for p in cparts])
+        cancel._tip = Tooltip(cancel, t("მონიშვნის სრულ სურათზე დაბრუნება"))
+
+    # --- Create / edit "შენი ზომა" dialog (same window for both) ------------
+
+    def _ask_size_dialog(self, title, name="", w="", h="", with_name=True):
+        "Modal dark dialog for a name + width:height. Returns (name, w, h) or None."
         result = {"val": None}
         dlg = tk.Toplevel(self.root)
-        dlg.title(t("საკუთარი ზომა"))
+        dlg.title(t(title))
         dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
         wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("საკუთარი პროპორცია"), bg=BG, fg=FG,
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(wrap, text=t("სიგანე : სიმაღლე  (მაგ. 4:5 ან 1200:800)"), bg=BG,
-                 fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 12))
+        tk.Label(wrap, text=t(title), bg=BG, fg=FG,
+                 font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        tk.Label(wrap, text=t("დაარქვი სახელი და მიუთითე სიგანე : სიმაღლე "
+                              "(პიქსელი ან პროპორცია, მაგ. 4:5)."),
+                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9), justify="left",
+                 wraplength=300).pack(anchor="w", pady=(5, 14))
 
+        e_name = None
+        if with_name:
+            tk.Label(wrap, text=t("სახელი"), bg=BG, fg=FG_DIM,
+                     font=("Segoe UI", 8, "bold")).pack(anchor="w")
+            e_name = tk.Entry(wrap, bg=BAR, fg=FG, insertbackground=FG,
+                              relief="flat", font=("Segoe UI", 11))
+            e_name.insert(0, name)
+            e_name.pack(fill="x", ipady=5, pady=(4, 12))
+
+        tk.Label(wrap, text=t("ზომა — სიგანე : სიმაღლე"), bg=BG, fg=FG_DIM,
+                 font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
         row = tk.Frame(wrap, bg=BG)
         row.pack(anchor="w")
 
@@ -147,10 +591,9 @@ class CropMixin:
             e.insert(0, value)
             return e
 
-        # Prefill with the current box size, so the dialog doubles as "type the
-        # size you want" and hints that pixel values work too.
-        w0 = h0 = ""
-        if self.crop_rect is not None:
+        # Prefill the size: explicit value (edit), else the current box (create).
+        w0, h0 = str(w), str(h)
+        if not w0 and not h0 and self.crop_rect is not None:
             w0 = str(int(round(self.crop_rect[2] - self.crop_rect[0])))
             h0 = str(int(round(self.crop_rect[3] - self.crop_rect[1])))
         e_w = mkentry(w0); e_w.pack(side="left", ipady=4)
@@ -171,16 +614,19 @@ class CropMixin:
             if cw <= 0 or ch <= 0:
                 err.configure(text=t("რიცხვები დადებითი უნდა იყოს"))
                 return
-            result["val"] = (cw, ch)
+            nm = e_name.get().strip() if e_name is not None else ""
+            if with_name and not nm:           # default name = the dimensions
+                nm = f"{self._num(cw)} × {self._num(ch)}"
+            result["val"] = (nm, cw, ch)
             dlg.destroy()
 
         btnrow = tk.Frame(wrap, bg=BG)
         btnrow.pack(anchor="e", pady=(14, 0))
 
-        def mkbtn(text, command, primary=False):
+        def mkbtn(text_, command, primary=False):
             bg = ACCENT if primary else BAR
             hov = "#5ab0ff" if primary else HOVER
-            b = tk.Label(btnrow, text=text, bg=bg, fg="#0b0b0b" if primary else FG,
+            b = tk.Label(btnrow, text=text_, bg=bg, fg="#0b0b0b" if primary else FG,
                          cursor="hand2", padx=14, pady=7,
                          font=("Segoe UI", 9, "bold" if primary else "normal"))
             b.bind("<Enter>", lambda e: b.configure(bg=hov))
@@ -189,13 +635,16 @@ class CropMixin:
             return b
 
         mkbtn(t("გაუქმება"), dlg.destroy).pack(side="right", padx=(8, 0))
-        mkbtn(t("არჩევა"), confirm, primary=True).pack(side="right")
+        mkbtn(t("შენახვა"), confirm, primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Return>", lambda e: confirm())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
-        e_w.focus_set()
-        e_w.select_range(0, "end")
+        (e_name or e_w).focus_set()
+        if e_name is not None:
+            e_name.select_range(0, "end")
+        else:
+            e_w.select_range(0, "end")
 
         dlg.update_idletasks()
         dw, dh = dlg.winfo_width(), dlg.winfo_height()
@@ -291,7 +740,6 @@ class CropMixin:
             return
         self.current_pil = self.current_pil.crop(box)
         self._cropped = True
-        self._clear_focus_for_geometry()  # source-px circle no longer maps after a crop
         self._edits_saved = False
         nw, nh = self.current_pil.size
         # Reset the box to the new full image; ready for a second crop.
