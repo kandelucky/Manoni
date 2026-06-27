@@ -7,8 +7,10 @@ behaviour is identical to when it lived directly on the class.
 
 import os
 import sys
+import json
 import tkinter as tk
 import tkinter.ttk as ttk
+import tkinter.filedialog as tkfd
 
 from PIL import Image, ImageTk
 
@@ -97,6 +99,46 @@ class ChromeMixin:
         "Vertical separator in a bar."
         return tk.Frame(parent, bg="#3a3a3a", width=1)
 
+    # --- Hand (pan) tool toggle ---------------------------------------------
+
+    def _build_hand_button(self, parent):
+        "A toggle icon button for the hand (pan) tool — accent-filled while active."
+        img = self.icon("hand")
+        if img is not None:
+            btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+        else:
+            btn = tk.Label(parent, text="✋", bg=BAR, fg=FG, cursor="hand2",
+                           font=("Segoe UI", 11))
+        btn.bind("<Enter>", lambda e: self._hand_btn_paint(hover=True))
+        btn.bind("<Leave>", lambda e: self._hand_btn_paint(hover=False))
+        btn.bind("<Button-1>", lambda e: self.toggle_hand_tool())
+        btn._tip = Tooltip(btn, t("Hand tool — drag to pan the photo"))
+        self.btn_hand = btn
+        return btn
+
+    def _hand_btn_paint(self, hover=False):
+        "Repaint the hand toggle: accent fill while active, hover tint otherwise."
+        if not hasattr(self, "btn_hand"):
+            return
+        if self.hand_tool:
+            self.btn_hand.configure(bg=ACCENT)
+        else:
+            self.btn_hand.configure(bg=HOVER if hover else BAR)
+
+    def _set_hand_tool(self, on):
+        "Turn the hand (pan) tool on/off: repaint the toggle + set the canvas cursor."
+        if on == self.hand_tool:
+            return
+        self.hand_tool = on
+        self._hand_btn_paint()
+        # 'hand2' marks the tool as armed; turning it off clears the cursor and the
+        # next pointer move lets the active edit tool (if any) reclaim its own.
+        self.preview.configure(cursor="hand2" if on else "")
+
+    def toggle_hand_tool(self):
+        "Toolbar action: flip the hand (pan) tool on/off."
+        self._set_hand_tool(not self.hand_tool)
+
     # --- Top info bar -------------------------------------------------------
 
     def _build_infobar(self):
@@ -125,15 +167,24 @@ class ChromeMixin:
         left = tk.Frame(bar, bg=BAR)
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
-                          t("ფოლდერის გახსნა")).pack(side="left", padx=4, pady=8)
+                          t("Open folder")).pack(side="left", padx=4, pady=8)
+        # Save as… sits next to Open — both are file operations. (Moved up here
+        # from the ☰ menu so saving is one click away.)
+        self._tool_button(left, "save", self._save_as_dialog,
+                          t("Save as…")).pack(side="left", padx=4, pady=8)
+        # Hand (pan) tool: a toggle — while on, dragging with the left button
+        # moves the photo on the canvas (like Photoshop's hand). Separated from
+        # the open button so it reads as its own viewport control.
+        self._sep(left).pack(side="left", fill="y", padx=6, pady=10)
+        self._build_hand_button(left).pack(side="left", padx=4, pady=8)
 
         # CENTER zone: undo/redo, truly centered over the bar (placed, so the
         # left/right zones don't shift it off-center).
         center = tk.Frame(bar, bg=BAR)
         center.place(relx=0.5, rely=0.5, anchor="center")
         for spec in [
-            ("undo", self.undo, t("დაბრუნება (Ctrl+Z)")),
-            ("redo", self.redo, t("გამეორება (Ctrl+Y)")),
+            ("undo", self.undo, t("Undo (Ctrl+Z)")),
+            ("redo", self.redo, t("Redo (Ctrl+Y)")),
         ]:
             self._tool_button(center, *spec).pack(side="left", padx=4, pady=8)
 
@@ -141,7 +192,7 @@ class ChromeMixin:
         right = tk.Frame(bar, bg=BAR)
         right.pack(side="right", padx=8)
 
-        self.btn_menu = self._tool_button(right, "menu", self.open_menu, t("მენიუ"))
+        self.btn_menu = self._tool_button(right, "menu", self.open_menu, t("Menu"))
         self.btn_menu.pack(side="right", padx=4, pady=8)   # anchor for the dropdown
         self._sep(right).pack(side="right", fill="y", padx=6, pady=10)
 
@@ -151,13 +202,13 @@ class ChromeMixin:
         cull = tk.Frame(right, bg=BAR)
         cull.pack(side="right")
         for spec in [
-            ("folder-check", self.move_to_folder,       t("შენახვა (keeper)")),
-            ("folder-x",     self.delete,               t("გადაგდება (reject)")),
-            ("settings",     self._cull_options_dialog, t("დახარისხების ფოლდერები")),
+            ("folder-check", self.move_to_folder,       t("Keep (keeper)")),
+            ("folder-x",     self.delete,               t("Reject")),
+            ("settings",     self._cull_options_dialog, t("Sorting folders")),
         ]:
             self._tool_button(cull, *spec).pack(side="left", padx=4, pady=8)
         self._glyph_button(cull, "?", self._cull_help_dialog,
-                           t("გადარჩევა — დახმარება")).pack(side="left", padx=4, pady=8)
+                           t("Culling — Help")).pack(side="left", padx=4, pady=8)
 
         # The edit panel's open/close lives on the always-visible icon rail
         # (a collapse chevron), not here — see _build_tool_rail / toggle_panel.
@@ -169,10 +220,32 @@ class ChromeMixin:
         if getattr(self, "_menu_popup", None) is not None:
             self._close_menu()
             return
-        items = [
-            ("save",        t("შენახვა როგორც…"), self._save_as_dialog),
-            ("folder-open", t("ფოლდერის გახსნა"),  self.open_folder),
-        ]
+        self._open_dropdown([
+            ("settings",    t("Settings"),     self._open_settings_menu),
+            ("languages",   t("Language"),     self._open_language_menu),
+            ("sep",),
+            ("info",        t("About Manoni"), self._about_dialog),
+        ])
+
+    def _open_settings_menu(self):
+        "Settings submenu — placeholder for now (text only; no options yet)."
+        pass
+
+    def _open_language_menu(self):
+        "The Language sub-dropdown: 'Add your language' first, then each language"
+        " (✓ on the active one). Choosing one relaunches the app."
+        specs = [("plus", t("Add your language"), self._language_studio), ("sep",)]
+        current = i18n.get_language()
+        for code, native in i18n.available():
+            mark = "   ✓" if code == current else ""
+            specs.append(("languages", native + mark,
+                          lambda c=code: self.switch_language(c)))
+        self._open_dropdown(specs)
+
+    def _open_dropdown(self, specs):
+        "Build the borderless dark popup under the ☰ button. Each spec is either"
+        " ('sep',) for a hairline divider or (icon_name, label, command) for a"
+        " clickable row. Tracked in self._menu_popup so a re-open toggles it."
         pop = tk.Toplevel(self.root)
         pop.overrideredirect(True)                 # borderless: a real popup menu
         pop.configure(bg="#3a3a3a")                # 1px hairline border via inset
@@ -180,7 +253,7 @@ class ChromeMixin:
         inner = tk.Frame(pop, bg=BAR)
         inner.pack(padx=1, pady=1)
 
-        def row(icon_name, label, command):
+        def add_row(icon_name, label, command):
             r = tk.Frame(inner, bg=BAR, cursor="hand2")
             r.pack(fill="x")
             img = self.icon(icon_name)
@@ -206,16 +279,12 @@ class ChromeMixin:
                 w.bind("<Enter>", enter)
                 w.bind("<Leave>", leave)
                 w.bind("<Button-1>", click)
-        for spec in items:
-            row(*spec)
 
-        # Language picker: one row per available language, each shown in its own
-        # script with a ✓ on the active one. Choosing one relaunches the app.
-        tk.Frame(inner, bg="#3a3a3a", height=1).pack(fill="x")
-        current = i18n.get_language()
-        for code, native in i18n.available():
-            mark = "   ✓" if code == current else ""
-            row("languages", native + mark, lambda c=code: self.switch_language(c))
+        for spec in specs:
+            if spec[0] == "sep":
+                tk.Frame(inner, bg="#3a3a3a", height=1).pack(fill="x")
+            else:
+                add_row(*spec)
 
         # Position the popup under the ☰ button, right edges aligned.
         pop.update_idletasks()
@@ -262,6 +331,139 @@ class ChromeMixin:
             # Couldn't re-exec (rare) — exit; the new language applies next launch.
             sys.exit(0)
 
+    # --- "Add your language" studio ----------------------------------------
+
+    def _language_studio(self):
+        "A window to add a UI language: generate a template, import a finished"
+        " translation, or export an installed language to share."
+        dlg = tk.Toplevel(self.root)
+        dlg.title(t("Add your language"))
+        dlg.configure(bg=BG)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+
+        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap.pack(fill="both", expand=True)
+        tk.Label(wrap, text=t("Add your language"), bg=BG, fg=FG,
+                 font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        steps = t("Manoni can speak any language. Here's how:\n"
+                  "1. Generate a template file — it lists every English text.\n"
+                  "2. Open it in any text editor and fill in your translations.\n"
+                  "3. Import the finished file — your language appears in the menu.")
+        tk.Label(wrap, text=steps, bg=BG, fg=FG_DIM, justify="left", anchor="w",
+                 font=("Segoe UI", 9), wraplength=self._edit_dpi_w(380)) \
+            .pack(anchor="w", pady=(8, 16))
+
+        self._filter_action(wrap, "download", t("Generate template file"),
+                            self._lang_export_template,
+                            t("Save a .json file with every text to translate"))
+        self._filter_action(wrap, "folder-input", t("Import a language"),
+                            lambda: self._lang_import(dlg),
+                            t("Load a finished .json translation and install it"))
+        self._filter_action(wrap, "share-2", t("Export a language"),
+                            self._lang_export_pack,
+                            t("Save an installed language to a .json file to share"))
+
+        self._dialog_btn(wrap, t("Close"), dlg.destroy).pack(anchor="e",
+                                                              pady=(16, 0))
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        self._place_filter_dialog(dlg)
+
+    def _lang_export_template(self):
+        "Write a .json template: every English source string, ready to translate."
+        payload = {
+            "_readme": ("Fill in 'code' (e.g. fr) and 'name' (e.g. Francais), "
+                        "then translate the right-hand value of each line under "
+                        "'strings'. Leave the left-hand key exactly as it is."),
+            "code": "",
+            "name": "",
+            "strings": {s: s for s in i18n.source_strings()},
+        }
+        path = tkfd.asksaveasfilename(
+            parent=self.root, title=t("Save template"),
+            defaultextension=".json", initialfile="manoni-language.json",
+            filetypes=[(t("Language file"), "*.json")])
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            self.toast(t("Template saved → {name}").format(
+                name=os.path.basename(path)))
+        except Exception:
+            self.toast(t("Could not write the file"))
+
+    def _lang_import(self, parent_dlg=None):
+        "Load a finished translation .json, install it to LANG_DIR, switch to it."
+        from ..config import LANG_DIR
+        path = tkfd.askopenfilename(
+            parent=self.root, title=t("Import a language"),
+            filetypes=[(t("Language file"), "*.json"), (t("All files"), "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                code, name = i18n.load_pack(json.load(f))
+        except Exception:
+            self.toast(t("That isn't a valid language file"))
+            return
+        # Strip path separators so a hand-written code can't escape LANG_DIR.
+        safe = "".join(ch for ch in code if ch.isalnum() or ch in "-_")
+        if not safe or code == i18n.DEFAULT_LANG:
+            self.toast(t("That language code is reserved"))
+            return
+        try:
+            os.makedirs(LANG_DIR, exist_ok=True)
+            with open(os.path.join(LANG_DIR, f"{safe}.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"code": code, "name": name,
+                           "strings": i18n.catalog(code)}, f,
+                          ensure_ascii=False, indent=2)
+        except Exception:
+            self.toast(t("Could not write the file"))
+            return
+        if parent_dlg is not None:
+            try:
+                parent_dlg.destroy()
+            except tk.TclError:
+                pass
+        self.toast(t("Language added: {name}").format(name=name))
+        # Switch to the freshly added language (relaunches, restoring the session).
+        self.switch_language(code)
+
+    def _lang_export_pack(self):
+        "Pick an installed language and save its pack to a .json file to share."
+        langs = [(c, n) for c, n in i18n.available() if c != i18n.DEFAULT_LANG]
+        if not langs:
+            self.toast(t("No languages to export yet"))
+            return
+        if len(langs) == 1:
+            self._write_lang_pack(*langs[0])
+            return
+        dlg, body = self._filter_dialog(t("Export a language"))
+        for code, name in langs:
+            self._filter_action_plain(
+                body, "share-2", name,
+                lambda c=code, n=name: (self._write_lang_pack(c, n), dlg.destroy()))
+        self._place_filter_dialog(dlg)
+
+    def _write_lang_pack(self, code, name):
+        "Save one installed language ({code,name,strings}) to a chosen .json file."
+        path = tkfd.asksaveasfilename(
+            parent=self.root, title=t("Export a language"),
+            defaultextension=".json", initialfile=f"manoni-{code}.json",
+            filetypes=[(t("Language file"), "*.json")])
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"code": code, "name": name,
+                           "strings": i18n.catalog(code)}, f,
+                          ensure_ascii=False, indent=2)
+            self.toast(t("Exported → {name}").format(name=os.path.basename(path)))
+        except Exception:
+            self.toast(t("Could not write the file"))
+
     # --- Body: sidebar + preview -------------------------------------------
 
     def _build_body(self):
@@ -269,16 +471,17 @@ class ChromeMixin:
         body.grid(row=2, column=0, sticky="nsew")
         self.body = body
         body.rowconfigure(0, weight=1)      # preview row expands
-        body.rowconfigure(1, weight=0)      # bottom strip (nav + zoom) fixed
+        body.rowconfigure(1, weight=0)      # filter preview strip (shown on demand)
+        body.rowconfigure(2, weight=0)      # bottom strip (nav + zoom) fixed
         body.columnconfigure(0, weight=0)   # thumbnail sidebar (drag-resizable)
         body.columnconfigure(1, weight=0)   # drag sash
         body.columnconfigure(2, weight=1)   # preview expands
         body.columnconfigure(3, weight=0)   # tool section panel fixed
         body.columnconfigure(4, weight=0)   # Fotor-style icon rail fixed
 
-        # Sidebar (scrollable thumbnail grid) — full height, left of the bottom strip
+        # Sidebar (scrollable thumbnail grid) — full height, left of the bottom strips
         side = tk.Frame(body, bg=SIDEBAR, width=self.sidebar_width)
-        side.grid(row=0, column=0, rowspan=2, sticky="ns")
+        side.grid(row=0, column=0, rowspan=3, sticky="ns")
         side.pack_propagate(False)   # honor our width; children are packed, not gridded
         self.sidebar = side
 
@@ -316,7 +519,7 @@ class ChromeMixin:
         # centred vertical grip nub mirrors the folder divider so both clearly
         # read as draggable; the strip lightens and the nub turns accent on hover.
         sash = tk.Frame(body, bg=BAR, width=8, cursor="sb_h_double_arrow")
-        sash.grid(row=0, column=1, rowspan=2, sticky="ns")
+        sash.grid(row=0, column=1, rowspan=3, sticky="ns")
         grip = tk.Frame(sash, bg=FG_DIM)
         grip.place(relx=0.5, rely=0.5, anchor="center", width=4, height=40)
         self.sash, self.sash_grip = sash, grip
@@ -349,6 +552,11 @@ class ChromeMixin:
         # Fotor-style edit area on the right: section panel + labeled icon rail
         self._build_edit_panel(body)
         self._build_tool_rail(body)
+
+        # Horizontal filter preview strip below the preview (row 1, col 2). It is
+        # built last so the section panel / rail already exist, and stays hidden
+        # until there are saved filters AND a photo to render them on.
+        self._build_filter_strip(body)
 
     def _on_wheel(self, event):
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
@@ -524,7 +732,7 @@ class ChromeMixin:
         row.pack(side="top", fill="x", padx=6, pady=5)
 
         self.btn_up = self._glyph_button(row, "↑", self.go_up_folder,
-                                         t("ზემოთ ფოლდერი"))
+                                         t("Up a folder"))
         self.btn_up.pack(side="left", padx=(0, 2))
 
         # Click an ancestor crumb to navigate there; the leaf is the open folder.
@@ -556,7 +764,7 @@ class ChromeMixin:
         for w in self.crumbs.winfo_children():
             w.destroy()
         if not self.folder:
-            tk.Label(self.crumbs, text=t("ფოლდერი არ არის გახსნილი"), bg=BAR,
+            tk.Label(self.crumbs, text=t("No folder open"), bg=BAR,
                      fg=FG_DIM, font=("Segoe UI", 8)).pack(side="left")
             self.btn_up.configure(fg="#5a5a5a")   # nothing to go up to
             return
@@ -625,9 +833,9 @@ class ChromeMixin:
         fz = tk.Frame(row, bg=BAR)
         fz.pack(side="right")
         self._tool_button(fz, "zoom-out", self.thumbs_smaller,
-                          t("პატარა თამბნეილები")).pack(side="left", padx=2)
+                          t("Smaller thumbnails")).pack(side="left", padx=2)
         self._tool_button(fz, "zoom-in", self.thumbs_larger,
-                          t("დიდი თამბნეილები")).pack(side="left", padx=2)
+                          t("Larger thumbnails")).pack(side="left", padx=2)
 
     def _build_view_button(self, parent):
         "A flat dropdown button (icon + current view + ▾) that opens the view menu."
@@ -673,10 +881,10 @@ class ChromeMixin:
         if not hasattr(self, "view_btn_label"):
             return
         if self.view_mode == "list":
-            text, icon_name = t("სია"), "menu"
+            text, icon_name = t("List"), "menu"
         else:
             key = self._active_view()
-            text = t(next((l for k, l, _s in self.VIEW_MENU if k == key), "ხატულები"))
+            text = t(next((l for k, l, _s in self.VIEW_MENU if k == key), "Icons"))
             icon_name = "layout-grid"
         self.view_btn_label.configure(text=text)
         img = self.icon(icon_name)

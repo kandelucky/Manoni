@@ -1,9 +1,9 @@
 """Retouch tool for Manoni — two modes that share one brush, paint loop and
 undo:
 
-  • ავტო შეკეთება (heal)  — paint over a blemish and it is cloned away from a
+  • Auto heal (heal)  — paint over a blemish and it is cloned away from a
     clean neighbour, colour-matched (imaging.heal_region).
-  • კლონი (clone stamp)  — Alt+click a source, then paint an exact copy of it
+  • Clone (clone stamp)  — Alt+click a source, then paint an exact copy of it
     with a locked offset (imaging.clone_region), like Photoshop.
 
 Unlike the sliders — global, non-destructive, rebuilt every render — a retouch
@@ -40,8 +40,8 @@ class HealMixin:
         modes.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
         modes.columnconfigure(0, weight=1, uniform="hm")
         modes.columnconfigure(1, weight=1, uniform="hm")
-        self._heal_mode_chip(modes, "ავტო შეკეთება", "auto", 0)
-        self._heal_mode_chip(modes, "კლონი", "clone", 1)
+        self._heal_mode_chip(modes, "Auto heal", "auto", 0)
+        self._heal_mode_chip(modes, "Clone", "clone", 1)
 
         self._heal_hint = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
                                    font=("Segoe UI", 8), justify="left",
@@ -54,13 +54,13 @@ class HealMixin:
         self._clone_opt_chips = {}
         self._clone_opts.columnconfigure(0, weight=1, uniform="co")
         self._clone_opts.columnconfigure(1, weight=1, uniform="co")
-        self._clone_toggle_chip(self._clone_opts, "თანხვედრილი", "aligned", 0)
-        self._clone_toggle_chip(self._clone_opts, "სარკისებური", "flip", 1)
+        self._clone_toggle_chip(self._clone_opts, "Aligned", "aligned", 0)
+        self._clone_toggle_chip(self._clone_opts, "Mirror", "flip", 1)
 
         # Reuse the standard dark Slider. These are absolute magnitudes (not
         # bidirectional like the tone sliders), so neutral = the low end and the
         # accent fill reads as a gauge that grows with the value.
-        self.s_heal_size = Slider(f, t("ფუნჯის ზომა"), self._set_heal_radius,
+        self.s_heal_size = Slider(f, t("Brush size"), self._set_heal_radius,
                                   lo=self.HEAL_MIN, hi=self.HEAL_MAX,
                                   neutral=self.HEAL_MIN)
         self.s_heal_size.set(self.heal_radius)
@@ -68,19 +68,19 @@ class HealMixin:
 
         # Strength: 100 = a solid clone (default), down to 0 = barely there, for
         # a soft, partial retouch (e.g. fading a wrinkle instead of erasing it).
-        self.s_heal_strength = Slider(f, t("სიძლიერე"), self._set_heal_strength,
+        self.s_heal_strength = Slider(f, t("Strength"), self._set_heal_strength,
                                       lo=0, hi=100, neutral=0)
         self.s_heal_strength.set(round(self.heal_opacity * 100))
         self.s_heal_strength.pack(fill="x", padx=EDIT_PAD, pady=2)
 
         # Edge feather: 0 = a crisp disc edge, higher = a softer, more blurred
         # blend into the surrounding pixels.
-        self.s_heal_feather = Slider(f, t("კიდის სიფაფუკე"), self._set_heal_feather,
+        self.s_heal_feather = Slider(f, t("Edge softness"), self._set_heal_feather,
                                      lo=0, hi=100, neutral=0)
         self.s_heal_feather.set(round(self.heal_feather * 100))
         self.s_heal_feather.pack(fill="x", padx=EDIT_PAD, pady=2)
 
-        tk.Label(f, text=t("Ctrl+Z — ბოლო მოქმედების გაუქმება"), bg=BAR, fg=FG_DIM,
+        tk.Label(f, text=t("Ctrl+Z — undo the last action"), bg=BAR, fg=FG_DIM,
                  anchor="w", font=("Segoe UI", 8)).pack(fill="x", padx=EDIT_PAD,
                                                         pady=(12, 4))
         self._refresh_heal_mode()
@@ -141,15 +141,13 @@ class HealMixin:
                            fg="#0b0b0b" if active else FG)
         if self.heal_mode == "clone":
             self._heal_hint.configure(
-                text=t("Alt+დააწკაპე — წყაროს არჩევა; მერე ხატე ზუსტი ასლი. "
-                       "ბორბალი ან [ ] ფუნჯის ზომას ცვლის."))
+                text=t("Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size."))
             self._clone_opts.pack(fill="x", padx=EDIT_PAD, pady=(0, 6),
                                   before=self.s_heal_size.canvas)
             self._refresh_clone_opts()
         else:
             self._heal_hint.configure(
-                text=t("დააწკაპე ან გადაუსვი ლაქას — ვშლი მახლობელი სუფთა ფონის "
-                       "ასლით. ბორბალი ან [ ] ფუნჯის ზომას ცვლის."))
+                text=t("Click or drag over a blemish — I erase it with a copy of nearby clean background. The wheel or [ ] changes the brush size."))
             self._clone_opts.pack_forget()
 
     def _enter_heal(self):
@@ -210,7 +208,7 @@ class HealMixin:
         self.clone_offset = None          # re-align on the next paint dab
         self._heal_cursor = (event.x, event.y)
         self._render_preview()
-        self.toast(t("წყარო არჩეულია — ახლა ხატე ასლი"))
+        self.toast(t("Source picked — now paint the copy"))
         return "break"
 
     # --- Painting -----------------------------------------------------------
@@ -221,7 +219,7 @@ class HealMixin:
             return
         if self.heal_mode == "clone":
             if self.clone_src is None:
-                self.toast(t("ჯერ Alt+დააწკაპე წყაროზე"))
+                self.toast(t("First Alt+click a source"))
                 return "break"
             if self.clone_offset is None or not self.clone_aligned:
                 # Aligned: lock the offset once and keep it across strokes.
@@ -349,7 +347,7 @@ class HealMixin:
         "Paste a stored before/after crop back at its box. Same-image only."
         if cmd["folder"] != self.folder or not self.files \
                 or self.files[self.index] != cmd["file"]:
-            self.toast(t("გაუქმება შეუძლებელია — სხვა სურათია"))
+            self.toast(t("Can't undo — a different image is open"))
             return False
         if self.current_pil.mode != "RGB":
             self.current_pil = self.current_pil.convert("RGB")

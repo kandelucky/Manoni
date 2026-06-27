@@ -2,8 +2,8 @@
 shape stays sharp while everything outside it is Gaussian-blurred. Two shapes
 share one panel, undo and pipeline:
 
-  • წრე  (circle) — a round in-focus area (portrait look).
-  • ხაზი  (line)   — a straight in-focus band that can be rotated (tilt-shift).
+  • Circle  (circle) — a round in-focus area (portrait look).
+  • Line  (line)   — a straight in-focus band that can be rotated (tilt-shift).
 
 Unlike crop / heal (destructive bakes into current_pil), this is a LIVE,
 non-destructive effect — exactly like the vignette. The shape is stored in
@@ -43,8 +43,8 @@ class FocusMixin:
         shapes.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
         shapes.columnconfigure(0, weight=1, uniform="fs")
         shapes.columnconfigure(1, weight=1, uniform="fs")
-        self._focus_shape_chip(shapes, "წრე", "circle", 0)
-        self._focus_shape_chip(shapes, "ხაზი", "line", 1)
+        self._focus_shape_chip(shapes, "Circle", "circle", 0)
+        self._focus_shape_chip(shapes, "Line", "line", 1)
 
         self._focus_hint = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
                                     font=("Segoe UI", 8), justify="left",
@@ -55,26 +55,26 @@ class FocusMixin:
         # Blur strength and edge softness. Absolute magnitudes (neutral = the low
         # end), so the accent fill reads as a gauge — like the heal sliders. The
         # press/release hooks make a whole drag one undo step.
-        self.s_focus_blur = Slider(f, t("ბლურის სიძლიერე"), self._set_focus_blur,
+        self.s_focus_blur = Slider(f, t("Blur strength"), self._set_focus_blur,
                                    lo=0, hi=100, neutral=0,
                                    on_press=self._edit_gesture_start,
                                    on_release=self._edit_gesture_end)
         self.s_focus_blur.pack(fill="x", padx=EDIT_PAD, pady=2)
 
-        self.s_focus_feather = Slider(f, t("გადასვლის სიფაფუკე"),
+        self.s_focus_feather = Slider(f, t("Transition softness"),
                                       self._set_focus_feather,
                                       lo=0, hi=100, neutral=0,
                                       on_press=self._edit_gesture_start,
                                       on_release=self._edit_gesture_end)
         self.s_focus_feather.pack(fill="x", padx=EDIT_PAD, pady=2)
 
-        remove = tk.Label(f, text=t("ბლურის მოშორება"), bg=BAR, fg=FG_DIM,
+        remove = tk.Label(f, text=t("Remove blur"), bg=BAR, fg=FG_DIM,
                           cursor="hand2", anchor="w", font=("Segoe UI", 9))
         remove.bind("<Enter>", lambda e: remove.configure(fg=FG))
         remove.bind("<Leave>", lambda e: remove.configure(fg=FG_DIM))
         remove.bind("<Button-1>", lambda e: self._remove_focus())
         remove.pack(fill="x", padx=EDIT_PAD, pady=(14, 6))
-        remove._tip = Tooltip(remove, t("ფოკუსის ბლურის გამორთვა"))
+        remove._tip = Tooltip(remove, t("Turn the focus blur off"))
         return f
 
     # --- Shape toggle -------------------------------------------------------
@@ -118,12 +118,10 @@ class FocusMixin:
                            fg="#0b0b0b" if on else FG)
         if active == "line":
             self._focus_hint.configure(
-                text=t("გადაათრიე ზოლი ფოკუსისთვის; კიდე სიგანეს ცვლის, "
-                       "ბოლო წერტილი — კუთხეს. ზოლში მკვეთრია, გარეთ — ბლური."))
+                text=t("Drag the band to set the focus; an edge changes its width, the end dot rotates it. Sharp in the band, blurred outside."))
         else:
             self._focus_hint.configure(
-                text=t("გადაათრიე წრე ფოკუსისთვის; კიდე ზომას ცვლის. "
-                       "შიგნით მკვეთრია, გარეთ — ბლური."))
+                text=t("Drag the circle to set the focus; the edge resizes it. Sharp inside, blurred outside."))
 
     # --- State + entry ------------------------------------------------------
 

@@ -31,11 +31,13 @@ from manoni_app.ui.crop import CropMixin
 from manoni_app.ui.heal import HealMixin
 from manoni_app.ui.focus import FocusMixin
 from manoni_app.ui.filters import FiltersMixin
+from manoni_app.ui.actions import ActionsMixin
+from manoni_app.ui.about import AboutMixin
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, HealMixin, FocusMixin,
-             FiltersMixin):
+             FiltersMixin, ActionsMixin, AboutMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -56,10 +58,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # Sidebar view modes (the footer dropdown). Grid modes set the icon size;
     # "list" switches to compact rows. (key, label, thumbnail px | None for list.)
     VIEW_MENU = [
-        ("large",  "დიდი ხატულები",    216),
-        ("medium", "საშუალო ხატულები",  144),
-        ("small",  "პატარა ხატულები",   96),
-        ("list",   "სია",              None),
+        ("large",  "Large icons",    216),
+        ("medium", "Medium icons",  144),
+        ("small",  "Small icons",   96),
+        ("list",   "List",              None),
     ]
     LIST_THUMB = 36     # tiny preview beside the filename in list view
     LIST_NAME_PAD = 30  # px reserved beside a list name (thumb gaps + border + scrollbar)
@@ -170,7 +172,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # (folder/format/quality), persisted across sessions in the state file.
         self.quick_save_cfg = None    # armed only within this session (never loaded)
         self.last_save = None         # {dir, fmt, quality} remembered for the dialog
-        # Cull (გადარჩევა): two destination folders the keep/reject toolbar
+        # Cull (culling): two destination folders the keep/reject toolbar
         # buttons sort the current photo into. Both must be set (in the ⚙ options
         # dialog) before either button works — see nav._require_cull. Persisted
         # across sessions in the state file.
@@ -184,7 +186,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._crop_btn_active = None  # the highlighted preset chip (for restyle)
         self._crop_chips = []         # all preset chip widgets (for restyle)
         self._crop_drag = None        # in-progress drag state, or None
-        # User-saved custom crop sizes shown in the "შენი ზომები" scroll list,
+        # User-saved custom crop sizes shown in the "My sizes" scroll list,
         # each {"name", "w", "h"}. Persisted across sessions in the state file.
         self.crop_sizes = []
         # Retouch tool: a LOCAL pixel edit baked into current_pil like crop —
@@ -192,7 +194,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # Brush radius is in SOURCE px so it stays constant through zoom. A stroke
         # is one undo step.
         self.heal_radius = 24         # brush radius in source px (slider / wheel / [ ])
-        self.heal_opacity = 1.0       # blend strength: 1.0 solid; the სიძლიერე slider lowers it
+        self.heal_opacity = 1.0       # blend strength: 1.0 solid; the Strength slider lowers it
         self.heal_feather = 0.5       # patch-edge softness 0..1 (matches imaging.HEAL_FEATHER)
         self.heal_mode = "auto"       # "auto" = spot heal, "clone" = manual clone stamp
         self.clone_src = None         # clone source anchor (source px), set by Alt+click
@@ -212,6 +214,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.pan_x = 0.0         # viewport pan offset, in screen pixels
         self.pan_y = 0.0
         self._pan_anchor = None  # (mx, my, pan_x, pan_y) captured while panning
+        self.hand_tool = False   # hand (pan) tool: while on, left-drag pans the canvas
         self._view_base = None   # cached cropped+scaled RGB image for the view
         self._view_key = None    # identity of _view_base (None forces a re-render)
         self._view_alpha = None  # matching alpha mask when the photo is transparent
@@ -235,6 +238,14 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._thumb_pos = 0            # next free grid slot while loading
         self._load_prefs()             # restore remembered sidebar width + thumb size
         self._load_filters()           # restore the user's saved filters (presets)
+        self._load_actions()           # restore the user's saved actions (macros)
+
+        # Action recorder (macros). While armed, committed edits/crops are captured
+        # as ordered steps (see manoni_app/ui/actions.py); _playing silences the
+        # crop tool's toasts while an action replays its steps.
+        self._recording = False        # is the recorder armed?
+        self._record_steps = []        # steps captured in the current recording
+        self._playing = False          # an action is currently replaying
 
         # Undo/redo: stacks of command dicts. A command is either
         #   {'kind': 'move', 'file', 'src', 'dest'}            (delete / move-to)
@@ -270,6 +281,15 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # Ctrl+R toggles the canvas rulers.
         self.root.bind("<Control-r>", lambda e: self.toggle_rulers())
         self.root.bind("<Control-R>", lambda e: self.toggle_rulers())
+
+        # Browse-mode arrow keys (only while the edit panel is closed — an open
+        # panel keeps the arrows for its own controls). ←/→ step between photos
+        # (no wrap: they stop at the folder edges); ↑/↓ sort the current photo
+        # into the keep / reject folders. See nav.py.
+        self.root.bind("<Left>",  lambda e: self._arrow_prev())
+        self.root.bind("<Right>", lambda e: self._arrow_next())
+        self.root.bind("<Up>",    lambda e: self._arrow_keep())
+        self.root.bind("<Down>",  lambda e: self._arrow_reject())
 
         if folder:
             self.load_folder(folder)

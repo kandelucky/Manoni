@@ -18,7 +18,7 @@ from ..i18n import t
 CHIP_BG   = "#2f2f2f"   # neutral preset / row background
 SEG_TRACK = "#202020"   # segmented-control trough
 SEL_BG    = "#26415c"   # accent-tinted fill for a selected row
-DARK_BTN  = "#141414"   # the black "გაუქმება" button
+DARK_BTN  = "#141414"   # the black "Cancel" button
 GLYPH     = "#cfcfcf"   # ratio-shape stroke on a neutral chip
 GLYPH_DIM = "#bdbdbd"   # ratio-shape stroke on the small ratio cards
 
@@ -31,10 +31,10 @@ class CropMixin:
     # Social presets: (name, subtitle, ratio label, w/h). Platforms that share a
     # ratio share one row. name/subtitle go through t() at build time.
     CROP_SOCIAL = [
-        ("Instagram პორტრეტი", "პოსტი · ვერტიკალური", "4:5", 4 / 5),
-        ("Story · Reels · TikTok", "სრული ეკრანი", "9:16", 9 / 16),
-        ("YouTube · X", "ჰორიზონტალური", "16:9", 16 / 9),
-        ("FB · LinkedIn", "გაზიარების ბანერი", "1.91", 1.91),
+        ("Instagram portrait", "Post · vertical", "4:5", 4 / 5),
+        ("Story · Reels · TikTok", "Full screen", "9:16", 9 / 16),
+        ("YouTube · X", "Horizontal", "16:9", 16 / 9),
+        ("FB · LinkedIn", "Share banner", "1.91", 1.91),
     ]
 
     def _build_crop_section(self, parent):
@@ -47,14 +47,14 @@ class CropMixin:
         self._size_selectors = []
         self._crop_btn_active = None
 
-        self._crop_group_header(f, "ratio", t("ფორმა"))
+        self._crop_group_header(f, "ratio", t("Shape"))
         self._build_crop_segment(f)
         self._build_ratio_cards(f)
 
-        self._crop_group_header(f, "share-2", t("სოციალური ქსელები"))
+        self._crop_group_header(f, "share-2", t("Social networks"))
         self._build_social_rows(f)
 
-        self._crop_group_header(f, "ruler", t("შენი ზომები"))
+        self._crop_group_header(f, "ruler", t("My sizes"))
         self._build_my_sizes(f)
 
         self._build_crop_actions(f)
@@ -120,15 +120,15 @@ class CropMixin:
         tk.Label(row, text=text, bg=BAR, fg=FG_DIM, anchor="w",
                  font=("Segoe UI", 8, "bold")).pack(side="left")
 
-    # --- Form segment: თავისუფ. / ორიგ. / საკუთ. ----------------------------
+    # --- Form segment: Free / Orig. / Custom --------------------------------
 
     def _build_crop_segment(self, parent):
         "Segmented control for the crop kind (free / original / one-off custom)."
         track = tk.Frame(parent, bg=SEG_TRACK)
         track.pack(fill="x", padx=EDIT_PAD, pady=(0, 5))
-        for icon_name, label, kind in [("maximize", t("თავისუფ."), None),
-                                       ("image", t("ორიგ."), "orig"),
-                                       ("scaling", t("საკუთ."), "custom")]:
+        for icon_name, label, kind in [("maximize", t("Free"), None),
+                                       ("image", t("Orig."), "orig"),
+                                       ("scaling", t("Custom"), "custom")]:
             self._segment_button(track, icon_name, label, kind)
 
     def _segment_button(self, track, icon_name, label, kind):
@@ -173,7 +173,7 @@ class CropMixin:
             iw, ih = self.current_pil.size
             ratio = iw / ih
         else:                                # one-off custom ratio (not saved)
-            res = self._ask_size_dialog("საკუთარი ფორმა", with_name=False)
+            res = self._ask_size_dialog("Custom shape", with_name=False)
             if res is None:
                 return
             _, w, h = res
@@ -277,10 +277,10 @@ class CropMixin:
             w.bind("<Leave>", lambda e: hover(False))
         self._crop_register(row, paint)
 
-    # --- "შენი ზომები": add button + scrollable saved-size list --------------
+    # --- "My sizes": add button + scrollable saved-size list ----------------
 
     def _build_my_sizes(self, parent):
-        "The '+ შენი ზომა' add button plus the scrollable list of saved sizes."
+        "The '+ Your size' add button plus the scrollable list of saved sizes."
         add = tk.Frame(parent, bg=BAR, cursor="hand2",
                        highlightbackground="#3d3d3d", highlightthickness=1)
         add.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
@@ -289,7 +289,7 @@ class CropMixin:
         plus = tk.Label(inner, text="＋", bg=BAR, fg=ACCENT,
                         font=("Segoe UI", 11, "bold"))
         plus.pack(side="left", padx=(0, 5))
-        lbl = tk.Label(inner, text=t("შენი ზომა"), bg=BAR, fg=ACCENT,
+        lbl = tk.Label(inner, text=t("Your size"), bg=BAR, fg=ACCENT,
                        font=("Segoe UI", 8, "bold"))
         lbl.pack(side="left")
         addparts = (add, inner, plus, lbl)
@@ -304,7 +304,7 @@ class CropMixin:
             w.bind("<Button-1>", lambda e: self._add_custom_size())
             w.bind("<Enter>", lambda e: add_hover(True))
             w.bind("<Leave>", lambda e: add_hover(False))
-        add._tip = Tooltip(add, t("შენი საზომის დამატება სიაში"))
+        add._tip = Tooltip(add, t("Add your size to the list"))
 
         # Scroll area: a fixed-height canvas + inner frame + slim scrollbar. The
         # canvas height tracks the content up to a cap, then the list scrolls.
@@ -356,7 +356,7 @@ class CropMixin:
             w.destroy()
         self._size_selectors = []
         if not self.crop_sizes:
-            ph = tk.Label(inner, text=t("ჯერ ზომები არ გაქვს"),
+            ph = tk.Label(inner, text=t("No sizes yet"),
                           bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), anchor="w",
                           justify="left",
                           wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD - 10))
@@ -376,10 +376,10 @@ class CropMixin:
         glyph.pack(side="left", padx=(8, 10), pady=5)
         acts = tk.Frame(row, bg=CHIP_BG)
         acts.pack(side="right", padx=(0, 6))
-        edit = self._size_action(acts, "pencil", "#2c3b4f", t("რედაქტირება"),
+        edit = self._size_action(acts, "pencil", "#2c3b4f", t("Edit"),
                                  lambda: self._edit_custom_size(idx))
         edit.pack(side="left")
-        dele = self._size_action(acts, "trash-2", "#4a2b2b", t("წაშლა"),
+        dele = self._size_action(acts, "trash-2", "#4a2b2b", t("Delete"),
                                  lambda: self._delete_custom_size(idx))
         dele.pack(side="left")
         txt = tk.Frame(row, bg=CHIP_BG)
@@ -455,7 +455,7 @@ class CropMixin:
 
     def _add_custom_size(self):
         "Open the create dialog; on save, add the size to the top of the list."
-        res = self._ask_size_dialog("ზომის შექმნა", with_name=True)
+        res = self._ask_size_dialog("Create size", with_name=True)
         if res is None:
             return
         name, w, h = res
@@ -469,7 +469,7 @@ class CropMixin:
         if not (0 <= idx < len(self.crop_sizes)):
             return
         sz = self.crop_sizes[idx]
-        res = self._ask_size_dialog("ზომის რედაქტირება", name=sz["name"],
+        res = self._ask_size_dialog("Edit size", name=sz["name"],
                                     w=self._num(sz["w"]), h=self._num(sz["h"]),
                                     with_name=True)
         if res is None:
@@ -504,7 +504,7 @@ class CropMixin:
     # --- Bottom actions: flip + apply + cancel ------------------------------
 
     def _build_crop_actions(self, parent):
-        "Flip (icon) + მოჭრა (accent) on one row, then the black გაუქმება button."
+        "Flip (icon) + Crop (accent) on one row, then the black Cancel button."
         bar = tk.Frame(parent, bg=BAR)
         bar.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
 
@@ -519,11 +519,11 @@ class CropMixin:
             w.bind("<Button-1>", lambda e: self._flip_crop_ratio())
             w.bind("<Enter>", lambda e: [x.configure(bg=HOVER) for x in (flip, fic)])
             w.bind("<Leave>", lambda e: [x.configure(bg=CHIP_BG) for x in (flip, fic)])
-        flip._tip = Tooltip(flip, t("მონიშვნის 90°-ით გადატრიალება"))
+        flip._tip = Tooltip(flip, t("Rotate the selection by 90°"))
 
         apply_btn = tk.Frame(bar, bg=ACCENT, cursor="hand2")
         apply_btn.pack(side="left", fill="both", expand=True, padx=(8, 0))
-        atx = tk.Label(apply_btn, text=t("მოჭრა"), bg=ACCENT, fg="#0b0b0b",
+        atx = tk.Label(apply_btn, text=t("Crop"), bg=ACCENT, fg="#0b0b0b",
                        font=("Segoe UI", 10, "bold"))
         atx.pack(expand=True, pady=10)
         for w in (apply_btn, atx):
@@ -541,7 +541,7 @@ class CropMixin:
         ximg = self.icon("x", size=13)
         if ximg is not None:
             tk.Label(cinner, image=ximg, bg=DARK_BTN).pack(side="left", padx=(0, 6))
-        ctx = tk.Label(cinner, text=t("გაუქმება"), bg=DARK_BTN, fg=FG_DIM,
+        ctx = tk.Label(cinner, text=t("Cancel"), bg=DARK_BTN, fg=FG_DIM,
                        font=("Segoe UI", 9))
         ctx.pack(side="left")
         cparts = [cancel, cinner] + list(cinner.winfo_children())
@@ -549,9 +549,9 @@ class CropMixin:
             w.bind("<Button-1>", lambda e: self._reset_crop())
             w.bind("<Enter>", lambda e: [p.configure(bg="#0d0d0d") for p in cparts])
             w.bind("<Leave>", lambda e: [p.configure(bg=DARK_BTN) for p in cparts])
-        cancel._tip = Tooltip(cancel, t("მონიშვნის სრულ სურათზე დაბრუნება"))
+        cancel._tip = Tooltip(cancel, t("Reset the selection to the whole image"))
 
-    # --- Create / edit "შენი ზომა" dialog (same window for both) ------------
+    # --- Create / edit "Your size" dialog (same window for both) ------------
 
     def _ask_size_dialog(self, title, name="", w="", h="", with_name=True):
         "Modal dark dialog for a name + width:height. Returns (name, w, h) or None."
@@ -566,21 +566,20 @@ class CropMixin:
         wrap.pack(fill="both", expand=True)
         tk.Label(wrap, text=t(title), bg=BG, fg=FG,
                  font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        tk.Label(wrap, text=t("დაარქვი სახელი და მიუთითე სიგანე : სიმაღლე "
-                              "(პიქსელი ან პროპორცია, მაგ. 4:5)."),
+        tk.Label(wrap, text=t("Name it and set width : height (pixels or a ratio, e.g. 4:5)."),
                  bg=BG, fg=FG_DIM, font=("Segoe UI", 9), justify="left",
                  wraplength=300).pack(anchor="w", pady=(5, 14))
 
         e_name = None
         if with_name:
-            tk.Label(wrap, text=t("სახელი"), bg=BG, fg=FG_DIM,
+            tk.Label(wrap, text=t("Name"), bg=BG, fg=FG_DIM,
                      font=("Segoe UI", 8, "bold")).pack(anchor="w")
             e_name = tk.Entry(wrap, bg=BAR, fg=FG, insertbackground=FG,
                               relief="flat", font=("Segoe UI", 11))
             e_name.insert(0, name)
             e_name.pack(fill="x", ipady=5, pady=(4, 12))
 
-        tk.Label(wrap, text=t("ზომა — სიგანე : სიმაღლე"), bg=BG, fg=FG_DIM,
+        tk.Label(wrap, text=t("Size — Width : Height"), bg=BG, fg=FG_DIM,
                  font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
         row = tk.Frame(wrap, bg=BG)
         row.pack(anchor="w")
@@ -609,10 +608,10 @@ class CropMixin:
                 cw = float(e_w.get().replace(",", "."))
                 ch = float(e_h.get().replace(",", "."))
             except ValueError:
-                err.configure(text=t("შეიყვანე ორი დადებითი რიცხვი"))
+                err.configure(text=t("Enter two positive numbers"))
                 return
             if cw <= 0 or ch <= 0:
-                err.configure(text=t("რიცხვები დადებითი უნდა იყოს"))
+                err.configure(text=t("Numbers must be positive"))
                 return
             nm = e_name.get().strip() if e_name is not None else ""
             if with_name and not nm:           # default name = the dimensions
@@ -634,8 +633,8 @@ class CropMixin:
             b.bind("<Button-1>", lambda e: command())
             return b
 
-        mkbtn(t("გაუქმება"), dlg.destroy).pack(side="right", padx=(8, 0))
-        mkbtn(t("შენახვა"), confirm, primary=True).pack(side="right")
+        mkbtn(t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
+        mkbtn(t("Save"), confirm, primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Return>", lambda e: confirm())
@@ -725,19 +724,24 @@ class CropMixin:
         self.fit_view()          # fit + recenter + render (shows the overlay)
 
     def apply_crop(self):
-        "Crop current_pil to the selection (in memory; written out via შენახვა)."
+        "Crop current_pil to the selection (in memory; written out via Save)."
         if self.current_pil is None or self.crop_rect is None:
             return
         iw, ih = self.current_pil.size
         x0, y0, x1, y1 = self.crop_rect
         box = (max(0, int(round(x0))), max(0, int(round(y0))),
                min(iw, int(round(x1))), min(ih, int(round(y1))))
+        playing = getattr(self, "_playing", False)
         if box[2] - box[0] < 2 or box[3] - box[1] < 2:
-            self.toast(t("მოსაჭრელი არე ძალიან პატარაა"))
+            if not playing:
+                self.toast(t("The crop area is too small"))
             return
         if box == (0, 0, iw, ih):
-            self.toast(t("მთელი სურათია მონიშნული — არაფერი იცვლება"))
+            if not playing:
+                self.toast(t("The whole image is selected — nothing changes"))
             return
+        if getattr(self, "_recording", False):
+            self._record_crop_step(box, iw, ih)   # capture as a macro step
         self.current_pil = self.current_pil.crop(box)
         self._cropped = True
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a crop
@@ -753,7 +757,8 @@ class CropMixin:
         self._view_key = None       # size changed → drop the cached scaled view
         self._render_preview()
         self._update_info(os.path.join(self.folder, self.files[self.index]))
-        self.toast(t("მოიჭრა → {w}×{h}px  ·  შენახვა ფაილში ჩასაწერად").format(w=nw, h=nh))
+        if not playing:
+            self.toast(t("Cropped → {w}×{h}px  ·  Save to write it to a file").format(w=nw, h=nh))
 
     # --- Crop overlay geometry + mouse interaction --------------------------
 
@@ -894,7 +899,7 @@ class CropMixin:
         return "break"
 
     def _crop_release(self, event):
-        "End the drag (the box stays as drawn; nothing is committed until მოჭრა)."
+        "End the drag (the box stays as drawn; nothing is committed until Crop)."
         if self._crop_drag is None:
             return
         self._crop_drag = None

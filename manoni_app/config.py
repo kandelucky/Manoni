@@ -22,6 +22,15 @@ STATE_FILE = os.path.join(ROOT_DIR, "manoni_state.json")
 # separate from the session state — so it survives and travels independently.
 FILTERS_FILE = os.path.join(ROOT_DIR, "manoni_filters.json")
 
+# User-recorded actions (macros): an ordered list of edit + crop steps replayed
+# onto an open photo. Own file (like filters) so it travels independently.
+ACTIONS_FILE = os.path.join(ROOT_DIR, "manoni_actions.json")
+
+# User-imported UI language packs (one {code,name,strings} .json per language).
+# Scanned at startup and registered with i18n, so an added language survives the
+# relaunch that a language switch triggers. See i18n.load_user_packs.
+LANG_DIR = os.path.join(ROOT_DIR, "languages")
+
 # Dark theme colors
 BG        = "#1b1b1b"   # main background
 BAR       = "#262626"   # toolbar / info bar

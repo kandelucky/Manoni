@@ -96,13 +96,13 @@ class SimpleViewer:
         bar = tk.Frame(self.root, bg=BAR, height=44)
         bar.grid(row=1, column=0, columnspan=2, sticky="ew")
         bar.grid_propagate(False)
-        self._btn(bar, "გახსნა", self.open_folder).pack(side="left", padx=(10, 14), pady=7)
+        self._btn(bar, "Open", self.open_folder).pack(side="left", padx=(10, 14), pady=7)
         self._btn(bar, "‹", lambda: self.show(self.index - 1)).pack(side="left", padx=2)
         self._btn(bar, "›", lambda: self.show(self.index + 1)).pack(side="left", padx=2)
         self.lbl_count = tk.Label(bar, text="0 / 0", bg=BAR, fg=FG_DIM,
                                   font=("Segoe UI", 9))
         self.lbl_count.pack(side="right", padx=14)
-        self.lbl_name = tk.Label(bar, text="← გახსენი ფოლდერი", bg=BAR, fg=FG_DIM,
+        self.lbl_name = tk.Label(bar, text="← Open a folder", bg=BAR, fg=FG_DIM,
                                  font=("Segoe UI", 9))
         self.lbl_name.pack(side="left", padx=12)
 
@@ -251,7 +251,7 @@ class SimpleViewer:
         "No images in the folder: blank the centre and the labels."
         self.current = None
         self.photo.delete("all")
-        self.lbl_name.configure(text="ფოტო ვერ მოიძებნა", fg=FG_DIM)
+        self.lbl_name.configure(text="No photo found", fg=FG_DIM)
         self.lbl_count.configure(text="0 / 0")
 
     def run(self):

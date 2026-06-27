@@ -22,19 +22,20 @@ class BrowserMixin:
     def _build_bottombar(self):
         # The bottom strip is part of the EDITOR CANVAS, so it spans only the
         # preview column (col 2). In edit mode the full-height tool panels (cols
-        # 3-4) sit beside it and clip it on the right.
+        # 3-4) sit beside it and clip it on the right. Row 1 above it holds the
+        # filter preview strip (when shown); this nav/zoom bar is the last row.
         bar = tk.Frame(self.body, bg=BAR, height=34)
-        bar.grid(row=1, column=2, sticky="ew")
+        bar.grid(row=2, column=2, sticky="ew")
         bar.grid_propagate(False)
 
         # RIGHT: navigation arrows, then the position counter.
         nav = tk.Frame(bar, bg=BAR)
         nav.pack(side="right", padx=8)
         for icon_name, command, tip in [
-            ("chevrons-left", self.first, t("პირველი")),
-            ("chevron-left", self.prev, t("წინა")),
-            ("chevron-right", self.next, t("შემდეგი")),
-            ("chevrons-right", self.last, t("ბოლო")),
+            ("chevrons-left", self.first, t("First")),
+            ("chevron-left", self.prev, t("Previous")),
+            ("chevron-right", self.next, t("Next")),
+            ("chevrons-right", self.last, t("Last")),
         ]:
             self._tool_button(nav, icon_name, command, tip).pack(side="left", padx=4, pady=4)
         self.lbl_pos = tk.Label(nav, text="0 / 0", bg=BAR, fg=FG_DIM,
@@ -45,8 +46,8 @@ class BrowserMixin:
         rot = tk.Frame(bar, bg=BAR)
         rot.place(relx=0.5, rely=0.5, anchor="center")
         for icon_name, command, tip in [
-            ("rotate-ccw", self.rotate_left, t("მარცხნივ ამოტრიალება")),
-            ("rotate-cw", self.rotate_right, t("მარჯვნივ ამოტრიალება")),
+            ("rotate-ccw", self.rotate_left, t("Rotate left")),
+            ("rotate-cw", self.rotate_right, t("Rotate right")),
         ]:
             self._tool_button(rot, icon_name, command, tip).pack(side="left", padx=4)
 
@@ -77,12 +78,12 @@ class BrowserMixin:
 
         # Stepper: − [ 49% ] +  (zoom-out / readout / zoom-in).
         self._tool_button(zone, "zoom-out", self.zoom_out,
-                          t("დაპატარავება")).pack(side="left", padx=2)
+                          t("Zoom out")).pack(side="left", padx=2)
         self.lbl_zoom = tk.Label(zone, text="—", bg=BAR, fg=FG, width=6,
                                  font=("Segoe UI", 9, "bold"))
         self.lbl_zoom.pack(side="left")
         self._tool_button(zone, "zoom-in", self.zoom_in,
-                          t("გადიდება")).pack(side="left", padx=2)
+                          t("Zoom in")).pack(side="left", padx=2)
 
     def _chip_hover(self, chip, entering):
         "Brighten a quick-size chip on hover; the active one stays accent-colored."
@@ -118,11 +119,12 @@ class BrowserMixin:
             self.show_current()
         else:
             self.current_pil = None
-            self._message = t("ფოტოები ვერ მოიძებნა")
+            self._message = t("No photos found")
             self._render_preview()
             self.lbl_name.configure(text="Manoni")
             self.lbl_info.configure(text="")
             self.lbl_pos.configure(text="0 / 0")
+            self._refresh_filter_strip()      # no photo → hide the filter strip
             self._save_state()
 
     def open_folder(self):

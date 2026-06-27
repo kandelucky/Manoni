@@ -55,7 +55,7 @@ class NavMixin:
         """
         result = {"choice": "cancel"}
         dlg = tk.Toplevel(self.root)
-        dlg.title(t("შენახვა?"))
+        dlg.title(t("Save?"))
         dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
@@ -66,10 +66,10 @@ class NavMixin:
 
         wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("სურათი შეცვლილია"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("The image has changed"), bg=BG, fg=FG,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
         fname = self.files[self.index] if self.files else ""
-        tk.Label(wrap, text=t("{fname} — შევინახო კოპია _edited-ში?").format(fname=fname), bg=BG,
+        tk.Label(wrap, text=t("{fname} — save a copy to _edited?").format(fname=fname), bg=BG,
                  fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 16))
 
         def mkbtn(text, command, primary=False):
@@ -85,9 +85,9 @@ class NavMixin:
 
         row = tk.Frame(wrap, bg=BG)
         row.pack(anchor="e")
-        mkbtn(t("გაუქმება"), lambda: choose("cancel")).pack(side="right", padx=(8, 0))
-        mkbtn(t("არ შევინახო"), lambda: choose("discard")).pack(side="right", padx=(8, 0))
-        mkbtn(t("შენახვა"), lambda: choose("save"), primary=True).pack(side="right")
+        mkbtn(t("Cancel"), lambda: choose("cancel")).pack(side="right", padx=(8, 0))
+        mkbtn(t("Don't save"), lambda: choose("discard")).pack(side="right", padx=(8, 0))
+        mkbtn(t("Save"), lambda: choose("save"), primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
         dlg.bind("<Escape>", lambda e: choose("cancel"))
@@ -119,6 +119,58 @@ class NavMixin:
     def last(self):
         self.go_to(len(self.files) - 1)
 
+    # --- Arrow-key browse shortcuts (only while the edit panel is closed) ----
+
+    def _browse_keys_active(self):
+        """True when the arrow shortcuts may act: a photo is shown, the edit
+        panel is closed, and no text field is focused. (Modal dialogs grab the
+        keyboard, so an open dialog never reaches these handlers anyway.)"""
+        if self.panel_open or not self.files:
+            return False
+        focused = self.root.focus_get()
+        if isinstance(focused, (tk.Entry, tk.Text)):
+            return False
+        return True
+
+    def _arrow_prev(self):
+        "← previous photo; at the first one, report the folder edge."
+        if not self._browse_keys_active():
+            return
+        if self.index > 0:
+            self.go_to(self.index - 1)
+        else:
+            self._folder_edge(-1)
+
+    def _arrow_next(self):
+        "→ next photo; at the last one, report the folder edge."
+        if not self._browse_keys_active():
+            return
+        if self.index < len(self.files) - 1:
+            self.go_to(self.index + 1)
+        else:
+            self._folder_edge(1)
+
+    def _folder_edge(self, direction):
+        """Reached the first (-1) / last (+1) photo of the folder.
+
+        TODO (planned, see Settings): when a "continue into the adjacent folder"
+        option is enabled, load the previous/next sibling folder and select its
+        last/first photo instead of toasting. Until that option exists we only
+        report the edge.
+        """
+        self.toast(t("End of the folder") if direction > 0
+                   else t("Start of the folder"))
+
+    def _arrow_keep(self):
+        "↑ sort the current photo into the keep (good) folder."
+        if self._browse_keys_active():
+            self.move_to_folder()
+
+    def _arrow_reject(self):
+        "↓ sort the current photo into the reject (bad) folder."
+        if self._browse_keys_active():
+            self.delete()
+
     # --- Cull: keep / reject (sort into two configured folders) -------------
 
     def _cull_ready(self):
@@ -131,7 +183,7 @@ class NavMixin:
         if not self.files:
             return False
         if not self._cull_ready():
-            self.toast(t("ჯერ მიუთითე დახარისხების ფოლდერები  ·  ⚙ პარამეტრები"))
+            self.toast(t("Set the sorting folders first  ·  ⚙ Settings"))
             self._cull_options_dialog()
             return False
         return True
@@ -142,7 +194,7 @@ class NavMixin:
             return
         os.makedirs(self.cull_keep, exist_ok=True)
         if self._move_current_to(self.cull_keep):
-            self.toast(t("შენახულია → {name}  ·  Ctrl+Z").format(
+            self.toast(t("Kept → {name}  ·  Ctrl+Z").format(
                 name=os.path.basename(self.cull_keep)))
 
     def delete(self):
@@ -151,7 +203,7 @@ class NavMixin:
             return
         os.makedirs(self.cull_reject, exist_ok=True)
         if self._move_current_to(self.cull_reject):
-            self.toast(t("გადაგდებულია → {name}  ·  Ctrl+Z").format(
+            self.toast(t("Rejected → {name}  ·  Ctrl+Z").format(
                 name=os.path.basename(self.cull_reject)))
 
     # --- Cull configuration + help dialogs ----------------------------------
@@ -182,17 +234,16 @@ class NavMixin:
               "ok": False}
 
         dlg = tk.Toplevel(self.root)
-        dlg.title(t("დახარისხების ფოლდერები"))
+        dlg.title(t("Sorting folders"))
         dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
         wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
 
-        tk.Label(wrap, text=t("დახარისხების ფოლდერები"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("Sorting folders"), bg=BG, fg=FG,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(wrap, text=t("მიუთითე სად გადავიდეს დატოვებული და გადაგდებული "
-                 "ფოტოები. სანამ ორივე არ მითითებულა, ღილაკები არ მუშაობს."),
+        tk.Label(wrap, text=t("Set where kept and rejected photos go. Until both are set, the buttons don't work."),
                  bg=BG, fg=FG_DIM, font=("Segoe UI", 9), justify="left",
                  wraplength=380).pack(anchor="w", pady=(4, 4))
 
@@ -213,14 +264,14 @@ class NavMixin:
                 dlg.grab_set()
                 if d:
                     var.set(d)
-            self._cull_dialog_button(row, t("არჩევა"), pick).pack(side="right",
+            self._cull_dialog_button(row, t("Select"), pick).pack(side="right",
                                                                padx=(6, 0))
             tk.Entry(row, textvariable=var, bg=BAR, fg=FG, insertbackground=FG,
                      relief="flat", font=("Segoe UI", 9), width=34).pack(
                          side="left", fill="x", expand=True, ipady=5)
 
-        folder_row(t("✓ შენახვა (keeper) — დატოვებული ფოტოები"), keep_var)
-        folder_row(t("✗ გადაგდება (reject) — გადაგდებული ფოტოები"), reject_var)
+        folder_row(t("✓ Keep (keeper) — photos you keep"), keep_var)
+        folder_row(t("✗ Reject — photos you discard"), reject_var)
 
         def confirm():
             st["keep"] = keep_var.get().strip()
@@ -230,9 +281,9 @@ class NavMixin:
 
         brow = tk.Frame(wrap, bg=BG)
         brow.pack(anchor="e", pady=(18, 0))
-        self._cull_dialog_button(brow, t("გაუქმება"), dlg.destroy).pack(
+        self._cull_dialog_button(brow, t("Cancel"), dlg.destroy).pack(
             side="right", padx=(8, 0))
-        self._cull_dialog_button(brow, t("შენახვა"), confirm, primary=True).pack(
+        self._cull_dialog_button(brow, t("Save"), confirm, primary=True).pack(
             side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
@@ -249,34 +300,33 @@ class NavMixin:
         self.cull_reject = st["reject"] or None
         self._save_state()
         if self._cull_ready():
-            self.toast(t("დახარისხების ფოლდერები შენახულია"))
+            self.toast(t("Sorting folders saved"))
         else:
-            self.toast(t("ფოლდერები არასრულია — გადარჩევა ჯერ არ მუშაობს"))
+            self.toast(t("Folders incomplete — culling doesn't work yet"))
 
     def _cull_help_dialog(self):
         "Explain the cull workflow: what keep / reject / options do."
         dlg = tk.Toplevel(self.root)
-        dlg.title(t("გადარჩევა — დახმარება"))
+        dlg.title(t("Culling — Help"))
         dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
         wrap = tk.Frame(dlg, bg=BG, padx=24, pady=20)
         wrap.pack(fill="both", expand=True)
 
-        tk.Label(wrap, text=t("ფოტოების გადარჩევა (culling)"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("Culling photos"), bg=BG, fg=FG,
                  font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 4))
-        tk.Label(wrap, text=t("ათვალიერებ ფოტოებს და თითოეულს ანაწილებ ორ "
-                 "ფოლდერში — დასატოვებელი და გადასაგდები."), bg=BG, fg=FG_DIM,
+        tk.Label(wrap, text=t("You browse the photos and sort each into two folders — keep and discard."), bg=BG, fg=FG_DIM,
                  font=("Segoe UI", 9), justify="left",
                  wraplength=360).pack(anchor="w", pady=(0, 12))
 
         rows = [
-            ("folder-check", "შენახვა (keeper)",
-             "მიმდინარე ფოტოს გადააქვს დასატოვებელ ფოლდერში."),
-            ("folder-x",     "გადაგდება (reject)",
-             "მიმდინარე ფოტოს გადააქვს გადასაგდებ ფოლდერში."),
-            ("settings",     "პარამეტრები",
-             "მიუთითე ეს ორი ფოლდერი — სანამ არ მიუთითებ, ღილაკები არ მუშაობს."),
+            ("folder-check", "Keep (keeper)",
+             "Moves the current photo to the keep folder."),
+            ("folder-x",     "Reject",
+             "Moves the current photo to the discard folder."),
+            ("settings",     "Settings",
+             "Set these two folders — until you do, the buttons don't work."),
         ]
         for icon_name, title, desc in rows:
             r = tk.Frame(wrap, bg=BG)
@@ -292,12 +342,12 @@ class NavMixin:
                      font=("Segoe UI", 9), justify="left",
                      wraplength=300).pack(anchor="w")
 
-        tk.Label(wrap, text=t("Ctrl+Z აბრუნებს ნებისმიერ გადატანას."), bg=BG,
+        tk.Label(wrap, text=t("Ctrl+Z undoes any move."), bg=BG,
                  fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(12, 0))
 
         brow = tk.Frame(wrap, bg=BG)
         brow.pack(anchor="e", pady=(16, 0))
-        self._cull_dialog_button(brow, t("გასაგებია"), dlg.destroy,
+        self._cull_dialog_button(brow, t("Got it"), dlg.destroy,
                                  primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
@@ -326,7 +376,7 @@ class NavMixin:
             shutil.move(os.path.join(src, file), os.path.join(dest, file))
             return True
         except Exception as e:
-            self.toast(t("შეცდომა: {e}").format(e=e))
+            self.toast(t("Error: {e}").format(e=e))
             return False
 
     def _drop_from_list(self, file):
@@ -361,10 +411,11 @@ class NavMixin:
         "Record a new action; any pending redo history is discarded."
         self._undo_stack.append(cmd)
         self._redo_stack.clear()
+        self._record_capture(cmd)   # feed the macro recorder if it is armed
 
     def undo(self):
         if not self._undo_stack:
-            self.toast(t("გასაუქმებელი არაფერია"))
+            self.toast(t("Nothing to undo"))
             return
         cmd = self._undo_stack.pop()
         if self._revert(cmd):
@@ -374,7 +425,7 @@ class NavMixin:
 
     def redo(self):
         if not self._redo_stack:
-            self.toast(t("გასამეორებელი არაფერია"))
+            self.toast(t("Nothing to redo"))
             return
         cmd = self._redo_stack.pop()
         if self._reapply(cmd):
@@ -389,7 +440,7 @@ class NavMixin:
                 return False
             if self.folder == cmd["src"]:
                 self._add_to_list(cmd["file"])
-            self.toast(t("დაბრუნდა: {name}").format(name=cmd['file']))
+            self.toast(t("Restored: {name}").format(name=cmd['file']))
             return True
         if cmd["kind"] == "edit":
             return self._apply_edit_state(cmd, cmd["before"])
@@ -406,7 +457,7 @@ class NavMixin:
                 return False
             if self.folder == cmd["src"]:
                 self._drop_from_list(cmd["file"])
-            self.toast(t("გადატანილია: {name}").format(name=cmd['file']))
+            self.toast(t("Moved: {name}").format(name=cmd['file']))
             return True
         if cmd["kind"] == "edit":
             return self._apply_edit_state(cmd, cmd["after"])
@@ -417,10 +468,10 @@ class NavMixin:
     def _apply_edit_state(self, cmd, state):
         "Restore the four edit factors for the image a command belongs to."
         if cmd["folder"] != self.folder:
-            self.toast(t("რედაქტირების გაუქმება შეუძლებელია — სხვა ფოლდერია"))
+            self.toast(t("Can't undo the edit — a different folder is open"))
             return False
         if not self.files or cmd["file"] not in self.files:
-            self.toast(t("რედაქტირების გაუქმება შეუძლებელია — ფაილი აღარ არსებობს"))
+            self.toast(t("Can't undo the edit — the file no longer exists"))
             return False
         if self.files[self.index] != cmd["file"]:
             self.index = self.files.index(cmd["file"])
@@ -433,4 +484,5 @@ class NavMixin:
         self._recompute_auto()
         self._refresh_auto_buttons()
         self._render_preview()
+        self._repaint_filter_strip()          # the active filter cell may have changed
         return True

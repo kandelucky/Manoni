@@ -21,9 +21,10 @@ class EditPanelMixin:
 
     # The rail's selectable tools and their blue-header titles (Save is a
     # separate bottom action, not a section, so it is not listed here).
-    SECTION_TITLES = {"basic": "Basic Edits", "crop": "მოჭრა",
-                      "heal": "შეკეთება & კლონი", "focus": "ფოკუსის ბლური",
-                      "effects": "ეფექტები", "filters": "ფილტრები"}
+    SECTION_TITLES = {"basic": "Basic Edits", "crop": "Crop",
+                      "heal": "Heal & Clone", "focus": "Focus blur",
+                      "effects": "Effects", "filters": "Filters",
+                      "actions": "Actions"}
 
     def _edit_dpi_w(self, logical):
         "Logical px → physical px for the edit area (so DPI-scaled text fits)."
@@ -36,7 +37,7 @@ class EditPanelMixin:
         # growing to whichever tool's content is open. Width is DPI-scaled so the
         # (DPI-scaled) labels fit the same at any Windows scaling.
         panel = tk.Frame(parent, bg=BAR, width=self._edit_dpi_w(EDIT_PANEL_W))
-        panel.grid(row=0, column=3, rowspan=2, sticky="ns")   # full height: clips the strip
+        panel.grid(row=0, column=3, rowspan=3, sticky="ns")   # full height: clips the strips
         panel.pack_propagate(False)
         self.edit_panel = panel
         if not self.panel_open:      # hidden until the toolbar toggle opens it
@@ -59,6 +60,7 @@ class EditPanelMixin:
             "focus":   self._build_focus_section(self.section_content),
             "effects": self._build_effects_section(self.section_content),
             "filters": self._build_filters_section(self.section_content),
+            "actions": self._build_actions_section(self.section_content),
         }
         self.sections[self.active_section].pack(fill="both", expand=True)
 
@@ -73,32 +75,32 @@ class EditPanelMixin:
         autobar.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
         autobar.columnconfigure(0, weight=1, uniform="auto")
         autobar.columnconfigure(1, weight=1, uniform="auto")
-        self._auto_btn(autobar, t("ავტო ლეველი"), "levels", 0,
-                       t("ფერის ბალანსის ავტო-სწორება (თითო არხი ცალკე იჭიმება)"))
-        self._auto_btn(autobar, t("ავტო კონტრასტი"), "contrast", 1,
-                       t("კონტრასტის ავტო-სწორება (ფერი უცვლელი რჩება)"))
+        self._auto_btn(autobar, t("Auto level"), "levels", 0,
+                       t("Auto-correct color balance (each channel stretched separately)"))
+        self._auto_btn(autobar, t("Auto contrast"), "contrast", 1,
+                       t("Auto-correct contrast (color stays unchanged)"))
 
         # Photoshop order: white balance at the very top, then tone, then detail.
         # Each group is split off with its own header so the sliders read as
         # distinct sections rather than one long glued strip.
-        self._group_header(f, t("თეთრის ბალანსი"))
-        self.s_temp       = self._slider(f, t("სითბო"), "temperature")
-        self.s_tint       = self._slider(f, t("ტინტი"), "tint")
+        self._group_header(f, t("White balance"))
+        self.s_temp       = self._slider(f, t("Temperature"), "temperature")
+        self.s_tint       = self._slider(f, t("Tint"), "tint")
 
-        self._group_header(f, t("ტონი"))
-        self.s_exposure   = self._slider(f, t("ექსპოზიცია"), "brightness")
-        self.s_contrast   = self._slider(f, t("კონტრასტი"), "contrast")
-        self.s_highlights = self._slider(f, t("ნათელები"), "highlights")
-        self.s_shadows    = self._slider(f, t("ჩრდილები"), "shadows")
-        self.s_whites     = self._slider(f, t("თეთრები"), "whites")
-        self.s_blacks     = self._slider(f, t("შავები"), "blacks")
+        self._group_header(f, t("Tone"))
+        self.s_exposure   = self._slider(f, t("Exposure"), "brightness")
+        self.s_contrast   = self._slider(f, t("Contrast"), "contrast")
+        self.s_highlights = self._slider(f, t("Highlights"), "highlights")
+        self.s_shadows    = self._slider(f, t("Shadows"), "shadows")
+        self.s_whites     = self._slider(f, t("Whites"), "whites")
+        self.s_blacks     = self._slider(f, t("Blacks"), "blacks")
 
-        self._group_header(f, t("დეტალი და ფერი"))
-        self.s_clarity    = self._slider(f, t("სიცხადე"), "clarity")
-        self.s_vibrance   = self._slider(f, t("სიხასხასე"), "vibrance")
-        self.s_color      = self._slider(f, t("ფერი"), "color")
-        self.s_texture    = self._slider(f, t("ტექსტურა"), "texture")
-        self.s_sharpen    = self._slider(f, t("სიმკვეთრე"), "sharpen")
+        self._group_header(f, t("Detail & Color"))
+        self.s_clarity    = self._slider(f, t("Clarity"), "clarity")
+        self.s_vibrance   = self._slider(f, t("Vibrance"), "vibrance")
+        self.s_color      = self._slider(f, t("Color"), "color")
+        self.s_texture    = self._slider(f, t("Texture"), "texture")
+        self.s_sharpen    = self._slider(f, t("Sharpen"), "sharpen")
         self.sliders = {"brightness": self.s_exposure,
                         "contrast": self.s_contrast,
                         "highlights": self.s_highlights,
@@ -159,13 +161,13 @@ class EditPanelMixin:
         " vignette now; grain next. They share the edit pipeline, undo and reset."
         f = tk.Frame(parent, bg=BAR)
         # Effects rest at 0 (off): hi=100, neutral=0 → strength 0.0–1.0.
-        self.s_bw = self._slider(f, t("შავ-თეთრი"), "bw", hi=100, neutral=0)
+        self.s_bw = self._slider(f, t("Black & White"), "bw", hi=100, neutral=0)
         self.sliders["bw"] = self.s_bw   # join the shared reset / undo machinery
         # Sepia: a warm-toned monochrome — grouped with B&W (both desaturating looks).
-        self.s_sepia = self._slider(f, t("სეპია"), "sepia", hi=100, neutral=0)
+        self.s_sepia = self._slider(f, t("Sepia"), "sepia", hi=100, neutral=0)
         self.sliders["sepia"] = self.s_sepia
         # Bidirectional (centred at 0): left lightens the corners, right darkens.
-        self.s_vignette = self._slider(f, t("ვინიეტი"), "vignette")
+        self.s_vignette = self._slider(f, t("Vignette"), "vignette")
         self.sliders["vignette"] = self.s_vignette
 
         self._clear_button(f)
@@ -177,7 +179,7 @@ class EditPanelMixin:
         "Always-visible icon rail: a collapse chevron on top, then the tool icons"
         " (click one to open the panel to it); Save pinned to the bottom."
         rail = tk.Frame(parent, bg=BAR, width=self._edit_dpi_w(EDIT_RAIL_W))
-        rail.grid(row=0, column=4, rowspan=2, sticky="ns")   # full height: clips the strip
+        rail.grid(row=0, column=4, rowspan=3, sticky="ns")   # full height: clips the strips
         rail.pack_propagate(False)   # children are packed → fix the width here
         self.rail = rail   # the rail itself never hides; only edit_panel collapses
 
@@ -188,18 +190,19 @@ class EditPanelMixin:
         # Collapse chevron: '<' (panel closed) opens it, '>' (panel open) closes
         # it. The slider panel slides out to the LEFT of this rail.
         self.btn_chevron = self._tool_button(
-            top, "chevron-left", self.toggle_panel, t("პანელის გახსნა / დაკეცვა"))
+            top, "chevron-left", self.toggle_panel, t("Open / collapse the panel"))
         self.btn_chevron.pack(side="top", pady=(0, 6))
         tk.Frame(top, bg="#3a3a3a", height=1).pack(side="top", fill="x",
                                                    padx=12, pady=(0, 6))
 
         for key, icon_name, label in [
             ("basic",   "sliders-horizontal", "Basic Edit"),
-            ("crop",    "crop",               "მოჭრა"),
-            ("heal",    "bandage",            "შეკეთება"),
-            ("focus",   "aperture",           "ბლური"),
-            ("effects", "wand-sparkles",      "ეფექტები"),
-            ("filters", "palette",            "ფილტრები"),
+            ("crop",    "crop",               "Crop"),
+            ("heal",    "bandage",            "Heal"),
+            ("focus",   "aperture",           "Blur"),
+            ("effects", "wand-sparkles",      "Effects"),
+            ("filters", "palette",            "Filters"),
+            ("actions", "clapperboard",       "Actions"),
         ]:
             self._rail_button(top, icon_name, label, key=key)
 
@@ -226,7 +229,7 @@ class EditPanelMixin:
             ic = tk.Label(btn, text="💾", bg=ACCENT, fg="#0b0b0b",
                           font=("Segoe UI", 14))
         ic.pack(pady=(8, 2))
-        tx = tk.Label(btn, text=t("შენახვა"), bg=ACCENT, fg="#0b0b0b",
+        tx = tk.Label(btn, text=t("Save"), bg=ACCENT, fg="#0b0b0b",
                       font=("Segoe UI", 8, "bold"))
         tx.pack(pady=(0, 8))
         for w in (btn, ic, tx):
@@ -235,7 +238,7 @@ class EditPanelMixin:
                                          for c in (btn, ic, tx)])
             w.bind("<Leave>", lambda e: [c.configure(bg=ACCENT)
                                          for c in (btn, ic, tx)])
-        btn._tip = Tooltip(btn, t("შენახვა"))
+        btn._tip = Tooltip(btn, t("Save"))
 
     def _set_panel(self, open_):
         "Show or hide the slider panel (col 3). The icon rail stays put."
@@ -309,6 +312,7 @@ class EditPanelMixin:
         "Open a tool section: swap the panel content, update header + rail highlight."
         if key not in self.sections:
             return
+        self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
         self.active_section = key
         for k, frame in self.sections.items():
             if k == key:
@@ -323,6 +327,8 @@ class EditPanelMixin:
             self._enter_heal()       # show the brush cursor + ring
         elif key == "focus":
             self._enter_focus()      # place the focus circle + fit to see it all
+        elif key == "actions":
+            self._enter_actions()    # refresh the recorder + saved-action list
         else:
             self.preview.configure(cursor="")
             self._render_preview()   # repaint without the crop/heal/focus overlay
@@ -365,7 +371,7 @@ class EditPanelMixin:
         b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
         b.bind("<Leave>", lambda e: b.configure(bg=BAR))
         b.bind("<Button-1>", lambda e, a=attr: self._reset_slider(a))
-        b._tip = Tooltip(b, t("სლაიდერის განულება"))
+        b._tip = Tooltip(b, t("Reset this slider"))
         return b
 
     def _clear_button(self, parent):
@@ -382,7 +388,7 @@ class EditPanelMixin:
             ic = tk.Label(inner, image=img, bg=NORMAL)
             ic.pack(side="left", padx=(0, 6))
             parts.append(ic)
-        tx = tk.Label(inner, text=t("გასუფთავება"), bg=NORMAL, fg=FG,
+        tx = tk.Label(inner, text=t("Clear all"), bg=NORMAL, fg=FG,
                       font=("Segoe UI", 9, "bold"))
         tx.pack(side="left")
         parts.append(tx)
@@ -390,7 +396,7 @@ class EditPanelMixin:
             w.bind("<Button-1>", lambda e: self._reset_edits())
             w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in parts])
             w.bind("<Leave>", lambda e: [p.configure(bg=NORMAL) for p in parts])
-        btn._tip = Tooltip(btn, t("ყველა სლაიდერის განულება"))
+        btn._tip = Tooltip(btn, t("Reset all sliders"))
         return btn
 
     def _slider_neutral(self, attr):
@@ -414,6 +420,7 @@ class EditPanelMixin:
         self._edits_saved = False
         self._render_preview()
         self._record_edit(before)
+        self._repaint_filter_strip()
 
     def _reset_sliders(self):
         "Put every slider back to its neutral (1.0, or 0.0 for effects). No re-render."
@@ -446,6 +453,7 @@ class EditPanelMixin:
         self._edits_saved = False
         self._render_preview()
         self._record_edit(before)
+        self._repaint_filter_strip()
 
     def _reset_edits(self):
         "Reset all sliders to neutral as a single undoable step."
@@ -453,6 +461,7 @@ class EditPanelMixin:
         self._reset_sliders()
         self._render_preview()
         self._record_edit(before)
+        self._repaint_filter_strip()
 
     # --- Edit undo bookkeeping ----------------------------------------------
 
@@ -478,6 +487,7 @@ class EditPanelMixin:
         if self._edit_before is not None:
             self._record_edit(self._edit_before)
             self._edit_before = None
+            self._repaint_filter_strip()
 
     def _record_edit(self, before):
         "Push an 'edit' undo entry for the current image if state changed."

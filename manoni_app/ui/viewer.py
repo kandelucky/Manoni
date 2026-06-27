@@ -45,6 +45,7 @@ class ViewerMixin:
         self._restyle_crop_chips()
         self._edits_saved = False
         self._render_preview()
+        self._refresh_filter_strip()   # rebuild the filter previews for this photo
         self._update_info(path)
         self._highlight_thumb()
         self._scroll_to_thumb()
@@ -129,6 +130,8 @@ class ViewerMixin:
     # acts when the crop box is live), and the wheel zooms unless heal claims it.
 
     def _preview_press(self, event):
+        if self.hand_tool:                       # hand tool overrides every tool
+            return self._on_pan_start(event)
         if self._focus_active():
             return self._focus_press(event)
         if self._heal_active():
@@ -143,6 +146,8 @@ class ViewerMixin:
         return self._preview_press(event)
 
     def _preview_drag(self, event):
+        if self.hand_tool:
+            return self._on_pan_move(event)
         if self._focus_active():
             return self._focus_move(event)
         if self._heal_active():
@@ -150,6 +155,8 @@ class ViewerMixin:
         return self._crop_move(event)
 
     def _preview_release(self, event):
+        if self.hand_tool:
+            return self._on_pan_end(event)
         if self._focus_active():
             return self._focus_release(event)
         if self._heal_active():
@@ -157,6 +164,8 @@ class ViewerMixin:
         return self._crop_release(event)
 
     def _preview_hover(self, event):
+        if self.hand_tool:                       # keep the hand cursor; no tool hover
+            return
         if self._focus_active():
             return self._focus_hover(event)
         if self._heal_active():
@@ -185,18 +194,18 @@ class ViewerMixin:
         self._render_preview()
 
     def _on_pan_end(self, event):
-        "Release the canvas: restore the normal cursor."
+        "Release the canvas: restore the cursor (the hand stays armed if its tool is on)."
         self._pan_anchor = None
-        self.preview.configure(cursor="")
+        self.preview.configure(cursor="hand2" if self.hand_tool else "")
 
     # --- Rotation -----------------------------------------------------------
 
     def rotate_left(self):
-        "Rotate the current photo 90° counter-clockwise (preview; saved on შენახვა)."
+        "Rotate the current photo 90° counter-clockwise (preview; saved on Save)."
         self._rotate(Image.ROTATE_90)
 
     def rotate_right(self):
-        "Rotate the current photo 90° clockwise (preview; saved on შენახვა)."
+        "Rotate the current photo 90° clockwise (preview; saved on Save)."
         self._rotate(Image.ROTATE_270)
 
     def _rotate(self, transpose_op):
@@ -211,6 +220,7 @@ class ViewerMixin:
         self.pan_x = self.pan_y = 0.0
         self._view_key = None           # size changed → drop the cached scaled view
         self._render_preview()
+        self._refresh_filter_strip()    # the rotated photo needs fresh thumbnails
         self._update_info(os.path.join(self.folder, self.files[self.index]))
 
     def _draw_message(self, text):

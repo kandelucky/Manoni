@@ -35,7 +35,7 @@ class SaveMixin:
             else:
                 img.save(out, fmt, quality=int(cfg.get("quality", 95)))
         except Exception as e:
-            self.toast(t("შეცდომა: {e}").format(e=e))
+            self.toast(t("Error: {e}").format(e=e))
             return None
         self._edits_saved = True                   # on disk now → no re-prompt
         return out
@@ -50,7 +50,7 @@ class SaveMixin:
             return self._save_as_dialog()          # configure + save in one go
         out = self._write_save(self.quick_save_cfg, self._save_basename())
         if out:
-            self.toast(t("შენახულია → {name}").format(name=os.path.basename(out)))
+            self.toast(t("Saved → {name}").format(name=os.path.basename(out)))
             return True
         return False
 
@@ -59,7 +59,7 @@ class SaveMixin:
         Defaults come from this session's quick cfg → the last saved → a sensible
         guess. Returns True if a file was written."""
         if not self.files or self.current_pil is None or not self.folder:
-            self.toast(t("ჯერ გახსენი სურათი"))
+            self.toast(t("Open an image first"))
             return False
 
         src_ext = os.path.splitext(self.files[self.index])[1].lower()
@@ -73,7 +73,7 @@ class SaveMixin:
               "name": "", "quick": False, "ok": False}
 
         dlg = tk.Toplevel(self.root)
-        dlg.title(t("შენახვა როგორც"))
+        dlg.title(t("Save as"))
         dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
@@ -107,25 +107,25 @@ class SaveMixin:
             return c
 
         # --- Folder (with a browse button) ---
-        heading(t("საქაღალდე"))
+        heading(t("Folder"))
         dir_var = tk.StringVar(value=st["dir"])
 
         def pick_dir():
             dlg.grab_release()                     # let the native picker take over
-            d = tkfd.askdirectory(parent=dlg, title=t("აირჩიე საქაღალდე"),
+            d = tkfd.askdirectory(parent=dlg, title=t("Choose a folder"),
                                   initialdir=dir_var.get() or self.folder)
             dlg.grab_set()
             if d:
                 dir_var.set(d)
 
         frow = tk.Frame(wrap, bg=BG); frow.pack(fill="x")
-        mkbtn(frow, t("არჩევა"), pick_dir).pack(side="right", padx=(6, 0))
+        mkbtn(frow, t("Select"), pick_dir).pack(side="right", padx=(6, 0))
         tk.Entry(frow, textvariable=dir_var, bg=BAR, fg=FG, insertbackground=FG,
                  relief="flat", font=("Segoe UI", 9)).pack(
                      side="left", fill="x", expand=True, ipady=5)
 
         # --- Name (with a live extension suffix) ---
-        heading(t("სახელი"))
+        heading(t("Name"))
         name_var = tk.StringVar(value=self._save_basename())
         nrow = tk.Frame(wrap, bg=BG); nrow.pack(fill="x")
         ext_lbl = tk.Label(nrow, text=self.FMT_EXT[st["fmt"]], bg=BG, fg=FG_DIM,
@@ -137,7 +137,7 @@ class SaveMixin:
 
         # --- Quality (lossy only) — built before format so format can show/hide it ---
         qbox = tk.Frame(wrap, bg=BG)
-        tk.Label(qbox, text=t("ხარისხი"), bg=BG, fg=FG_DIM,
+        tk.Label(qbox, text=t("Quality"), bg=BG, fg=FG_DIM,
                  font=("Segoe UI", 8)).pack(anchor="w", pady=(10, 2))
         qrow = tk.Frame(qbox, bg=BG); qrow.pack(anchor="w")
         q_chips = {}
@@ -154,7 +154,7 @@ class SaveMixin:
         box = tk.Label(chk, text="☐", bg=BG, fg=FG, font=("Segoe UI", 13),
                        cursor="hand2")
         box.pack(side="left")
-        ctxt = tk.Label(chk, text=t("გამოვიყენე ეს კონფიგი სწრაფი შენახვისთვის"),
+        ctxt = tk.Label(chk, text=t("Use this config for quick save"),
                         bg=BG, fg=FG, font=("Segoe UI", 9), cursor="hand2")
         ctxt.pack(side="left", padx=(6, 0))
 
@@ -166,7 +166,7 @@ class SaveMixin:
             w.bind("<Button-1>", toggle_quick)
 
         # --- Format chips (drive the extension label + quality visibility) ---
-        heading(t("ფორმატი"))
+        heading(t("Format"))
         fmt_row = tk.Frame(wrap, bg=BG); fmt_row.pack(anchor="w")
         fmt_chips = {}
 
@@ -199,8 +199,8 @@ class SaveMixin:
             dlg.destroy()
 
         brow = tk.Frame(wrap, bg=BG); brow.pack(anchor="e", pady=(16, 0))
-        mkbtn(brow, t("გაუქმება"), dlg.destroy).pack(side="right", padx=(8, 0))
-        mkbtn(brow, t("შენახვა"), confirm, primary=True).pack(side="right")
+        mkbtn(brow, t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
+        mkbtn(brow, t("Save"), confirm, primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -224,5 +224,5 @@ class SaveMixin:
         if st["quick"]:
             self.quick_save_cfg = dict(cfg)        # arm quick save for this session
         self._save_state()                         # persist last_save across sessions
-        self.toast(t("შენახულია → {name}").format(name=os.path.basename(out)))
+        self.toast(t("Saved → {name}").format(name=os.path.basename(out)))
         return True
