@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+<meta charset="UTF-8">
+<title>Manoni · მოჭრის პანელი — ვარიანტები</title>
+<style>
+  :root{
+    --bg:#1b1b1b; --bar:#262626; --hover:#3a3a3a; --accent:#4aa3ff;
+    --fg:#e6e6e6; --dim:#9a9a9a; --chip:#2f2f2f; --line:#333;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:"Segoe UI","Noto Sans Georgian",sans-serif;
+    padding:32px; -webkit-font-smoothing:antialiased;
+  }
+  h1{font-size:18px; font-weight:600; margin-bottom:4px}
+  .sub{color:var(--dim); font-size:13px; margin-bottom:28px}
+  .stage{display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap}
+  .col{width:260px}
+  .col > .name{font-size:13px; color:var(--accent); font-weight:600; margin-bottom:10px}
+  .col > .desc{font-size:11px; color:var(--dim); margin-bottom:14px; line-height:1.5; min-height:46px}
+
+  /* panel shell (matches the real edit panel) */
+  .panel{background:var(--bar); width:260px; border-radius:6px; overflow:hidden;
+         box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .header{background:var(--accent); color:#0b0b0b; font-weight:700; font-size:14px;
+          padding:9px 14px; display:flex; align-items:center; gap:8px}
+  .header svg{width:16px; height:16px}
+  .body{padding:12px 14px 14px}
+
+  .hint{color:var(--dim); font-size:11px; line-height:1.5; margin-bottom:12px;
+        display:flex; gap:7px; align-items:flex-start}
+  .hint svg{width:14px;height:14px;flex:none;margin-top:1px;stroke:var(--dim)}
+
+  .group-title{display:flex; align-items:center; gap:6px; color:var(--dim);
+               font-size:10px; font-weight:700; letter-spacing:.3px;
+               text-transform:uppercase; margin:14px 0 8px}
+  .group-title svg{width:13px;height:13px;stroke:var(--dim)}
+  .group-title.first{margin-top:2px}
+
+  svg{stroke:currentColor; fill:none; stroke-width:2;
+      stroke-linecap:round; stroke-linejoin:round}
+
+  /* generic ratio-shape glyph */
+  .shape{display:flex;align-items:center;justify-content:center;flex:none}
+  .rect{border:1.5px solid currentColor; border-radius:2px}
+  .rect.fill{background:currentColor; opacity:.9}
+  .rect.dashed{border-style:dashed}
+
+  /* ---------- buttons shared ---------- */
+  .primary{background:var(--accent); color:#0b0b0b; font-weight:700; font-size:14px;
+           text-align:center; padding:11px; border-radius:6px; cursor:pointer;
+           display:flex; align-items:center; justify-content:center; gap:8px;
+           margin-top:14px}
+  .primary svg{width:16px;height:16px}
+  .primary:hover{background:#5ab0ff}
+  .cancel{color:var(--dim); font-size:12px; text-align:center; padding:8px;
+          cursor:pointer; margin-top:2px}
+  .cancel:hover{color:var(--fg)}
+
+  /* =====================================================================
+     VARIANT 1 — ratio silhouettes (chip = mini-shape + label)
+     ===================================================================== */
+  .v1 .grid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .v1 .chip{background:var(--chip); border:1px solid transparent; border-radius:6px;
+            padding:8px 6px; display:flex; align-items:center; gap:8px; cursor:pointer;
+            transition:.12s}
+  .v1 .chip:hover{background:var(--hover)}
+  .v1 .chip .shape{width:24px;height:24px;color:#cfcfcf}
+  .v1 .chip .lbl{font-size:11px; color:var(--fg); line-height:1.2}
+  .v1 .chip .sub{font-size:9px; color:var(--dim)}
+  .v1 .chip.active{background:rgba(74,163,255,.16); border-color:var(--accent)}
+  .v1 .chip.active .shape{color:var(--accent)}
+  .v1 .chip.active .lbl{color:#fff; font-weight:600}
+  .v1 .social .chip{padding:8px}
+  .v1 .flip{display:flex; align-items:center; gap:8px; color:var(--dim); font-size:11px;
+            padding:9px 4px; cursor:pointer; margin-top:12px;
+            border-top:1px solid var(--line)}
+  .v1 .flip:hover{color:var(--fg)}
+  .v1 .flip svg{width:15px;height:15px}
+
+  /* =====================================================================
+     VARIANT 2 — segmented pills + social rows
+     ===================================================================== */
+  .v2 .pills{display:flex; flex-wrap:wrap; gap:5px}
+  .v2 .pill{background:var(--chip); border-radius:14px; padding:6px 11px; font-size:11px;
+            color:var(--fg); cursor:pointer; display:flex; align-items:center; gap:6px;
+            transition:.12s}
+  .v2 .pill:hover{background:var(--hover)}
+  .v2 .pill .shape{width:14px;height:14px;color:var(--dim)}
+  .v2 .pill.active{background:var(--accent); color:#0b0b0b; font-weight:600}
+  .v2 .pill.active .shape{color:#0b0b0b}
+  .v2 .rows{display:flex; flex-direction:column; gap:4px}
+  .v2 .row{display:flex; align-items:center; gap:10px; background:var(--chip);
+           border-radius:6px; padding:8px 10px; cursor:pointer; transition:.12s}
+  .v2 .row:hover{background:var(--hover)}
+  .v2 .row .shape{width:22px;height:24px;color:#cfcfcf}
+  .v2 .row .txt{flex:1; min-width:0}
+  .v2 .row .txt .t1{font-size:11px; color:var(--fg)}
+  .v2 .row .txt .t2{font-size:9px; color:var(--dim)}
+  .v2 .row .ratio{font-size:10px; color:var(--dim); font-variant-numeric:tabular-nums}
+  .v2 .row.active{background:rgba(74,163,255,.16); box-shadow:inset 0 0 0 1px var(--accent)}
+  .v2 .row.active .shape{color:var(--accent)}
+  .v2 .row.active .ratio{color:var(--accent)}
+  .v2 .actionbar{display:flex; gap:8px; margin-top:14px}
+  .v2 .iconbtn{background:var(--chip); border-radius:6px; width:44px; flex:none;
+               display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .v2 .iconbtn:hover{background:var(--hover)}
+  .v2 .iconbtn svg{width:17px;height:17px;color:var(--fg)}
+  .v2 .actionbar .primary{margin-top:0; flex:1}
+
+  /* =====================================================================
+     VARIANT 3 — cards with filled shapes
+     ===================================================================== */
+  .v3 .seg{display:flex; background:#202020; border-radius:7px; padding:3px; gap:2px;
+           margin-bottom:6px}
+  .v3 .seg .opt{flex:1; text-align:center; font-size:11px; color:var(--dim);
+                padding:6px 2px; border-radius:5px; cursor:pointer;
+                display:flex; flex-direction:column; align-items:center; gap:4px}
+  .v3 .seg .opt svg{width:15px;height:15px}
+  .v3 .seg .opt:hover{color:var(--fg)}
+  .v3 .seg .opt.active{background:var(--chip); color:var(--fg)}
+  .v3 .ratios{display:grid; grid-template-columns:repeat(4,1fr); gap:5px}
+  .v3 .rcard{background:var(--chip); border-radius:6px; padding:8px 2px; cursor:pointer;
+             display:flex; flex-direction:column; align-items:center; gap:6px; transition:.12s}
+  .v3 .rcard:hover{background:var(--hover)}
+  .v3 .rcard .shape{height:22px; color:#bdbdbd}
+  .v3 .rcard .lbl{font-size:10px; color:var(--dim)}
+  .v3 .rcard.active{background:var(--accent)}
+  .v3 .rcard.active .shape{color:#0b0b0b}
+  .v3 .rcard.active .lbl{color:#0b0b0b; font-weight:700}
+  .v3 .cards{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .v3 .card{background:var(--chip); border-radius:7px; padding:10px; cursor:pointer;
+            display:flex; flex-direction:column; gap:7px; transition:.12s}
+  .v3 .card:hover{background:var(--hover)}
+  .v3 .card .top{display:flex; align-items:center; gap:8px}
+  .v3 .card .shape{width:18px;height:22px;color:var(--accent)}
+  .v3 .card .nm{font-size:11px; color:var(--fg); font-weight:600}
+  .v3 .card .meta{font-size:9px; color:var(--dim); line-height:1.4}
+  .v3 .flip{display:flex; align-items:center; justify-content:center; gap:7px;
+            color:var(--dim); font-size:11px; padding:9px; cursor:pointer; margin-top:12px;
+            background:#202020; border-radius:6px}
+  .v3 .flip:hover{color:var(--fg); background:var(--chip)}
+  .v3 .flip svg{width:15px;height:15px}
+
+  /* =====================================================================
+     VARIANT 4 — hybrid (chosen) + black cancel button
+     ===================================================================== */
+  .v4 .seg{display:flex; background:#202020; border-radius:7px; padding:3px; gap:2px; margin-bottom:6px}
+  .v4 .seg .opt{flex:1; text-align:center; font-size:11px; color:var(--dim); padding:8px 2px;
+                border-radius:5px; cursor:pointer; display:flex; flex-direction:column;
+                align-items:center; gap:5px; transition:.12s}
+  .v4 .seg .opt svg{width:16px;height:16px}
+  .v4 .seg .opt:hover{color:var(--fg)}
+  .v4 .seg .opt.active{background:var(--chip); color:var(--fg)}
+  .v4 .ratios{display:grid; grid-template-columns:repeat(4,1fr); gap:5px}
+  .v4 .rcard{background:var(--chip); border-radius:6px; padding:9px 2px; cursor:pointer;
+             display:flex; flex-direction:column; align-items:center; gap:7px; transition:.12s}
+  .v4 .rcard:hover{background:var(--hover)}
+  .v4 .rcard .shape{height:22px; color:#bdbdbd}
+  .v4 .rcard .lbl{font-size:10px; color:var(--dim)}
+  .v4 .rcard.active{background:var(--accent)}
+  .v4 .rcard.active .shape{color:#0b0b0b}
+  .v4 .rcard.active .lbl{color:#0b0b0b; font-weight:700}
+  .v4 .rows{display:flex; flex-direction:column; gap:4px}
+  .v4 .row{display:flex; align-items:center; gap:10px; background:var(--chip);
+           border-radius:6px; padding:8px 10px; cursor:pointer; transition:.12s}
+  .v4 .row:hover{background:var(--hover)}
+  .v4 .row .shape{width:22px;height:24px;color:#cfcfcf}
+  .v4 .row .txt{flex:1; min-width:0}
+  .v4 .row .txt .t1{font-size:11px; color:var(--fg)}
+  .v4 .row .txt .t2{font-size:9px; color:var(--dim)}
+  .v4 .row .ratio{font-size:10px; color:var(--dim); font-variant-numeric:tabular-nums}
+  .v4 .row.active{background:rgba(74,163,255,.16); box-shadow:inset 0 0 0 1px var(--accent)}
+  .v4 .row.active .shape{color:var(--accent)}
+  .v4 .row.active .ratio{color:var(--accent)}
+  .v4 .actionbar{display:flex; gap:8px; margin-top:14px}
+  .v4 .iconbtn{background:var(--chip); border-radius:6px; width:46px; flex:none;
+               display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .v4 .iconbtn:hover{background:var(--hover)}
+  .v4 .iconbtn svg{width:17px;height:17px;color:var(--fg)}
+  .v4 .actionbar .primary{margin-top:0; flex:1}
+  /* the requested change: cancel is a real black button, not a text link */
+  .v4 .cancel-btn{background:#141414; color:var(--dim); border:1px solid #2e2e2e;
+                  border-radius:6px; padding:10px; text-align:center; font-size:13px;
+                  cursor:pointer; display:flex; align-items:center; justify-content:center;
+                  gap:7px; margin-top:8px; transition:.12s}
+  .v4 .cancel-btn svg{width:15px;height:15px}
+  .v4 .cancel-btn:hover{background:#0d0d0d; color:var(--fg); border-color:#3d3d3d}
+
+  /* "შენი ზომა" — add-your-own-size button + scrollable saved-size list */
+  .v4 .addsize{display:flex; align-items:center; justify-content:center; gap:7px;
+               background:transparent; border:1px dashed #3d3d3d; border-radius:6px;
+               padding:9px; color:var(--accent); font-size:11px; font-weight:600;
+               cursor:pointer; transition:.12s; margin-bottom:6px}
+  .v4 .addsize:hover{border-color:var(--accent); background:rgba(74,163,255,.08)}
+  .v4 .addsize svg{width:14px;height:14px}
+  .v4 .mysizes{max-height:104px; overflow-y:auto; display:flex; flex-direction:column;
+               gap:4px; padding-right:3px}
+  .v4 .mysizes::-webkit-scrollbar{width:6px}
+  .v4 .mysizes::-webkit-scrollbar-thumb{background:#3a3a3a; border-radius:3px}
+  .v4 .mysizes::-webkit-scrollbar-track{background:transparent}
+  .v4 .msrow{display:flex; align-items:center; gap:10px; background:var(--chip);
+             border-radius:6px; padding:7px 10px; cursor:pointer; transition:.12s}
+  .v4 .msrow:hover{background:var(--hover)}
+  .v4 .msrow .shape{width:20px; height:22px; color:#cfcfcf; flex:none;
+                    display:flex; align-items:center; justify-content:center}
+  .v4 .msrow .txt{flex:1; min-width:0}
+  .v4 .msrow .txt .t1{font-size:11px; color:var(--fg)}
+  .v4 .msrow .txt .t2{font-size:9px; color:var(--dim)}
+  .v4 .msrow .acts{flex:none; display:flex; gap:3px}
+  .v4 .msrow .acts .ic{color:var(--dim); display:flex; padding:3px; cursor:pointer;
+                       border-radius:4px}
+  .v4 .msrow .acts .ic svg{width:13px; height:13px}
+  .v4 .msrow .acts .edit:hover{color:var(--accent); background:rgba(74,163,255,.14)}
+  .v4 .msrow .acts .del:hover{color:#ff6b6b; background:rgba(255,107,107,.12)}
+  .v4 .msrow.active{background:rgba(74,163,255,.16); box-shadow:inset 0 0 0 1px var(--accent)}
+  .v4 .msrow.active .shape{color:var(--accent)}
+  .v4 .msrow.active .txt .t1{color:#fff; font-weight:600}
+
+  /* ---------- create / edit "შენი ზომა" dialog (same window for both) ---------- */
+  .dlgcol .name{font-size:13px; color:var(--accent); font-weight:600; margin-bottom:10px}
+  .dlgcol .desc{font-size:11px; color:var(--dim); margin-bottom:14px; line-height:1.5}
+  .dlg{background:var(--bg); border:1px solid #383838; border-radius:8px; padding:18px;
+       width:272px; box-shadow:0 14px 44px rgba(0,0,0,.6)}
+  .dlg .dtitle{font-size:14px; font-weight:700; color:var(--fg)}
+  .dlg .dsub{font-size:11px; color:var(--dim); margin:5px 0 16px; line-height:1.5}
+  .dlg .field{margin-bottom:14px}
+  .dlg label{display:block; font-size:10px; font-weight:700; letter-spacing:.3px;
+             text-transform:uppercase; color:var(--dim); margin-bottom:6px}
+  .dlg input{background:var(--bar); border:1px solid #383838; border-radius:5px;
+             color:var(--fg); font-size:13px; padding:9px 10px; width:100%; outline:none;
+             font-family:inherit}
+  .dlg input:focus{border-color:var(--accent)}
+  .dlg .wh{display:flex; align-items:center; gap:8px}
+  .dlg .wh input{text-align:center}
+  .dlg .wh .colon{font-size:16px; font-weight:700; color:var(--fg)}
+  .dlg .wh .shape{flex:none; width:34px; height:34px; display:flex; align-items:center;
+                  justify-content:center; color:var(--accent)}
+  .dlg .err{font-size:10px; color:#ff6b6b; min-height:13px; margin-top:-6px}
+  .dlg .dbtns{display:flex; gap:8px; justify-content:flex-end; margin-top:12px}
+  .dlg .dbtn{padding:9px 16px; border-radius:6px; font-size:12px; cursor:pointer}
+  .dlg .dbtn.ghost{background:var(--bar); color:var(--fg)}
+  .dlg .dbtn.ghost:hover{background:var(--hover)}
+  .dlg .dbtn.save{background:var(--accent); color:#0b0b0b; font-weight:700}
+  .dlg .dbtn.save:hover{background:#5ab0ff}
+</style>
+</head>
+<body>
+  <h1>Manoni · მოჭრის პანელის რედიზაინი</h1>
+  <div class="sub">4 ვარიანტი — აპის რეალური ფერებითა და ზომით (260px). პროპორციები ვიზუალურად ჩანს.</div>
+
+  <div class="stage">
+
+    <!-- ============ VARIANT 1 ============ -->
+    <div class="col">
+      <div class="name">ვარიანტი 1 — სილუეტები</div>
+      <div class="desc">ყველა ჩიპს მინი-მართკუთხედი ახლავს, რომელიც პროპორციის ფორმას აჩვენებს. იკონებიანი სათაურები, აქცენტ-ჩარჩო აქტიურზე.</div>
+      <div class="panel v1">
+        <div class="header">
+          <svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+          მოჭრა
+        </div>
+        <div class="body">
+          <div class="hint">
+            <svg viewBox="0 0 24 24"><path d="M5 9V5h4"/><path d="m5 5 5 5"/><path d="M19 15v4h-4"/><path d="m19 19-5-5"/></svg>
+            ჩაითრიე კუთხეები ან აირჩიე მზა ფორმა
+          </div>
+
+          <div class="group-title first">
+            <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+            ფორმა
+          </div>
+          <div class="grid">
+            <div class="chip">
+              <span class="shape"><span class="rect dashed" style="width:20px;height:20px"></span></span>
+              <span class="lbl">თავისუფ.</span>
+            </div>
+            <div class="chip">
+              <span class="shape"><svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></span>
+              <span class="lbl">ორიგინ.</span>
+            </div>
+            <div class="chip">
+              <span class="shape"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+              <span class="lbl">საკუთარი</span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:21px;height:21px"></span></span>
+              <span class="lbl">1:1</span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:24px;height:18px"></span></span>
+              <span class="lbl">4:3</span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:25px;height:17px"></span></span>
+              <span class="lbl">3:2</span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:23px;height:19px"></span></span>
+              <span class="lbl">5:4</span>
+            </div>
+          </div>
+
+          <div class="group-title">
+            <svg viewBox="0 0 24 24"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+            სოციალური ქსელები
+          </div>
+          <div class="grid social">
+            <div class="chip active">
+              <span class="shape"><span class="rect fill" style="width:18px;height:22px"></span></span>
+              <span><span class="lbl">IG პორტრ.</span><br><span class="sub">4:5</span></span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:13px;height:23px"></span></span>
+              <span><span class="lbl">Story·Reels</span><br><span class="sub">9:16</span></span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:25px;height:14px"></span></span>
+              <span><span class="lbl">YouTube·X</span><br><span class="sub">16:9</span></span>
+            </div>
+            <div class="chip">
+              <span class="shape"><span class="rect" style="width:25px;height:13px"></span></span>
+              <span><span class="lbl">FB·LinkedIn</span><br><span class="sub">1.91</span></span>
+            </div>
+          </div>
+
+          <div class="flip">
+            <svg viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+            გადატრიალება · 4:5 ⇄ 5:4
+          </div>
+
+          <div class="primary">
+            <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+            მოჭრა
+          </div>
+          <div class="cancel">გაუქმება</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VARIANT 2 ============ -->
+    <div class="col">
+      <div class="name">ვარიანტი 2 — პილები + სტრიქონები</div>
+      <div class="desc">ფორმები კომპაქტურ pill-ებად (იკითხება ერთ თვალით), სოც. ქსელები კი სრულ სტრიქონებად, სადაც სახელი, ფორმა და კოეფიციენტი ცალ-ცალკეა.</div>
+      <div class="panel v2">
+        <div class="header">
+          <svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+          მოჭრა
+        </div>
+        <div class="body">
+          <div class="hint">
+            <svg viewBox="0 0 24 24"><path d="M5 9V5h4"/><path d="m5 5 5 5"/><path d="M19 15v4h-4"/><path d="m19 19-5-5"/></svg>
+            ჩაითრიე კუთხეები ან აირჩიე მზა ფორმა
+          </div>
+
+          <div class="group-title first">
+            <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+            ფორმა
+          </div>
+          <div class="pills">
+            <div class="pill"><span class="shape"><span class="rect dashed" style="width:12px;height:12px"></span></span>თავისუფ.</div>
+            <div class="pill"><span class="shape"><span class="rect" style="width:13px;height:11px"></span></span>ორიგ.</div>
+            <div class="pill active"><span class="shape"><span class="rect" style="width:12px;height:12px"></span></span>1:1</div>
+            <div class="pill"><span class="shape"><span class="rect" style="width:14px;height:11px"></span></span>4:3</div>
+            <div class="pill"><span class="shape"><span class="rect" style="width:14px;height:10px"></span></span>3:2</div>
+            <div class="pill"><span class="shape"><span class="rect" style="width:13px;height:11px"></span></span>5:4</div>
+            <div class="pill"><span class="shape"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>საკუთ.</div>
+          </div>
+
+          <div class="group-title">
+            <svg viewBox="0 0 24 24"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+            სოციალური ქსელები
+          </div>
+          <div class="rows">
+            <div class="row">
+              <span class="shape"><span class="rect" style="width:18px;height:22px"></span></span>
+              <span class="txt"><div class="t1">Instagram პორტრეტი</div><div class="t2">პოსტი · ვერტიკალური</div></span>
+              <span class="ratio">4:5</span>
+            </div>
+            <div class="row active">
+              <span class="shape"><span class="rect" style="width:13px;height:23px"></span></span>
+              <span class="txt"><div class="t1">Story · Reels · TikTok</div><div class="t2">სრული ეკრანი</div></span>
+              <span class="ratio">9:16</span>
+            </div>
+            <div class="row">
+              <span class="shape"><span class="rect" style="width:24px;height:14px"></span></span>
+              <span class="txt"><div class="t1">YouTube · X</div><div class="t2">ჰორიზონტალური</div></span>
+              <span class="ratio">16:9</span>
+            </div>
+            <div class="row">
+              <span class="shape"><span class="rect" style="width:24px;height:13px"></span></span>
+              <span class="txt"><div class="t1">FB · LinkedIn</div><div class="t2">გაზიარების ბანერი</div></span>
+              <span class="ratio">1.91</span>
+            </div>
+          </div>
+
+          <div class="actionbar">
+            <div class="iconbtn" title="გადატრიალება">
+              <svg viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+            </div>
+            <div class="primary">
+              <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              მოჭრა
+            </div>
+          </div>
+          <div class="cancel">გაუქმება</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VARIANT 3 ============ -->
+    <div class="col">
+      <div class="name">ვარიანტი 3 — ბარათები</div>
+      <div class="desc">ფორმა — სეგმენტ-კონტროლი + 4 პატარა ფორმის ბარათი; სოც. ქსელები — დიდი, „დასაჭერი“ ბარათები სავსე ფიგურით და მინიშნებებით.</div>
+      <div class="panel v3">
+        <div class="header">
+          <svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+          მოჭრა
+        </div>
+        <div class="body">
+          <div class="hint">
+            <svg viewBox="0 0 24 24"><path d="M5 9V5h4"/><path d="m5 5 5 5"/><path d="M19 15v4h-4"/><path d="m19 19-5-5"/></svg>
+            ჩაითრიე კუთხეები ან აირჩიე მზა ფორმა
+          </div>
+
+          <div class="group-title first">
+            <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+            ფორმა
+          </div>
+          <div class="seg">
+            <div class="opt active">
+              <svg viewBox="0 0 24 24"><path d="M5 9V5h4"/><path d="m5 5 5 5"/><path d="M19 15v4h-4"/><path d="m19 19-5-5"/></svg>
+              თავისუფ.
+            </div>
+            <div class="opt">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+              ორიგ.
+            </div>
+            <div class="opt">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              საკუთ.
+            </div>
+          </div>
+          <div class="ratios">
+            <div class="rcard"><span class="shape"><span class="rect" style="width:22px;height:22px"></span></span><span class="lbl">1:1</span></div>
+            <div class="rcard"><span class="shape"><span class="rect" style="width:22px;height:16px"></span></span><span class="lbl">4:3</span></div>
+            <div class="rcard active"><span class="shape"><span class="rect" style="width:22px;height:15px"></span></span><span class="lbl">3:2</span></div>
+            <div class="rcard"><span class="shape"><span class="rect" style="width:21px;height:17px"></span></span><span class="lbl">5:4</span></div>
+          </div>
+
+          <div class="group-title">
+            <svg viewBox="0 0 24 24"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+            სოციალური ქსელები
+          </div>
+          <div class="cards">
+            <div class="card">
+              <div class="top"><span class="shape"><span class="rect fill" style="width:18px;height:22px"></span></span><span class="nm">IG პორტრ.</span></div>
+              <div class="meta">ვერტიკ. პოსტი · 4:5</div>
+            </div>
+            <div class="card">
+              <div class="top"><span class="shape"><span class="rect fill" style="width:13px;height:23px"></span></span><span class="nm">Story/Reels</span></div>
+              <div class="meta">TikTok · 9:16</div>
+            </div>
+            <div class="card">
+              <div class="top"><span class="shape"><span class="rect fill" style="width:24px;height:13px"></span></span><span class="nm">YouTube·X</span></div>
+              <div class="meta">ჰორიზონ. · 16:9</div>
+            </div>
+            <div class="card">
+              <div class="top"><span class="shape"><span class="rect fill" style="width:24px;height:13px"></span></span><span class="nm">FB·LinkedIn</span></div>
+              <div class="meta">ბანერი · 1.91</div>
+            </div>
+          </div>
+
+          <div class="flip">
+            <svg viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+            გადატრიალება · 3:4 ⇄ 4:3
+          </div>
+
+          <div class="primary">
+            <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+            მოჭრა
+          </div>
+          <div class="cancel">გაუქმება</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VARIANT 4 — chosen hybrid + black cancel button ============ -->
+    <div class="col">
+      <div class="name">ვარიანტი 4 — ჰიბრიდი (არჩეული)</div>
+      <div class="desc">სეგმენტ-კონტროლი + ფორმის ბარათები + სოც. სტრიქონები. „გაუქმება“ ახლა ნამდვილი შავი ღილაკია, არა ტექსტი.</div>
+      <div class="panel v4">
+        <div class="header">
+          <svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+          მოჭრა
+        </div>
+        <div class="body">
+          <div class="group-title first">
+            <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+            ფორმა
+          </div>
+          <div class="seg">
+            <div class="opt active">
+              <svg viewBox="0 0 24 24"><path d="M5 9V5h4"/><path d="m5 5 5 5"/><path d="M19 15v4h-4"/><path d="m19 19-5-5"/></svg>
+              თავისუფ.
+            </div>
+            <div class="opt">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+              ორიგ.
+            </div>
+            <div class="opt">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              საკუთ.
+            </div>
+          </div>
+          <div class="ratios">
+            <div class="rcard"><span class="shape"><span class="rect" style="width:22px;height:22px"></span></span><span class="lbl">1:1</span></div>
+            <div class="rcard"><span class="shape"><span class="rect" style="width:22px;height:16px"></span></span><span class="lbl">4:3</span></div>
+            <div class="rcard active"><span class="shape"><span class="rect" style="width:22px;height:15px"></span></span><span class="lbl">3:2</span></div>
+            <div class="rcard"><span class="shape"><span class="rect" style="width:21px;height:17px"></span></span><span class="lbl">5:4</span></div>
+          </div>
+
+          <div class="group-title">
+            <svg viewBox="0 0 24 24"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+            სოციალური ქსელები
+          </div>
+          <div class="rows">
+            <div class="row">
+              <span class="shape"><span class="rect" style="width:18px;height:22px"></span></span>
+              <span class="txt"><div class="t1">Instagram პორტრეტი</div><div class="t2">პოსტი · ვერტიკალური</div></span>
+              <span class="ratio">4:5</span>
+            </div>
+            <div class="row active">
+              <span class="shape"><span class="rect" style="width:13px;height:23px"></span></span>
+              <span class="txt"><div class="t1">Story · Reels · TikTok</div><div class="t2">სრული ეკრანი</div></span>
+              <span class="ratio">9:16</span>
+            </div>
+            <div class="row">
+              <span class="shape"><span class="rect" style="width:24px;height:14px"></span></span>
+              <span class="txt"><div class="t1">YouTube · X</div><div class="t2">ჰორიზონტალური</div></span>
+              <span class="ratio">16:9</span>
+            </div>
+            <div class="row">
+              <span class="shape"><span class="rect" style="width:24px;height:13px"></span></span>
+              <span class="txt"><div class="t1">FB · LinkedIn</div><div class="t2">გაზიარების ბანერი</div></span>
+              <span class="ratio">1.91</span>
+            </div>
+          </div>
+
+          <div class="group-title">
+            <svg viewBox="0 0 24 24"><path d="M21 3 3 21"/><path d="M21 8v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M14 8v2"/><path d="M18 8v4"/><path d="M6 14v2"/><path d="M10 12v4"/></svg>
+            შენი ზომები
+          </div>
+          <div class="addsize">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            შენი ზომა
+          </div>
+          <div class="mysizes">
+            <div class="msrow active">
+              <span class="shape"><span class="rect" style="width:16px;height:21px"></span></span>
+              <span class="txt"><div class="t1">ჩემი 3:4</div><div class="t2">1242 × 1656</div></span>
+              <span class="acts">
+                <span class="ic edit" title="რედაქტირება"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                <span class="ic del" title="წაშლა"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+              </span>
+            </div>
+            <div class="msrow">
+              <span class="shape"><span class="rect" style="width:20px;height:16px"></span></span>
+              <span class="txt"><div class="t1">FB ბმული</div><div class="t2">1200 × 628 · 1.91</div></span>
+              <span class="acts">
+                <span class="ic edit" title="რედაქტირება"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                <span class="ic del" title="წაშლა"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+              </span>
+            </div>
+            <div class="msrow">
+              <span class="shape"><span class="rect" style="width:18px;height:18px"></span></span>
+              <span class="txt"><div class="t1">ავატარი</div><div class="t2">800 × 800 · 1:1</div></span>
+              <span class="acts">
+                <span class="ic edit" title="რედაქტირება"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                <span class="ic del" title="წაშლა"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+              </span>
+            </div>
+            <div class="msrow">
+              <span class="shape"><span class="rect" style="width:12px;height:21px"></span></span>
+              <span class="txt"><div class="t1">Reels</div><div class="t2">1080 × 1920 · 9:16</div></span>
+              <span class="acts">
+                <span class="ic edit" title="რედაქტირება"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                <span class="ic del" title="წაშლა"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+              </span>
+            </div>
+            <div class="msrow">
+              <span class="shape"><span class="rect" style="width:21px;height:14px"></span></span>
+              <span class="txt"><div class="t1">QHD ეკრანი</div><div class="t2">2560 × 1440 · 16:9</div></span>
+              <span class="acts">
+                <span class="ic edit" title="რედაქტირება"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                <span class="ic del" title="წაშლა"><svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+              </span>
+            </div>
+          </div>
+
+          <div class="actionbar">
+            <div class="iconbtn" title="გადატრიალება">
+              <svg viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+            </div>
+            <div class="primary">
+              <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              მოჭრა
+            </div>
+          </div>
+          <div class="cancel-btn">
+            <svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            გაუქმება
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ create / edit dialog mockup ============ -->
+    <div class="col dlgcol">
+      <div class="name">ფანჯარა — ზომის შექმნა / რედაქტირება</div>
+      <div class="desc">„＋ შენი ზომა“ და სტრიქონის ✎ რედაქტირება ერთსა და იმავე ფანჯარას ხსნის. სხვაობა მხოლოდ სათაურია — შესაცვლელია სახელიც და ზომებიც.</div>
+      <div class="dlg">
+        <div class="dtitle">ზომის რედაქტირება</div>
+        <div class="dsub">დაარქვი სახელი და მიუთითე სიგანე × სიმაღლე (პიქსელებში ან პროპორციად, მაგ. 4:5).</div>
+
+        <div class="field">
+          <label>სახელი</label>
+          <input type="text" value="ჩემი 3:4">
+        </div>
+
+        <div class="field">
+          <label>ზომა — სიგანე : სიმაღლე</label>
+          <div class="wh">
+            <input type="text" value="1242">
+            <span class="colon">:</span>
+            <input type="text" value="1656">
+            <span class="shape"><span class="rect" style="width:21px;height:28px;border-color:var(--accent)"></span></span>
+          </div>
+        </div>
+        <div class="err"></div>
+
+        <div class="dbtns">
+          <div class="dbtn ghost">გაუქმება</div>
+          <div class="dbtn save">შენახვა</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

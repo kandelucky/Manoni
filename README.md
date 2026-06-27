@@ -31,9 +31,16 @@ Browse thumbnails (left panel) · click to open · ◀ ▶ first/last navigation
 🗑 delete (moves file to a `_deleted` subfolder — safe, reversible) ·
 📁 move-to-folder (keep good ones) · 📂 open folder · info bar (name, size, date).
 
-## Not done yet (stubbed toolbar buttons)
+**Photo editor** (right-side panel, Adobe-Camera-Raw style): live sliders for
+**brightness · contrast · saturation · temperature · blur↔sharpen**, "reset", and
+**save** — the edited full-res copy goes to an `_edited/` subfolder, the original is
+never touched.
 
-Resize · Brightness · Filter · Grid view · Menu. See `spec/03-roadmap.md`.
+## Not done yet
+
+Tint · Vignette · Shadows/Highlights · custom filter presets · Resize · Grid view · Menu.
+The toolbar's ☀/🎨 buttons are still stubs (editing lives in the right panel).
+See `spec/03-roadmap.md`.
 
 ## Where to start
 

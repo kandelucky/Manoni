@@ -20,3 +20,9 @@ Thumbs.db
 
 # App runtime output (deleted photos are moved here)
 _deleted/
+
+# Persisted UI/session state (machine-specific paths)
+manoni_state.json
+
+# Personal planning / spec docs (kept local, not tracked)
+spec/

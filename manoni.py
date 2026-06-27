@@ -1,11 +1,12 @@
-"""Manoni - a fast, simple dark photo browser + culler.
+"""Manoni — a fast, simple dark photo browser + culler.
 
 Runs on a weak laptop. Pure Python + Tkinter + Pillow (MIT-friendly stack).
-Built fresh (NOT on Blurry's keyboard engine) so the code is ours and easy to extend.
 
-Current state (first increment): the interface shell (ImageGlass-style, dark theme)
-with working browsing, folder open, delete (safe, reversible) and move-to-folder.
-Editing (resize / brightness / filter) is stubbed - that is the next work.
+This file is the entry point and the application *shell*: it builds the window,
+holds the shared state, and wires things together. All the behaviour lives in
+the manoni_app package, split by topic into mixins that Manoni composes (see
+spec/05-architecture.md). A new feature goes into the matching module there —
+never back into one giant file.
 
 Run:  python manoni.py [optional_folder]
 See:  spec/00-START-HERE.md
@@ -13,136 +14,235 @@ See:  spec/00-START-HERE.md
 
 import os
 import sys
-import shutil
-import datetime
+import json
 import tkinter as tk
-import tkinter.ttk as ttk
-import tkinter.filedialog as tkfd
 
-from PIL import Image, ImageTk, ImageEnhance
-
-# --- Config -----------------------------------------------------------------
-
-# Icons live next to this file in ./icons (Lucide, white strokes on transparent)
-ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
-SUPPORTED = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff", ".tif"}
-
-# Dark theme colors
-BG        = "#1b1b1b"   # main background
-BAR       = "#262626"   # toolbar / info bar
-SIDEBAR   = "#1e1e1e"   # sidebar background
-HOVER     = "#3a3a3a"   # button hover
-ACCENT    = "#4aa3ff"   # selection / highlight
-FG        = "#e6e6e6"   # primary text
-FG_DIM    = "#9a9a9a"   # secondary text
-
-ICON_SIZE = 22
-THUMB_W   = 150
+from manoni_app.config import BG, THUMB_W, STATE_FILE, ROOT_DIR
+from manoni_app import i18n
+from manoni_app import translations  # noqa: F401 — registers language packs on import
+from manoni_app.scaling import set_dpi_awareness, apply_tk_scaling
+from manoni_app.ui.chrome import ChromeMixin
+from manoni_app.ui.editpanel import EditPanelMixin
+from manoni_app.ui.saving import SaveMixin
+from manoni_app.ui.browser import BrowserMixin
+from manoni_app.ui.viewer import ViewerMixin
+from manoni_app.ui.nav import NavMixin
+from manoni_app.ui.crop import CropMixin
+from manoni_app.ui.heal import HealMixin
+from manoni_app.ui.focus import FocusMixin
+from manoni_app.ui.filters import FiltersMixin
 
 
-class Slider:
-    """A clean, dark, custom-drawn horizontal slider (Canvas-based).
-
-    Layout per slider:  label (top-left)            value (top-right)
-                        ───────────●───────────────  (track + knob)
-    The fill runs from the neutral point to the knob, so you can see at a
-    glance how far an edit deviates from "unchanged".
-    """
-    W       = 220   # widget width
-    H       = 50    # widget height
-    PAD     = 10    # left/right inset for the track
-    TRACK_Y = 38    # track baseline
-    KNOB_R  = 7     # knob radius
-    TRACK   = "#3a3a3a"
-    KNOB    = "#f0f0f0"
-
-    def __init__(self, parent, label, command, lo=0, hi=200, neutral=100):
-        self.label = label
-        self.command = command          # called with the int value on change
-        self.lo, self.hi = lo, hi
-        self.neutral = neutral
-        self.value = neutral
-        self.x0 = self.PAD
-        self.x1 = self.W - self.PAD
-        self.canvas = tk.Canvas(parent, width=self.W, height=self.H, bg=BAR,
-                                highlightthickness=0, cursor="hand2")
-        self.canvas.bind("<Button-1>", self._on_drag)
-        self.canvas.bind("<B1-Motion>", self._on_drag)
-        self._draw()
-
-    def pack(self, **kw):
-        self.canvas.pack(**kw)
-        return self
-
-    def _val_to_x(self, v):
-        frac = (v - self.lo) / (self.hi - self.lo)
-        return self.x0 + frac * (self.x1 - self.x0)
-
-    def _x_to_val(self, x):
-        frac = (x - self.x0) / (self.x1 - self.x0)
-        frac = min(1.0, max(0.0, frac))
-        return round(self.lo + frac * (self.hi - self.lo))
-
-    def _on_drag(self, event):
-        v = self._x_to_val(event.x)
-        if v != self.value:
-            self.value = v
-            self._draw()
-            self.command(v)
-
-    def set(self, v):
-        "Set the value and redraw, WITHOUT firing the command (for resets)."
-        self.value = max(self.lo, min(self.hi, v))
-        self._draw()
-
-    def get(self):
-        return self.value
-
-    def _draw(self):
-        c = self.canvas
-        c.delete("all")
-        c.create_text(self.x0, 11, text=self.label, anchor="w",
-                      fill=FG, font=("Segoe UI", 9))
-        d = self.value - self.neutral
-        dtxt = f"+{d}" if d > 0 else str(d)
-        c.create_text(self.x1, 11, text=dtxt, anchor="e",
-                      fill=FG_DIM, font=("Segoe UI", 9))
-        y = self.TRACK_Y
-        c.create_line(self.x0, y, self.x1, y, fill=self.TRACK,
-                      width=4, capstyle="round")
-        nx = self._val_to_x(self.neutral)
-        kx = self._val_to_x(self.value)
-        if abs(kx - nx) > 1:
-            c.create_line(nx, y, kx, y, fill=ACCENT, width=4, capstyle="round")
-        r = self.KNOB_R
-        c.create_oval(kx - r, y - r, kx + r, y + r,
-                      fill=self.KNOB, outline=ACCENT, width=2)
-
-
-class Manoni:
+class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
+             ViewerMixin, NavMixin, CropMixin, HealMixin, FocusMixin,
+             FiltersMixin):
     "Main application window"
 
+    # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
+    # 1.0 = 100% (true pixels); "Fit" is a separate mode that tracks the window.
+    MIN_SCALE = 0.05    # 5% — most zoomed out
+    MAX_SCALE = 16.0    # 1600% — most zoomed in
+    ZOOM_STEP = 1.25    # multiply/divide per wheel notch or −/+ click
+    ZOOM_PRESETS = [("Fit", None), ("50%", 0.5), ("100%", 1.0), ("200%", 2.0)]
+
+    # Sidebar thumbnail grid (file-manager style: drag-resizable + zoomable).
+    THUMB_MIN   = 72    # smallest thumbnail (px)
+    THUMB_MAX   = 240   # largest thumbnail (px)
+    THUMB_STEP  = 24    # +/- per zoom click
+    THUMB_PAD   = 16    # a cell's footprint beyond the image (padding + border)
+    SIDEBAR_MIN = 110   # narrowest the sidebar can be dragged
+    SIDEBAR_MAX = 720   # widest the sidebar can be dragged
+
+    # Sidebar view modes (the footer dropdown). Grid modes set the icon size;
+    # "list" switches to compact rows. (key, label, thumbnail px | None for list.)
+    VIEW_MENU = [
+        ("large",  "დიდი ხატულები",    216),
+        ("medium", "საშუალო ხატულები",  144),
+        ("small",  "პატარა ხატულები",   96),
+        ("list",   "სია",              None),
+    ]
+    LIST_THUMB = 36     # tiny preview beside the filename in list view
+    LIST_NAME_PAD = 30  # px reserved beside a list name (thumb gaps + border + scrollbar)
+    LIST_COL_MIN = 190  # min px per list column → list reflows to 2/3/4… cols when wide
+    FOLDER_NAME_PAD = 38  # px reserved beside a folder name (glyph + gaps) per column
+    MAX_GRID_COLS = 16  # safe upper bound when (re)configuring grid column weights
+
+    # The top sub-folder list never grows past min(FOLDER_LIST_MAX, a fraction of
+    # the sidebar height) — so on a short laptop screen it can't crowd the photo
+    # list below it down to a single row; the overflow scrolls (with a scrollbar).
+    FOLDER_LIST_MAX = 170  # absolute ceiling for the folder list's AUTO height (px)
+    FOLDER_LIST_MIN = 56   # but always tall enough for ~2 folder rows (px)
+    FOLDER_CAP_FRACTION = 0.34  # auto height: at most this share of the sidebar height
+    FOLDER_DRAG_MAX_FRACTION = 0.7  # but a manual drag may claim up to this share
+    FOLDER_COL_MIN = 120   # min px per folder column → 2 columns once the sidebar is wide
+    FOLDER_MAX_COLS = 2    # never more than two folder columns (keeps names readable)
+
+    # A photo counts as edited when ANY live factor leaves its neutral, or it
+    # has been rotated/cropped — see _has_unsaved_edits, which drives the
+    # "save a copy?" prompt on navigation. (Comparing every factor to its neutral
+    # instead of a fixed dict means new sliders are covered automatically.)
+    # Most factors rest at 1.0; creative effects rest at 0.0 (off → full). List
+    # the 0-neutral ones here so reset / "is edited" use the right rest point.
+    # auto_mode is not a slider; its rest is None (no auto correction active).
+    SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "focus": None, "auto_mode": None}
+
     def __init__(self, folder=None):
+        # Declare DPI awareness BEFORE the first window so Windows draws the
+        # UI at the monitor's true pixels instead of bitmap-stretching it
+        # (the blur seen at 150 % scaling). See manoni_app/scaling.py.
+        set_dpi_awareness()
+
+        # Give this process its own Windows taskbar identity. Without it, Tk
+        # apps launched via pythonw.exe share a default identity and Windows
+        # reuses whatever icon another Tk app (e.g. ctk_maker) registered —
+        # so Manoni would borrow that app's icon. Must run before the window.
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "voxe.manoni.photoculler")
+            except Exception:
+                pass
+
         self.root = tk.Tk()
+        # Tell Tk the real DPI so point-sized fonts render crisp; keep the
+        # factor so icons can be loaded at a matching pixel size.
+        self.dpi = apply_tk_scaling(self.root)
         self.root.title("Manoni")
+        # Manoni's own window/taskbar icon (manoni.ico / -icon.png at the root).
+        try:
+            ico = os.path.join(ROOT_DIR, "manoni.ico")
+            png = os.path.join(ROOT_DIR, "manoni-icon.png")
+            if sys.platform == "win32" and os.path.exists(ico):
+                self.root.iconbitmap(default=ico)
+            elif os.path.exists(png):
+                self.root.iconphoto(True, tk.PhotoImage(file=png, master=self.root))
+        except Exception:
+            pass
         self.root.configure(bg=BG)
-        self.root.geometry("1280x800")
+        self._center_window(1280, 800)
 
         self.folder = None
         self.files = []          # image filenames in the folder
+        self.subfolders = []     # (name, fullpath) of sub-directories, listed at the sidebar top
         self.index = 0           # current image index
         self.current_pil = None  # PIL image currently shown (full res)
         self.brightness = 1.0    # live edit factors (1.0 = unchanged)
         self.contrast = 1.0
         self.color = 1.0
         self.temperature = 1.0   # >1.0 warmer (more red), <1.0 cooler (more blue)
-        self._fit_pil = None     # current photo pre-scaled to the preview size
-        self._fit_size = None    # (w, h) the fit image was scaled for
+        self.tint = 1.0          # >1.0 magenta (less green), <1.0 green (more green)
+        # ACR tone controls (factor 1.0 = neutral; amount = factor - 1.0 in [-1,1])
+        self.highlights = 1.0    # + brightens / - recovers the bright tones
+        self.shadows = 1.0       # + lifts / - deepens the dark tones
+        self.whites = 1.0        # + raises / - pulls back the white point
+        self.blacks = 1.0        # + lifts / - crushes the black point
+        self.clarity = 1.0       # + midtone local contrast / - soft glow
+        self.vibrance = 1.0      # + saturate the muted colours (protects saturated)
+        self.texture = 1.0       # + crisper medium detail / - gentle surface smoothing
+        self.sharpen = 1.0       # >1.0 sharpen, <1.0 blur (1.0 = unchanged)
+        # Effects (creative looks) rest at 0.0 = off, up to 1.0 = full strength.
+        self.bw = 0.0            # black-and-white: blend toward grayscale (0 = colour)
+        self.sepia = 0.0         # sepia: blend toward a warm-toned monochrome (0 = colour)
+        self.vignette = 1.0      # vignette: <1 lightens corners, >1 darkens; 1 = off
+        self._vig_cache = {}     # geometry key -> mask; reused across slider drags
+        # Selective focus blur (Fotor-style depth of field): a draggable circle
+        # kept sharp while the rest blurs. None = off, else {cx, cy, r (source px),
+        # blur, feather}. A LIVE non-destructive effect like the vignette.
+        self.focus = None
+        self._focus_cache = {}   # geometry key -> mask; reused across blur drags
+        self._focus_drag = None  # in-progress circle drag state, or None
+        # Auto tone (Photoshop "Auto Levels" / "Auto Contrast"). One mode at a
+        # time: "levels" stretches each RGB channel (fixes a colour cast),
+        # "contrast" stretches luminance only (keeps colour balance). The per-band
+        # LUTs are computed once from the full base image and cached, so the
+        # preview viewport and the saved full-res file get the same mapping.
+        self.auto_mode = None
+        self._auto_luts = None
+        self._rotated = False    # has the current photo been rotated since loaded?
+        self._cropped = False    # has the current photo been cropped since loaded?
+        self._edits_saved = False  # are the current photo's edits already saved to a copy?
+        # Save model: "quick save" (rail button + leaving an edited photo) writes
+        # silently using quick_save_cfg = {dir, fmt, quality}. It starts UNSET each
+        # session on purpose, so the first quick save opens the full Save-as dialog
+        # (where it gets armed). last_save = the dialog's remembered defaults
+        # (folder/format/quality), persisted across sessions in the state file.
+        self.quick_save_cfg = None    # armed only within this session (never loaded)
+        self.last_save = None         # {dir, fmt, quality} remembered for the dialog
+        # Cull (გადარჩევა): two destination folders the keep/reject toolbar
+        # buttons sort the current photo into. Both must be set (in the ⚙ options
+        # dialog) before either button works — see nav._require_cull. Persisted
+        # across sessions in the state file.
+        self.cull_keep = None         # folder the ✓ keeper button moves photos to
+        self.cull_reject = None       # folder the ✗ reject button moves photos to
+        self._menu_popup = None       # the ☰ dropdown Toplevel while open, else None
+        # Crop tool: a non-destructive selection drawn over the preview, stored in
+        # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
+        self.crop_rect = None         # [x0, y0, x1, y1] in source px, or None
+        self.crop_ratio = None        # locked aspect ratio (w/h), or None = free
+        self._crop_btn_active = None  # the highlighted preset chip (for restyle)
+        self._crop_chips = []         # all preset chip widgets (for restyle)
+        self._crop_drag = None        # in-progress drag state, or None
+        # User-saved custom crop sizes shown in the "შენი ზომები" scroll list,
+        # each {"name", "w", "h"}. Persisted across sessions in the state file.
+        self.crop_sizes = []
+        # Retouch tool: a LOCAL pixel edit baked into current_pil like crop —
+        # either auto spot-heal (clone a clean neighbour) or a manual clone stamp.
+        # Brush radius is in SOURCE px so it stays constant through zoom. A stroke
+        # is one undo step.
+        self.heal_radius = 24         # brush radius in source px (slider / wheel / [ ])
+        self.heal_opacity = 1.0       # blend strength: 1.0 solid; the სიძლიერე slider lowers it
+        self.heal_feather = 0.5       # patch-edge softness 0..1 (matches imaging.HEAL_FEATHER)
+        self.heal_mode = "auto"       # "auto" = spot heal, "clone" = manual clone stamp
+        self.clone_src = None         # clone source anchor (source px), set by Alt+click
+        self.clone_offset = None      # locked (dst-src) offset while cloning, or None
+        self.clone_aligned = True     # True = offset persists across strokes (Photoshop "aligned")
+        self.clone_flip = False       # mirror the cloned source left↔right
+        self._healed = False          # has the current photo been retouched (heal/clone)?
+        self._heal_cursor = None      # last (screen x, y) for the brush ring, or None
+        self._heal_before_img = None  # RGB snapshot taken when a stroke begins
+        self._heal_dirty = None       # union box of the stroke's dabs, or None
+        self._heal_last = None        # last dabbed source point (for dab spacing)
+        self._disp = (1.0, 0.0, 0.0)  # last render transform: (scale, off_x, off_y)
+        self.panel_open = False  # is the right-side edit panel (sliders + rail) shown?
+        self.active_section = "basic"  # which edit section/tool is open in the panel
+        self.fit_mode = True     # True = fit to window; False = use self.user_scale
+        self.user_scale = 1.0    # absolute scale when not fitting (1.0 = 100%)
+        self.pan_x = 0.0         # viewport pan offset, in screen pixels
+        self.pan_y = 0.0
+        self._pan_anchor = None  # (mx, my, pan_x, pan_y) captured while panning
+        self._view_base = None   # cached cropped+scaled RGB image for the view
+        self._view_key = None    # identity of _view_base (None forces a re-render)
+        self._view_alpha = None  # matching alpha mask when the photo is transparent
+        self._has_alpha = False  # does the current photo carry transparency?
+        self._checker_img = None    # cached transparency checkerboard (grows with view)
+        self._checker_size = (0, 0)
+        self.show_rulers = True  # top + left pixel rulers (Ctrl+R); persisted
+        self._message = None     # placeholder text shown when no photo is loaded
         self.icons = {}          # name -> PhotoImage (kept alive)
+        self._folder_imgs = {}   # cached small folder glyph for the list rows (kept alive)
         self.thumb_images = []   # thumbnail PhotoImages (kept alive)
-        self.thumb_widgets = []  # frame per thumbnail (for highlight); may be None
+        self.thumb_widgets = []  # cell frame per thumbnail (for highlight); may be None
+        self.folder_widgets = []  # sub-folder rows in the top folder list
         self._thumb_job = None
+        self.thumb_size = THUMB_W       # current thumbnail size (px), zoomable
+        self.view_mode = "grid"         # sidebar layout: "grid" icons | "list" rows
+        self.sidebar_width = THUMB_W + 30  # current sidebar width (px), drag-resizable
+        self.folder_list_height = None  # user-dragged sub-folder list height (px); None = auto
+        self._thumb_cols = 1            # columns in the thumbnail grid (recomputed)
+        self._folder_cols = 1          # columns in the top folder list (1 or 2, by width)
+        self._thumb_pos = 0            # next free grid slot while loading
+        self._load_prefs()             # restore remembered sidebar width + thumb size
+        self._load_filters()           # restore the user's saved filters (presets)
 
+        # Undo/redo: stacks of command dicts. A command is either
+        #   {'kind': 'move', 'file', 'src', 'dest'}            (delete / move-to)
+        #   {'kind': 'edit', 'folder', 'file', 'before', 'after'}  (slider edits)
+        self._undo_stack = []
+        self._redo_stack = []
+        self._edit_before = None  # edit-state snapshot taken when a drag begins
+
+        self._init_scrollbar_style()
         self._build_infobar()
         self._build_toolbar()
         self._build_body()
@@ -154,409 +254,147 @@ class Manoni:
         # Re-fit the preview when the window resizes
         self.preview.bind("<Configure>", lambda e: self._render_preview())
 
+        # Save the session (last folder + image) when the window is closed.
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Undo / redo shortcuts (Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z to redo).
+        self.root.bind("<Control-z>", lambda e: self.undo())
+        self.root.bind("<Control-y>", lambda e: self.redo())
+        self.root.bind("<Control-Z>", lambda e: self.redo())  # Ctrl+Shift+Z
+
+        # [ / ] resize the heal brush (Photoshop-style), only while it is open.
+        self.root.bind("[", lambda e: self._heal_brush_key(-1))
+        self.root.bind("]", lambda e: self._heal_brush_key(1))
+
+        # Ctrl+R toggles the canvas rulers.
+        self.root.bind("<Control-r>", lambda e: self.toggle_rulers())
+        self.root.bind("<Control-R>", lambda e: self.toggle_rulers())
+
         if folder:
             self.load_folder(folder)
-
-    # --- Icons --------------------------------------------------------------
-
-    def icon(self, name):
-        "Load a Lucide icon (white) scaled to ICON_SIZE, cached. None if missing."
-        if name in self.icons:
-            return self.icons[name]
-        path = os.path.join(ICON_DIR, name + ".png")
-        img = None
-        if os.path.exists(path):
-            try:
-                im = Image.open(path).convert("RGBA")
-                im = im.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
-                img = ImageTk.PhotoImage(im)
-            except Exception:
-                img = None
-        self.icons[name] = img
-        return img
-
-    def _tool_button(self, parent, icon_name, command, tooltip=""):
-        "A flat icon button with hover effect (falls back to text if no icon)."
-        img = self.icon(icon_name)
-        if img is not None:
-            btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
         else:
-            btn = tk.Label(parent, text=tooltip or "?", bg=BAR, fg=FG,
-                           cursor="hand2", font=("Segoe UI", 10))
-        btn.bind("<Enter>", lambda e: btn.configure(bg=HOVER))
-        btn.bind("<Leave>", lambda e: btn.configure(bg=BAR))
-        btn.bind("<Button-1>", lambda e: command())
-        btn._tooltip = tooltip
-        return btn
+            self._restore_last_session()
 
-    def _sep(self, parent):
-        "Vertical separator in a bar."
-        return tk.Frame(parent, bg="#3a3a3a", width=1)
+    # --- Session state (last folder + image) --------------------------------
 
-    # --- Top info bar -------------------------------------------------------
+    def _center_window(self, want_w, want_h):
+        """Size the window to fit the screen and center it.
 
-    def _build_infobar(self):
-        self.infobar = tk.Frame(self.root, bg=BAR, height=30)
-        self.infobar.grid(row=0, column=0, sticky="ew")
-        self.infobar.grid_propagate(False)
+        On a small/weak laptop a fixed 1280x800 can spill below the screen edge,
+        hiding the bottom of the window under the taskbar. We clamp the size to
+        the available screen area (leaving a margin for the title bar + taskbar)
+        and place it so the whole window stays visible.
+        """
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        # Leave room: side margins + title bar (~32px) and taskbar (~56px).
+        w = min(want_w, sw - 40)
+        h = min(want_h, sh - 88)
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - 88 - h) // 2)
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
 
-        self.lbl_name = tk.Label(self.infobar, text="Manoni", bg=BAR, fg=FG,
-                                 font=("Segoe UI", 9, "bold"))
-        self.lbl_name.pack(side="left", padx=12)
-
-        self.lbl_info = tk.Label(self.infobar, text="", bg=BAR, fg=FG_DIM,
-                                 font=("Segoe UI", 9))
-        self.lbl_info.pack(side="left", padx=8)
-
-    # --- Toolbar ------------------------------------------------------------
-
-    def _build_toolbar(self):
-        bar = tk.Frame(self.root, bg=BAR, height=46)
-        bar.grid(row=1, column=0, sticky="ew")
-        bar.grid_propagate(False)
-
-        # (icon, command, tooltip)
-        groups = [
-            [("chevron-left", self.prev, "წინა"),
-             ("chevron-right", self.next, "შემდეგი")],
-            [("maximize", self._render_preview, "Fit"),
-             ("grid-2x2", lambda: self.toast("ბადე — მალე"), "ბადე")],
-            [("scaling", lambda: self.toast("Resize — მალე"), "Resize"),
-             ("sun", lambda: self.toast("განათება — მალე"), "განათება"),
-             ("palette", lambda: self.toast("ფილტრი — მალე"), "ფილტრი")],
-            [("folder-check", self.move_to_folder, "შენახვა ფოლდერში"),
-             ("trash-2", self.delete, "წაშლა")],
-            [("folder-open", self.open_folder, "ფოლდერის გახსნა"),
-             ("menu", lambda: self.toast("მენიუ — მალე"), "მენიუ")],
-        ]
-
-        for gi, group in enumerate(groups):
-            for icon_name, command, tip in group:
-                btn = self._tool_button(bar, icon_name, command, tip)
-                btn.pack(side="left", padx=4, pady=8)
-            if gi < len(groups) - 1:
-                self._sep(bar).pack(side="left", fill="y", padx=6, pady=10)
-
-    # --- Body: sidebar + preview -------------------------------------------
-
-    def _build_body(self):
-        body = tk.Frame(self.root, bg=BG)
-        body.grid(row=2, column=0, sticky="nsew")
-        body.rowconfigure(0, weight=1)
-        body.columnconfigure(0, weight=0)   # thumbnail sidebar fixed
-        body.columnconfigure(1, weight=1)   # preview expands
-        body.columnconfigure(2, weight=0)   # edit panel fixed
-
-        # Sidebar (scrollable thumbnails)
-        side = tk.Frame(body, bg=SIDEBAR, width=THUMB_W + 30)
-        side.grid(row=0, column=0, sticky="ns")
-        side.grid_propagate(False)
-
-        self.canvas = tk.Canvas(side, bg=SIDEBAR, highlightthickness=0,
-                                width=THUMB_W + 30)
-        sb = ttk.Scrollbar(side, orient="vertical", command=self.canvas.yview)
-        self.thumb_holder = tk.Frame(self.canvas, bg=SIDEBAR)
-        self.thumb_holder.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0, 0), window=self.thumb_holder, anchor="nw")
-        self.canvas.configure(yscrollcommand=sb.set)
-        sb.pack(side="right", fill="y")
-        self.canvas.pack(side="left", fill="both", expand=True)
-        for w in (self.canvas, self.thumb_holder):
-            w.bind("<MouseWheel>", self._on_wheel)
-
-        # Big preview fills the center
-        self.preview = tk.Label(body, bg=BG)
-        self.preview.grid(row=0, column=1, sticky="nsew")
-
-        # ACR-style edit panel on the right
-        self._build_edit_panel(body)
-
-    def _on_wheel(self, event):
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
-        return "break"
-
-    # --- Edit panel (below the preview) -------------------------------------
-
-    def _build_edit_panel(self, parent):
-        "Vertical ACR-style edit panel on the right: stacked live sliders + reset."
-        panel = tk.Frame(parent, bg=BAR, width=252)
-        panel.grid(row=0, column=2, sticky="ns")
-        panel.grid_propagate(False)
-
-        tk.Label(panel, text="რედაქტირება", bg=BAR, fg=FG,
-                 font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=16,
-                                                     pady=(16, 10))
-
-        self.s_brightness = self._slider(panel, "განათება", "brightness")
-        self.s_contrast   = self._slider(panel, "კონტრასტი", "contrast")
-        self.s_color      = self._slider(panel, "ფერი", "color")
-        self.sliders = {"brightness": self.s_brightness,
-                        "contrast": self.s_contrast,
-                        "color": self.s_color}
-
-        reset = tk.Label(panel, text="ხელახლა", bg=BAR, fg=FG_DIM,
-                         cursor="hand2", font=("Segoe UI", 9))
-        reset.bind("<Enter>", lambda e: reset.configure(fg=FG))
-        reset.bind("<Leave>", lambda e: reset.configure(fg=FG_DIM))
-        reset.bind("<Button-1>", lambda e: self._reset_edits())
-        reset.pack(anchor="w", padx=16, pady=(14, 0))
-
-    def _slider(self, parent, label, attr):
-        "A labeled live slider (0–200 → factor 0.0–2.0) bound to an attribute."
-        s = Slider(parent, label, lambda v, a=attr: self._on_slider(a, v))
-        s.pack(anchor="w", padx=16, pady=6)
-        return s
-
-    def _on_slider(self, attr, val):
-        setattr(self, attr, val / 100.0)
-        self._render_preview()
-
-    def _reset_sliders(self):
-        "Put every slider back to neutral (factor 1.0). set() does not re-render."
-        for attr, s in self.sliders.items():
-            setattr(self, attr, 1.0)
-            s.set(100)
-
-    def _reset_edits(self):
-        self._reset_sliders()
-        self._render_preview()
-
-    # --- Bottom navigation --------------------------------------------------
-
-    def _build_bottombar(self):
-        bar = tk.Frame(self.root, bg=BAR, height=34)
-        bar.grid(row=3, column=0, sticky="ew")
-        bar.grid_propagate(False)
-
-        wrap = tk.Frame(bar, bg=BAR)
-        wrap.pack(expand=True)
-
-        self.lbl_pos = tk.Label(wrap, text="0 / 0", bg=BAR, fg=FG_DIM,
-                                font=("Segoe UI", 9))
-        self.lbl_pos.pack(side="left", padx=14)
-
-        for icon_name, command, tip in [
-            ("chevrons-left", self.first, "პირველი"),
-            ("chevron-left", self.prev, "წინა"),
-            ("chevron-right", self.next, "შემდეგი"),
-            ("chevrons-right", self.last, "ბოლო"),
-        ]:
-            self._tool_button(wrap, icon_name, command, tip).pack(side="left", padx=4, pady=4)
-
-    # --- Folder + files -----------------------------------------------------
-
-    def load_folder(self, folder):
-        "Load all images in a folder and show the first one."
-        self.folder = folder
-        self.files = sorted(
-            f for f in os.listdir(folder)
-            if os.path.isfile(os.path.join(folder, f))
-            and os.path.splitext(f)[1].lower() in SUPPORTED)
-        self.index = 0
-        self._build_thumbs()
-        if self.files:
-            self.show_current()
-        else:
-            self.preview.configure(image="", text="ფოტოები ვერ მოიძებნა",
-                                   fg=FG_DIM, font=("Segoe UI", 12))
-            self.lbl_name.configure(text="Manoni")
-            self.lbl_info.configure(text="")
-            self.lbl_pos.configure(text="0 / 0")
-
-    def open_folder(self):
-        folder = tkfd.askdirectory(parent=self.root,
-                                   initialdir=self.folder or os.path.expanduser("~"))
-        if folder:
-            self.load_folder(folder)
-
-    # --- Thumbnails ---------------------------------------------------------
-
-    def _build_thumbs(self):
-        "Rebuild the sidebar thumbnail list (loaded incrementally so UI stays responsive)."
-        if self._thumb_job is not None:
-            self.root.after_cancel(self._thumb_job)
-            self._thumb_job = None
-        for w in self.thumb_holder.winfo_children():
-            w.destroy()
-        self.thumb_images = []
-        self.thumb_widgets = []
-        self._thumb_idx = 0
-        self._thumb_job = self.root.after(1, self._add_thumb)
-
-    def _add_thumb(self):
+    def _save_state(self):
+        "Remember the folder/image plus UI prefs so we can restore them next time."
+        state = {"thumb_size": self.thumb_size,
+                 "sidebar_width": self.sidebar_width,
+                 "view_mode": self.view_mode,
+                 "show_rulers": self.show_rulers,
+                 "language": i18n.get_language()}
+        if self.folder_list_height is not None:
+            state["folder_list_height"] = self.folder_list_height
+        if self.last_save:
+            state["last_save"] = self.last_save   # remembered Save-as defaults
+        if self.cull_keep:
+            state["cull_keep"] = self.cull_keep   # ✓ keeper destination
+        if self.cull_reject:
+            state["cull_reject"] = self.cull_reject  # ✗ reject destination
+        if self.crop_sizes:
+            state["crop_sizes"] = self.crop_sizes    # user's saved crop sizes
+        if self.folder:
+            state["folder"] = self.folder
+            if self.files and 0 <= self.index < len(self.files):
+                state["file"] = self.files[self.index]
         try:
-            if not self.thumb_holder.winfo_exists():
-                return
-        except tk.TclError:
-            return
-        if self._thumb_idx >= len(self.files):
-            self._thumb_job = None
-            return
-
-        i = self._thumb_idx
-        file = self.files[i]
-        try:
-            with Image.open(os.path.join(self.folder, file)) as im:
-                im.thumbnail((THUMB_W, THUMB_W))
-                im = im.convert("RGB")
-                photo = ImageTk.PhotoImage(im)
-            self.thumb_images.append(photo)
-
-            frame = tk.Frame(self.thumb_holder, bg=SIDEBAR,
-                             highlightthickness=2, highlightbackground=SIDEBAR)
-            frame.pack(pady=4)
-            lbl = tk.Label(frame, image=photo, bg=SIDEBAR, cursor="hand2")
-            lbl.pack()
-            name = tk.Label(self.thumb_holder, text=file, bg=SIDEBAR, fg=FG_DIM,
-                            font=("Segoe UI", 7), wraplength=THUMB_W)
-            name.pack()
-            for w in (lbl, frame, name):
-                w.bind("<MouseWheel>", self._on_wheel)
-                w.bind("<Button-1>", lambda e, idx=i: self.go_to(idx))
-            self.thumb_widgets.append(frame)
+            with open(STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f)
         except Exception:
-            self.thumb_widgets.append(None)
+            pass
 
-        self._thumb_idx += 1
-        self._thumb_job = self.root.after(1, self._add_thumb)
-
-    def _highlight_thumb(self):
-        for i, frame in enumerate(self.thumb_widgets):
-            if frame is None:
-                continue
-            try:
-                frame.configure(highlightbackground=ACCENT if i == self.index else SIDEBAR)
-            except tk.TclError:
-                pass
-
-    # --- Show current image -------------------------------------------------
-
-    def show_current(self):
-        if not self.files:
-            return
-        path = os.path.join(self.folder, self.files[self.index])
+    def _load_prefs(self):
+        "Read sidebar width + thumbnail size from the state file (before the UI builds)."
         try:
-            self.current_pil = Image.open(path)
-            self.current_pil.load()
+            with open(STATE_FILE, encoding="utf-8") as f:
+                state = json.load(f)
         except Exception:
-            self.current_pil = None
-        self._fit_pil = None     # new photo → drop the cached scaled image
-        self._reset_sliders()
-        self._render_preview()
-        self._update_info(path)
-        self._highlight_thumb()
-        self.lbl_pos.configure(text=f"{self.index + 1} / {len(self.files)}")
-
-    def _fit_current(self, aw, ah):
-        "Downscale the full-res photo to the preview size, once. Expensive."
-        img = self.current_pil.copy()
-        img.thumbnail((aw, ah), Image.LANCZOS)
-        self._fit_pil = img.convert("RGB")
-        self._fit_size = (aw, ah)
-
-    def _apply_edits(self, img):
-        "Apply the live edit factors. Cheap on the small preview, exact on full-res."
-        if self.brightness != 1.0:
-            img = ImageEnhance.Brightness(img).enhance(self.brightness)
-        if self.contrast != 1.0:
-            img = ImageEnhance.Contrast(img).enhance(self.contrast)
-        if self.color != 1.0:
-            img = ImageEnhance.Color(img).enhance(self.color)
-        return img
-
-    def _render_preview(self):
-        "Apply live edits to the cached fit image and show it. Cheap on the slider."
-        if self.current_pil is None:
             return
-        aw = max(self.preview.winfo_width(), 1)
-        ah = max(self.preview.winfo_height(), 1)
-        if aw <= 1 or ah <= 1:
-            return
-        # Re-scale only when the photo changed or the window was resized.
-        if self._fit_pil is None or self._fit_size != (aw, ah):
-            self._fit_current(aw, ah)
-        img = self._apply_edits(self._fit_pil)
-        photo = ImageTk.PhotoImage(img)
-        self.preview.configure(image=photo, text="")
-        self.preview.image = photo   # keep reference
+        ts = state.get("thumb_size")
+        if isinstance(ts, int):
+            self.thumb_size = max(self.THUMB_MIN, min(self.THUMB_MAX, ts))
+        sw = state.get("sidebar_width")
+        if isinstance(sw, int):
+            self.sidebar_width = max(self.SIDEBAR_MIN, min(self.SIDEBAR_MAX, sw))
+        flh = state.get("folder_list_height")
+        if isinstance(flh, int):       # clamped to the live sidebar at apply time
+            self.folder_list_height = max(self.FOLDER_LIST_MIN, flh)
+        vm = state.get("view_mode")
+        if vm in ("grid", "list"):
+            self.view_mode = vm
+        sr = state.get("show_rulers")
+        if isinstance(sr, bool):
+            self.show_rulers = sr
+        # UI language. Falls back to the default (Georgian) if unset/unknown.
+        lang = state.get("language")
+        if isinstance(lang, str):
+            i18n.set_language(lang)
+        # Save-as defaults (folder/format/quality). NOT quick_save_cfg — that stays
+        # unset each session so the first quick save always opens the dialog.
+        ls = state.get("last_save")
+        if isinstance(ls, dict) and isinstance(ls.get("dir"), str) \
+                and ls.get("fmt") in ("JPEG", "PNG", "WEBP"):
+            self.last_save = {"dir": ls["dir"], "fmt": ls["fmt"],
+                              "quality": int(ls.get("quality", 95))}
+        # Cull destinations (keep + reject). Restored even if the folder no
+        # longer exists — the cull action re-creates it (makedirs) on use.
+        ck = state.get("cull_keep")
+        if isinstance(ck, str) and ck:
+            self.cull_keep = ck
+        cr = state.get("cull_reject")
+        if isinstance(cr, str) and cr:
+            self.cull_reject = cr
+        # User's saved custom crop sizes. Keep only well-formed {name,w,h} with
+        # positive dimensions, so a hand-edited state file can't break the panel.
+        cs = state.get("crop_sizes")
+        if isinstance(cs, list):
+            clean = []
+            for it in cs:
+                if not isinstance(it, dict):
+                    continue
+                try:
+                    w, h = float(it.get("w")), float(it.get("h"))
+                except (TypeError, ValueError):
+                    continue
+                if w > 0 and h > 0:
+                    name = str(it.get("name") or "").strip()
+                    clean.append({"name": name, "w": w, "h": h})
+            self.crop_sizes = clean
 
-    def _update_info(self, path):
-        file = self.files[self.index]
+    def _restore_last_session(self):
+        "On launch with no folder given, reopen the last session if it still exists."
         try:
-            w, h = self.current_pil.size if self.current_pil else (0, 0)
-            size_kb = os.path.getsize(path) / 1024
-            size_txt = f"{size_kb/1024:.1f} MB" if size_kb > 1024 else f"{size_kb:.0f} KB"
-            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(path))
-            date_txt = mtime.strftime("%Y/%m/%d %H:%M")
-            self.lbl_name.configure(text=file)
-            self.lbl_info.configure(
-                text=f"{self.index+1}/{len(self.files)}   ·   {w}×{h}   ·   "
-                     f"{size_txt}   ·   {date_txt}")
+            with open(STATE_FILE, encoding="utf-8") as f:
+                state = json.load(f)
         except Exception:
-            self.lbl_name.configure(text=file)
-            self.lbl_info.configure(text="")
-
-    # --- Navigation ---------------------------------------------------------
-
-    def go_to(self, index):
-        if 0 <= index < len(self.files):
-            self.index = index
-            self.show_current()
-
-    def prev(self):
-        if self.files:
-            self.go_to((self.index - 1) % len(self.files))
-
-    def next(self):
-        if self.files:
-            self.go_to((self.index + 1) % len(self.files))
-
-    def first(self):
-        self.go_to(0)
-
-    def last(self):
-        self.go_to(len(self.files) - 1)
-
-    # --- Cull: delete + move ------------------------------------------------
-
-    def delete(self):
-        "Move the current file into a _deleted subfolder (safe, reversible)."
-        if not self.files:
             return
-        trash = os.path.join(self.folder, "_deleted")
-        os.makedirs(trash, exist_ok=True)
-        self._move_current_to(trash)
-        self.toast("გადატანილია _deleted-ში")
+        folder = state.get("folder")
+        if folder and os.path.isdir(folder):
+            self.load_folder(folder, select=state.get("file"))
 
-    def move_to_folder(self):
-        "Move the current file into a folder you choose (keep the good ones)."
-        if not self.files:
-            return
-        dest = tkfd.askdirectory(parent=self.root, title="აირჩიე ფოლდერი",
-                                 initialdir=self.folder)
-        if dest:
-            self._move_current_to(dest)
-            self.toast(f"გადატანილია → {os.path.basename(dest)}")
-
-    def _move_current_to(self, dest):
-        file = self.files[self.index]
-        src = os.path.join(self.folder, file)
-        try:
-            shutil.move(src, os.path.join(dest, file))
-        except Exception as e:
-            self.toast(f"შეცდომა: {e}")
-            return
-        # Remove from list and refresh
-        del self.files[self.index]
-        if self.index >= len(self.files):
-            self.index = max(0, len(self.files) - 1)
-        self._build_thumbs()
-        if self.files:
-            self.show_current()
-        else:
-            self.load_folder(self.folder)
+    def _on_close(self):
+        if not self._maybe_prompt_save():
+            return                       # unsaved edits + 'cancel' → keep window open
+        self._save_state()
+        self.root.destroy()
 
     # --- Misc ---------------------------------------------------------------
 
