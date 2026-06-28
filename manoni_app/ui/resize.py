@@ -14,7 +14,7 @@ is identical to when it lived directly on the class.
 import os
 import tkinter as tk
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from ..config import (BAR, ACCENT, FG, FG_DIM, HOVER, EDIT_PANEL_W, EDIT_PAD,
                       CHIP_GAP, ON_ACCENT, ACCENT_HOVER, CHIP_BG, DIVIDER)
@@ -29,10 +29,50 @@ class ResizeMixin:
     RESIZE_PX_PRESETS  = [1080, 1600, 2000, 2560]
     RESIZE_PCT_PRESETS = [25, 50, 75]
 
+    # Pixel quality = which resampling filter the resize uses (and, for "sharp",
+    # a light output-sharpen afterwards). Shared by the single photo + folder
+    # batch via _resize_pixels, so both paths render pixels identically.
+    #   soft   — BICUBIC + a small Gaussian blur (smoother, gentler on noise)
+    #   normal — LANCZOS: the default; sharpest clean downscale (no post-pass)
+    #   sharp  — LANCZOS + an UnsharpMask (web "output sharpening")
+    # Soft and sharp each carry a 3-step strength (light/medium/strong); normal
+    # has none. The chosen strength is remembered per quality in _resize_strength.
+    RESIZE_QUALITIES = ("soft", "normal", "sharp")
+    RESIZE_RESAMPLE  = {"soft": Image.BICUBIC, "normal": Image.LANCZOS,
+                        "sharp": Image.LANCZOS}
+    RESIZE_STRENGTHS = ("light", "medium", "strong")
+    # Sharp: UnsharpMask percent per strength (radius + threshold fixed, so only
+    # real edges crisp up while flat areas / noise stay clean).
+    RESIZE_SHARP_RADIUS = 0.8
+    RESIZE_SHARP_THRESH = 2
+    RESIZE_SHARP_PCT    = {"light": 50, "medium": 90, "strong": 150}
+    # Soft: an extra Gaussian blur (full-res px) on top of the BICUBIC resample.
+    RESIZE_SOFT_BLUR    = {"light": 0.5, "medium": 0.9, "strong": 1.4}
+
+    def _resize_pixels(self, img, size, post=True):
+        """Resize `img` to `size` with the chosen quality + strength.
+
+        `post`=False skips the soft/sharp pass — used for the compare "before",
+        which stays the plain reference so the slider shows the effect."""
+        q = self._resize_quality
+        out = img.resize(size, self.RESIZE_RESAMPLE[q])
+        if not post or q == "normal":
+            return out
+        lvl = self._resize_strength[q]
+        if q == "sharp":
+            out = out.filter(ImageFilter.UnsharpMask(
+                radius=self.RESIZE_SHARP_RADIUS, percent=self.RESIZE_SHARP_PCT[lvl],
+                threshold=self.RESIZE_SHARP_THRESH))
+        else:   # soft
+            out = out.filter(ImageFilter.GaussianBlur(self.RESIZE_SOFT_BLUR[lvl]))
+        return out
+
     def _build_resize_section(self, parent):
         "Resize panel: current size, mode toggle, a value entry + presets, apply."
         f = tk.Frame(parent, bg=BAR)
         self._resize_mode = "px"             # "px" = long side, "pct" = percent
+        self._resize_quality = "normal"      # soft / normal / sharp (resample)
+        self._resize_strength = {"soft": "medium", "sharp": "medium"}  # per quality
         self._resize_var = tk.StringVar()
 
         self._resize_group(f, t("Size"))
@@ -73,6 +113,44 @@ class ResizeMixin:
         self._resize_result = tk.Label(f, text="", bg=BAR, fg=ACCENT, anchor="w",
                                        font=("Segoe UI", 10, "bold"))
         self._resize_result.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
+
+        # Pixel quality (resample filter). One setting drives the single photo
+        # AND the whole-folder batch.
+        tk.Label(f, text=t("Pixels"), bg=BAR, fg=FG_DIM, anchor="w",
+                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
+                                                    pady=(12, 4))
+        self._resize_q_chips = {}
+        qrow = tk.Frame(f, bg=BAR)
+        qrow.pack(fill="x", padx=EDIT_PAD)
+        for i in range(len(self.RESIZE_QUALITIES)):
+            qrow.columnconfigure(i, weight=1, uniform="rq")
+        qlabels = {"soft": t("Soft"), "normal": t("Normal"), "sharp": t("Sharp")}
+        for i, key in enumerate(self.RESIZE_QUALITIES):
+            self._resize_q_chips[key] = self._resize_quality_chip(
+                qrow, qlabels[key], key, i)
+
+        # Strength of the soft/sharp effect (a whole block, shown only for those
+        # two — "normal" has no effect to dial). Packed before the hint label.
+        self._resize_str_block = tk.Frame(f, bg=BAR)
+        tk.Label(self._resize_str_block, text=t("Strength"), bg=BAR, fg=FG_DIM,
+                 anchor="w", font=("Segoe UI", 8, "bold")).pack(fill="x",
+                                                                pady=(8, 4))
+        self._resize_str_chips = {}
+        srow = tk.Frame(self._resize_str_block, bg=BAR)
+        srow.pack(fill="x")
+        for i in range(len(self.RESIZE_STRENGTHS)):
+            srow.columnconfigure(i, weight=1, uniform="rs")
+        slabels = {"light": t("Light"), "medium": t("Medium"), "strong": t("Strong")}
+        for i, key in enumerate(self.RESIZE_STRENGTHS):
+            self._resize_str_chips[key] = self._resize_strength_chip(
+                srow, slabels[key], key, i)
+
+        self._resize_q_hint = tk.Label(
+            f, text=t("Soft = smoother · Sharp adds web output-sharpening."),
+            bg=BAR, fg=FG_DIM, anchor="w", justify="left", font=("Segoe UI", 8),
+            wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD))
+        self._resize_q_hint.pack(fill="x", padx=EDIT_PAD, pady=(5, 0))
+        self._set_resize_quality(self._resize_quality)   # paints chips + str block
 
         # Apply (accent, full width).
         apply_btn = tk.Frame(f, bg=ACCENT, cursor="hand2")
@@ -170,6 +248,47 @@ class ResizeMixin:
         chip.bind("<Leave>", lambda e: chip.configure(bg=CHIP_BG))
         return chip
 
+    def _resize_quality_chip(self, parent, label, key, col):
+        "One pixel-quality chip (soft/normal/sharp); click selects it, like the mode chips."
+        chip = tk.Label(parent, text=label, bg=CHIP_BG, fg=FG, cursor="hand2",
+                        font=("Segoe UI", 8, "bold"), pady=6)
+        chip.grid(row=0, column=col, sticky="ew", padx=2)
+        chip.bind("<Button-1>", lambda e: self._set_resize_quality(key))
+        return chip
+
+    def _set_resize_quality(self, q):
+        "Pick the resample quality; light up its chip + show/hide the strength block."
+        self._resize_quality = q
+        for k, chip in self._resize_q_chips.items():
+            set_chip_active(chip, k == q, CHIP_BG)
+        self._refresh_resize_strength()
+
+    def _resize_strength_chip(self, parent, label, key, col):
+        "One strength chip (light/medium/strong) for the active soft/sharp effect."
+        chip = tk.Label(parent, text=label, bg=CHIP_BG, fg=FG, cursor="hand2",
+                        font=("Segoe UI", 8, "bold"), pady=6)
+        chip.grid(row=0, column=col, sticky="ew", padx=2)
+        chip.bind("<Button-1>", lambda e: self._set_resize_strength(key))
+        return chip
+
+    def _set_resize_strength(self, level):
+        "Set the active quality's effect strength; remembered per quality."
+        if self._resize_quality == "normal":
+            return
+        self._resize_strength[self._resize_quality] = level
+        self._refresh_resize_strength()
+
+    def _refresh_resize_strength(self):
+        "Show the strength block for soft/sharp (hidden for normal) + light its chip."
+        if self._resize_quality == "normal":
+            self._resize_str_block.pack_forget()
+            return
+        self._resize_str_block.pack(fill="x", padx=EDIT_PAD,
+                                    before=self._resize_q_hint)
+        active = self._resize_strength[self._resize_quality]
+        for k, chip in self._resize_str_chips.items():
+            set_chip_active(chip, k == active, CHIP_BG)
+
     def _reset_resize_input(self):
         "Seed the value: the current long side (px mode) or 100 (percent mode)."
         if self.current_pil is None:
@@ -244,9 +363,11 @@ class ResizeMixin:
         if (nw, nh) == (iw, ih):
             self.toast(t("That's already the current size"))
             return
-        self.current_pil = self.current_pil.resize((nw, nh), Image.LANCZOS)
+        self.current_pil = self._resize_pixels(self.current_pil, (nw, nh))
         if self._before_pil is not None:   # keep the compare "before" aligned
-            self._before_pil = self._before_pil.resize((nw, nh), Image.LANCZOS)
+            # Same resample, but no soft/sharp pass — "before" is the reference.
+            self._before_pil = self._resize_pixels(self._before_pil, (nw, nh),
+                                                   post=False)
             self._before_base_key = None
         self._resized = True
         self._clear_focus_for_geometry()   # source-px focus shape no longer maps
@@ -324,7 +445,7 @@ class ResizeMixin:
                     if target is None:                # value went blank mid-run
                         fail += 1
                         continue
-                    out = im.resize(target, Image.LANCZOS)
+                    out = self._resize_pixels(im, target)
                     extra = self._batch_export_meta(im)
                 # Don't let two sources (a.jpg + a.png) or a re-run overwrite each
                 # other — number a clashing name instead.

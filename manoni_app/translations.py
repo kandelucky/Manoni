@@ -292,6 +292,15 @@ CATALOG_KA = {
         "ორიგინალი ხელუხლებელია — შენახვა ჩაწერს შეცვლილ ასლს.",
     "Enter a valid size": "შეიყვანე სწორი ზომა",
     "That's already the current size": "ეს უკვე მიმდინარე ზომაა",
+    "Pixels": "პიქსელები",
+    "Soft": "რბილი",
+    "Normal": "ნორმალური",
+    "Sharp": "მკვეთრი",
+    "Light": "მსუბუქი",
+    "Medium": "საშუალო",
+    "Strong": "ძლიერი",
+    "Soft = smoother · Sharp adds web output-sharpening.":
+        "რბილი = უფრო გლუვი · მკვეთრი ამატებს ვების გამკვეთვას.",
     "Resized → {w}×{h}px  ·  Save to write it to a file":
         "ზომა შეიცვალა → {w}×{h}px  ·  შენახვა ფაილში ჩასაწერად",
     "Whole folder": "მთელი ფოლდერი",
