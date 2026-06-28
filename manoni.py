@@ -35,11 +35,14 @@ from manoni_app.ui.filters import FiltersMixin
 from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
 from manoni_app.ui.metadata import MetadataMixin
+from manoni_app.ui.settings import SettingsMixin
+from manoni_app.ui.gridview import GridViewMixin
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, ResizeMixin, HealMixin,
-             FocusMixin, FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin):
+             FocusMixin, FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin,
+             SettingsMixin, GridViewMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -99,7 +102,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # Most factors rest at 1.0; creative effects rest at 0.0 (off → full). List
     # the 0-neutral ones here so reset / "is edited" use the right rest point.
     # auto_mode is not a slider; its rest is None (no auto correction active).
-    SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "focus": None, "auto_mode": None}
+    SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "grain": 0.0,
+                      "focus": None, "auto_mode": None}
 
     def __init__(self, folder=None):
         # Declare DPI awareness BEFORE the first window so Windows draws the
@@ -178,6 +182,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.bw = 0.0            # black-and-white: blend toward grayscale (0 = colour)
         self.sepia = 0.0         # sepia: blend toward a warm-toned monochrome (0 = colour)
         self.vignette = 1.0      # vignette: <1 lightens corners, >1 darkens; 1 = off
+        self.grain = 0.0         # film grain: 0 = off, up to 1 = full strength
         self._vig_cache = {}     # geometry key -> mask; reused across slider drags
         # Selective focus blur (Fotor-style depth of field): a draggable shape
         # kept sharp while the rest blurs. None = off, else a dict with shape
@@ -285,6 +290,25 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._thumb_cols = 1            # columns in the thumbnail grid (recomputed)
         self._folder_cols = 1          # columns in the top folder list (1 or 2, by width)
         self._thumb_pos = 0            # next free grid slot while loading
+        # Grid view (full-area big-thumbnail grid over the preview, for culling).
+        # Off by default; toggled from the toolbar. Tiles are cached per filename
+        # for the open folder so culling rebuilds cheaply. See ui/gridview.py.
+        self.grid_view = False
+        self.grid_cells = []           # cell per file index in the grid (None on fail)
+        self.grid_images = []          # grid tile PhotoImages (kept alive)
+        self._grid_job = None          # pending incremental-build after-job
+        self._grid_pool = None         # worker pool decoding grid tiles
+        self._grid_futures = {}        # file index -> pending tile decode Future
+        self._grid_cache = {}          # filename -> decoded PIL tile (current folder)
+        self._grid_cache_folder = None
+        # Grid multi-select + drag-to-sort: a set of selected file indices, and the
+        # transient drag state used to drop them onto the კარგი / ცუდი zones.
+        self._grid_sel = set()         # selected file indices in the grid
+        self._grid_press_xy = None     # (x_root, y_root) where a tile press began
+        self._grid_dragging = False    # is a tile drag in progress?
+        self._drag_chip = None         # floating "{n} photos" label following the cursor
+        self.grid_tile = self.GRID_TILE_DEFAULT  # grid tile size (px), Ctrl+wheel zoomable
+        self._grid_zoom_job = None     # debounce handle for tile-zoom rebuilds
         self._load_prefs()             # restore remembered sidebar width + thumb size
         self._load_filters()           # restore the user's saved filters (presets)
         self._load_actions()           # restore the user's saved actions (macros)
@@ -404,6 +428,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         state = {"thumb_size": self.thumb_size,
                  "sidebar_width": self.sidebar_width,
                  "view_mode": self.view_mode,
+                 "grid_tile": self.grid_tile,
                  "show_rulers": self.show_rulers,
                  "language": i18n.get_language()}
         if self.folder_list_height is not None:
@@ -439,6 +464,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         sw = state.get("sidebar_width")
         if isinstance(sw, int):
             self.sidebar_width = max(self.SIDEBAR_MIN, min(self.SIDEBAR_MAX, sw))
+        gt = state.get("grid_tile")
+        if isinstance(gt, int):
+            self.grid_tile = max(self.GRID_TILE_MIN, min(self.GRID_TILE_MAX, gt))
         flh = state.get("folder_list_height")
         if isinstance(flh, int):       # clamped to the live sidebar at apply time
             self.folder_list_height = max(self.FOLDER_LIST_MIN, flh)
@@ -459,7 +487,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                 and ls.get("fmt") in ("JPEG", "PNG", "WEBP"):
             self.last_save = {"dir": ls["dir"], "fmt": ls["fmt"],
                               "quality": int(ls.get("quality", 95)),
-                              "keep_meta": bool(ls.get("keep_meta", True))}
+                              "keep_meta": bool(ls.get("keep_meta", True)),
+                              "to_srgb": bool(ls.get("to_srgb", False))}
         # Cull destinations (keep + reject). Restored even if the folder no
         # longer exists — the cull action re-creates it (makedirs) on use.
         ck = state.get("cull_keep")
@@ -500,6 +529,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         if not self._maybe_prompt_save():
             return                       # unsaved edits + 'cancel' → keep window open
         self._shutdown_decode_pool()     # stop any in-flight thumbnail decoding
+        self._shutdown_grid_pool()       # stop any in-flight grid-tile decoding
         self._save_state()
         self.root.destroy()
 

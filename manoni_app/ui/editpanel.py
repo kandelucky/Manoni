@@ -162,7 +162,7 @@ class EditPanelMixin:
 
     def _build_effects_section(self, parent):
         "Effects: creative looks, each a 0→full strength slider. B&W + sepia +"
-        " vignette now; grain next. They share the edit pipeline, undo and reset."
+        " vignette + film grain. They share the edit pipeline, undo and reset."
         f = tk.Frame(parent, bg=BAR)
         # Effects rest at 0 (off): hi=100, neutral=0 → strength 0.0–1.0.
         self.s_bw = self._slider(f, t("Black & White"), "bw", hi=100, neutral=0)
@@ -173,6 +173,9 @@ class EditPanelMixin:
         # Bidirectional (centred at 0): left lightens the corners, right darkens.
         self.s_vignette = self._slider(f, t("Vignette"), "vignette")
         self.sliders["vignette"] = self.s_vignette
+        # Film grain: 0 = off → full strength. Laid on top of the whole look.
+        self.s_grain = self._slider(f, t("Film grain"), "grain", hi=100, neutral=0)
+        self.sliders["grain"] = self.s_grain
 
         self._clear_button(f)
         return f
@@ -556,6 +559,7 @@ class EditPanelMixin:
                 "skin_hue": self.skin_hue, "skin_sat": self.skin_sat,
                 "skin_light": self.skin_light,
                 "bw": self.bw, "sepia": self.sepia, "vignette": self.vignette,
+                "grain": self.grain,
                 "focus": dict(self.focus) if self.focus else None,
                 "auto_mode": self.auto_mode}
 

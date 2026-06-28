@@ -42,7 +42,7 @@ class FiltersMixin:
                    "sat_aqua", "sat_blue", "sat_purple", "sat_magenta",
                    "gold_hue", "gold_sat", "gold_light",
                    "skin_hue", "skin_sat", "skin_light",
-                   "bw", "sepia", "vignette")
+                   "bw", "sepia", "vignette", "grain")
     AUTO_MODES = (None, "levels", "contrast")
 
     # Standard built-in filters: a palette of popular looks shipped with the app.

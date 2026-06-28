@@ -276,6 +276,8 @@ class NavMixin:
         self.cull_keep = st["keep"] or None
         self.cull_reject = st["reject"] or None
         self._save_state()
+        if hasattr(self, "_zone_keep"):
+            self._update_drop_zones()        # refresh the grid drop-zone subtitles
         if self._cull_ready():
             self.toast(t("Sorting folders saved"))
         else:
@@ -365,6 +367,7 @@ class NavMixin:
         if self.index >= len(self.files):
             self.index = max(0, len(self.files) - 1)
         self._build_thumbs()
+        self._refresh_grid_if_open()     # drop the culled tile from the grid view too
         if self.files:
             self.show_current()
         else:
@@ -380,6 +383,7 @@ class NavMixin:
         self.files.sort()
         self.index = self.files.index(file)
         self._build_thumbs()
+        self._refresh_grid_if_open()     # restore the un-rejected tile into the grid too
         self.show_current()
 
     # --- Undo / redo --------------------------------------------------------

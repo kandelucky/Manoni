@@ -54,6 +54,7 @@ class ViewerMixin:
         self._update_info(path)
         self._highlight_thumb()
         self._scroll_to_thumb()
+        self._grid_on_navigate()       # keep the grid-view selection in sync (no-op if off)
         self.lbl_pos.configure(text=f"{self.index + 1} / {len(self.files)}")
         self._save_state()
 
@@ -297,7 +298,7 @@ class ViewerMixin:
             gold_light=self.gold_light,
             skin_hue=self.skin_hue, skin_sat=self.skin_sat,
             skin_light=self.skin_light,
-            bw=self.bw, sepia=self.sepia,
+            bw=self.bw, sepia=self.sepia, grain=self.grain,
             sharpen=self.sharpen, vignette=self.vignette, focus=self.focus)
 
     def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None):

@@ -47,6 +47,17 @@ CATALOG_KA = {
     "No folder open": "ფოლდერი არ არის გახსნილი",
     "Smaller thumbnails": "პატარა თამბნეილები",
     "Larger thumbnails": "დიდი თამბნეილები",
+    "Grid view — see many photos at once (for culling)":
+        "ბადე — ბევრი ფოტო ერთად (გადასარჩევად)",
+    "No photos to show": "საჩვენებელი ფოტო არ არის",
+    # --- Grid view drop zones (drag photos onto Good / Bad) ---------------
+    "Good": "კარგი",
+    "Bad": "ცუდი",
+    "(set a folder)": "(მიუთითე ფოლდერი)",
+    "1 photo": "1 ფოტო",
+    "{n} photos": "{n} ფოტო",
+    "Moved {n} → {name}  ·  Ctrl+Z": "{n} გადატანილია → {name}  ·  Ctrl+Z",
+    "Couldn't open the folder: {e}": "ფოლდერი ვერ გაიხსნა: {e}",
 
     # --- Photo navigation (browser.py) ------------------------------------
     "First": "პირველი",
@@ -124,6 +135,7 @@ CATALOG_KA = {
     "Black & White": "შავ-თეთრი",
     "Sepia": "სეპია",
     "Vignette": "ვინიეტი",
+    "Film grain": "ფირის მარცვალი",
     "Soon": "მალე",
     "Open / collapse the panel": "პანელის გახსნა / დაკეცვა",
     "Heal": "შეკეთება",

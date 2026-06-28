@@ -70,6 +70,14 @@ TONE_BL = 55.0
 # Strength 0..1 then blends this toned image over the original.
 SEPIA_RAMP = ((0.843, 40), (0.765, 25), (0.588, 10))   # R, G, B: gray*scale + offset
 
+# Film grain (analog look): monochrome Gaussian luminance noise laid over the
+# finished image. GRAIN_MAX_SIGMA = the noise std-dev at a full slider (bigger =
+# coarser, more visible specks). GRAIN_SIZE = the grain CELL in full-res source
+# px; it is scaled to the preview's display px (like blur/clarity) so the grain
+# the preview shows matches the saved full-res file rather than being finer.
+GRAIN_MAX_SIGMA = 40.0
+GRAIN_SIZE      = 1.5
+
 
 @dataclass
 class Edits:
@@ -115,6 +123,8 @@ class Edits:
     sepia:       float = 0.0
     sharpen:     float = 1.0
     vignette:    float = 1.0
+    # Film grain: 0.0 = off, up to 1.0 = full strength. See apply_grain.
+    grain:       float = 0.0
     # Selective "focus" blur (Fotor-style depth of field): a circle kept sharp
     # while everything outside it is Gaussian-blurred. None = off, else a dict
     # {cx, cy, r (source px), blur 0..1, feather 0..1}. See apply_focus_blur.
@@ -240,6 +250,31 @@ def apply_vignette(img, amount, scale, src_box, full_size, cache=None):
         white = Image.new("RGB", img.size, (255, 255, 255))
         edge = Image.blend(img, white, a)                       # toward white
     return Image.composite(img, edge, mask)
+
+
+# --- Film grain --------------------------------------------------------------
+
+def apply_grain(img, amount, scale):
+    """Lay monochrome film grain over the finished image: Gaussian luminance
+    noise added equally to R/G/B (so it reads as grain, not colour speckle).
+    `amount` 0..1 = strength (the noise sigma). The grain CELL is GRAIN_SIZE
+    full-res source px scaled to the preview's display px, so the preview's
+    grain matches what the saved full-res file gets — like blur/clarity. Pure
+    Pillow: the noise is split into a positive and a negative offset and
+    added / subtracted per channel, no numpy."""
+    img = img.convert("RGB")
+    w, h = img.size
+    if w < 1 or h < 1 or amount <= 0.0:
+        return img
+    sigma = amount * GRAIN_MAX_SIGMA
+    cell = max(1, int(round(GRAIN_SIZE * scale)))    # grain clump in display px
+    nw, nh = max(1, w // cell), max(1, h // cell)
+    noise = Image.effect_noise((nw, nh), sigma)      # "L", Gaussian around 128
+    if (nw, nh) != (w, h):
+        noise = noise.resize((w, h), Image.BILINEAR)  # clump + smooth the specks
+    hi = noise.point(lambda x: x - 128 if x > 128 else 0).convert("RGB")
+    lo = noise.point(lambda x: 128 - x if x < 128 else 0).convert("RGB")
+    return ImageChops.subtract(ImageChops.add(img, hi), lo)
 
 
 # --- Selective focus blur (depth of field) -----------------------------------
@@ -641,6 +676,10 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
     if e.vignette != 1.0:
         img = apply_vignette(img, e.vignette - 1.0, scale, src_box, full_size,
                              vig_cache)
+    if e.grain > 0.0:
+        # Grain goes LAST — on top of the whole look (after focus blur and
+        # vignette), the way real film grain sits over the final image.
+        img = apply_grain(img, e.grain, scale)
     return img
 
 

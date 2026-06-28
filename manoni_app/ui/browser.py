@@ -142,6 +142,7 @@ class BrowserMixin:
             self._show_loading_overlay(len(self.files))
         self._build_folder_list()        # top section: minimalist sub-folder list
         self._build_thumbs()             # bottom section: photo thumbnail grid
+        self._refresh_grid_if_open()     # rebuild the full-area grid for the new folder
         if self.files:
             self.show_current()
         else:

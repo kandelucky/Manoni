@@ -333,6 +333,11 @@ class ChromeMixin:
         self._glyph_button(cull, "?", self._cull_help_dialog,
                            t("Culling — Help")).pack(side="left", padx=4, pady=8)
 
+        # Grid (culling) view toggle, just left of the cull group: fills the
+        # preview area with a big-thumbnail grid for fast side-by-side culling.
+        self._sep(right).pack(side="right", fill="y", padx=6, pady=10)
+        self._build_gridview_button(right).pack(side="right", padx=4, pady=8)
+
         # The edit panel's open/close lives on the always-visible icon rail
         # (a collapse chevron), not here — see _build_tool_rail / toggle_panel.
 
@@ -344,6 +349,7 @@ class ChromeMixin:
             self._close_menu()
             return
         self._open_dropdown([
+            ("settings",    t("Settings"),     self._settings_dialog),
             ("languages",   t("Language"),     self._open_language_menu),
             ("sep",),
             ("info",        t("About Manoni"), self._about_dialog),
@@ -679,6 +685,10 @@ class ChromeMixin:
         # built last so the section panel / rail already exist, and stays hidden
         # until there are saved filters AND a photo to render them on.
         self._build_filter_strip(body)
+
+        # Grid (culling) view: a full-area big-thumbnail grid that overlays the
+        # preview column. Built hidden; the toolbar grid-2x2 toggle reveals it.
+        self._build_grid_view(body)
 
     def _on_wheel(self, event):
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
