@@ -6,6 +6,8 @@ that the main window composes. Kept separate so the window code stays focused.
 
 import tkinter as tk
 
+from PIL import ImageTk
+
 from .config import ACCENT, BAR, FG, FG_DIM, HOVER
 
 
@@ -113,6 +115,48 @@ class Slider:
         r = self.KNOB_R
         c.create_oval(kx - r, y - r, kx + r, y + r,
                       fill=self.KNOB, outline=BAR, width=2)
+
+
+class Histogram:
+    """A live RGB histogram strip (a Canvas showing a PIL-rendered image).
+
+    Holds no image state of its own: on every `refresh()` (and on resize) it
+    asks `render(w, h)` for a fresh histogram image at the current width, so the
+    app can hand back the edited preview's histogram each frame. `render` returns
+    a PIL RGB image of that size, or None when there is no photo.
+    """
+
+    def __init__(self, parent, render, height=92, bg=BAR):
+        self.render = render
+        self.height = height
+        self.canvas = tk.Canvas(parent, height=height, bg=bg,
+                                highlightthickness=0)
+        self.canvas.bind("<Configure>", self._on_configure)
+        self._w = 0
+        self._photo = None         # keep a reference alive or Tk drops the image
+
+    def pack(self, **kw):
+        self.canvas.pack(**kw)
+        return self
+
+    def _on_configure(self, event):
+        "Stretched to the panel width: re-render at the new width."
+        if event.width != self._w:
+            self._w = event.width
+            self.refresh()
+
+    def refresh(self):
+        "Re-pull the histogram image from `render` and repaint (None → clear)."
+        w = self._w or self.canvas.winfo_width()
+        if w <= 1:
+            return
+        img = self.render(w, self.height)
+        self.canvas.delete("all")
+        if img is None:
+            self._photo = None
+            return
+        self._photo = ImageTk.PhotoImage(img)
+        self.canvas.create_image(0, 0, anchor="nw", image=self._photo)
 
 
 class Tooltip:

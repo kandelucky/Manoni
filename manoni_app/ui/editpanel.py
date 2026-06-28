@@ -11,7 +11,7 @@ from ..config import (BAR, HOVER, ACCENT, FG, FG_DIM,
                       EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP,
                       ON_ACCENT, ACCENT_HOVER, CHIP_BG, BORDER, DIVIDER)
 from .. import imaging
-from ..widgets import Slider, Tooltip
+from ..widgets import Slider, Tooltip, Histogram
 from ..i18n import t
 
 
@@ -51,6 +51,13 @@ class EditPanelMixin:
                                       font=("Segoe UI", 10, "bold"),
                                       padx=14, pady=8)
         self.section_title.pack(side="top", fill="x")
+
+        # Live histogram: sits under the header, above the swappable content, so
+        # every tool shows the edited photo's tonal spread. It re-renders from
+        # the current preview viewport on each _render_preview (see viewer).
+        self.histogram = Histogram(panel, self._render_histogram,
+                                   height=self._edit_dpi_w(84))
+        self.histogram.pack(side="top", fill="x", padx=EDIT_PAD, pady=(8, 4))
 
         # One swappable content frame per section, stacked in this holder.
         self.section_content = tk.Frame(panel, bg=BAR)

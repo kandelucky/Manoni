@@ -321,6 +321,8 @@ class ViewerMixin:
             if self._message:
                 self._draw_message(self._message)
             self._update_zoom_readout(None)
+            self._hist_pil = None
+            self._update_histogram()
             return
         vw = max(self.preview.winfo_width(), 1)
         vh = max(self.preview.winfo_height(), 1)
@@ -362,6 +364,7 @@ class ViewerMixin:
             self._view_key = key
 
         img = self._apply_edits(self._view_base, scale, (sx0, sy0, sx1, sy1), (iw, ih))
+        self._hist_pil = img    # edited photo pixels (pre-checker) → live histogram
         if self._view_alpha is not None:
             bg = self._checker_bg(img.width, img.height)
             img = Image.composite(img, bg, self._view_alpha)
@@ -395,6 +398,19 @@ class ViewerMixin:
         if self.compare_mode and not self._compare_peek:
             self._draw_compare_divider(vw, vh)
         self._update_zoom_readout(scale)
+        self._update_histogram()
+
+    def _render_histogram(self, w, h):
+        "Build the panel's live-histogram image from the edited viewport (None if"
+        " no photo). Called back by the Histogram widget at its current width."
+        src = getattr(self, "_hist_pil", None)
+        return imaging.histogram_image(src, w, h) if src is not None else None
+
+    def _update_histogram(self):
+        "Refresh the panel histogram from the latest render (no-op before build)."
+        hist = getattr(self, "histogram", None)
+        if hist is not None:
+            hist.refresh()
 
     def _before_view_base(self):
         """The 'before' scaled viewport: the heal-free `_before_pil` if a stroke
