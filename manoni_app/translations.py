@@ -379,6 +379,13 @@ CATALOG_KA = {
         "„მკითხე“ ყოველ ჯერზე პატარა ფანჯარას აჩენს კიდესთან. „პირველი ფოტო“ "
         "თავში აბრუნებს; „მომდევნო ფოლდერი“ შემდეგ ფოლდერს ხსნის, რომელშიც ფოტოა.",
     # General toggles (settings.py · General tab)
+    "Interface": "ინტერფეისი",
+    "Show filter strip": "ფილტრების ზოლის ჩვენება",
+    "The row of filter previews under the photo.":
+        "ფილტრების გადახედვების ზოლი ფოტოს ქვეშ.",
+    "Show pixel rulers": "სახაზავების ჩვენება",
+    "The top and left rulers over the photo (Ctrl+R).":
+        "ზედა და მარცხენა სახაზავები ფოტოზე (Ctrl+R).",
     "On launch": "გაშვებისას",
     "Reopen the last folder": "ბოლო ფოლდერის ხელახლა გახსნა",
     "Jump back to the last photo": "ბოლო ფოტოზე დაბრუნება",

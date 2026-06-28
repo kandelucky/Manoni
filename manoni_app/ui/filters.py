@@ -360,6 +360,10 @@ class FiltersMixin:
         " group ('Standard' built-ins + the user's groups) under a foldable caption."
         if not hasattr(self, "filter_strip"):
             return
+        # Turned off in Settings → keep the filmstrip hidden regardless of photo.
+        if not getattr(self, "show_filter_strip", True):
+            self.filter_strip.grid_remove()
+            return
         # Built-in filters are always present, so the strip shows whenever a photo
         # is open (base is None only when nothing is loaded).
         base = self._filter_thumb_base()

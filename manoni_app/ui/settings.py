@@ -479,6 +479,16 @@ class SettingsMixin:
                    command=pick_view).pack()
 
         self._set_group(p, t("Interface"))
+        r = self._set_row(p, t("Show filter strip"),
+                          t("The row of filter previews under the photo."))
+
+        def pick_filters(on):
+            self.show_filter_strip = on
+            self._save_state()
+            self._refresh_filter_strip()         # show / hide the strip live
+        _Toggle(r, self.dpi, on=getattr(self, "show_filter_strip", True),
+                command=pick_filters).pack()
+
         r = self._set_row(p, t("Show pixel rulers"),
                           t("The top and left rulers over the photo (Ctrl+R)."))
 
@@ -741,6 +751,8 @@ class SettingsMixin:
         self.set_view("large")                       # default sidebar view
         if not getattr(self, "show_rulers", True):   # rulers default = on
             self.toggle_rulers()
+        self.show_filter_strip = True                # filter strip default = on
+        self._refresh_filter_strip()
         self.last_save = {"dir": "", "fmt": "JPEG", "quality": 95,
                           "keep_meta": True, "to_srgb": False}
         self._save_state()
