@@ -215,6 +215,11 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # across sessions in the state file.
         self.cull_keep = None         # folder the ✓ keeper button moves photos to
         self.cull_reject = None       # folder the ✗ reject button moves photos to
+        # What ←/→ do at the folder edge (last photo + → , or first photo + ←):
+        # None = ask each time (a small dialog with the two choices), "wrap" =
+        # jump to the first/last photo of the same folder, "sibling" = continue
+        # into the next/previous sibling folder. Persisted across sessions.
+        self.edge_action = None
         self._menu_popup = None       # the ☰ dropdown Toplevel while open, else None
         # Crop tool: a non-destructive selection drawn over the preview, stored in
         # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
@@ -439,6 +444,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             state["cull_keep"] = self.cull_keep   # ✓ keeper destination
         if self.cull_reject:
             state["cull_reject"] = self.cull_reject  # ✗ reject destination
+        if self.edge_action:
+            state["edge_action"] = self.edge_action  # folder-edge behaviour
         if self.crop_sizes:
             state["crop_sizes"] = self.crop_sizes    # user's saved crop sizes
         if self.folder:
@@ -497,6 +504,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         cr = state.get("cull_reject")
         if isinstance(cr, str) and cr:
             self.cull_reject = cr
+        # Folder-edge behaviour (None = ask). Only the two real actions persist.
+        ea = state.get("edge_action")
+        if ea in ("wrap", "sibling"):
+            self.edge_action = ea
         # User's saved custom crop sizes. Keep only well-formed {name,w,h} with
         # positive dimensions, so a hand-edited state file can't break the panel.
         cs = state.get("crop_sizes")

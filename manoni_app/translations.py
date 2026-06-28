@@ -353,6 +353,31 @@ CATALOG_KA = {
     # --- Navigation / cull / undo dialogs (nav.py) ------------------------
     "End of the folder": "ფოლდერის ბოლოა",
     "Start of the folder": "ფოლდერის დასაწყისია",
+    # Folder-edge chooser (←/→ past the edge)
+    "You're on the last photo": "ბოლო ფოტოზე ხარ",
+    "You're on the first photo": "პირველ ფოტოზე ხარ",
+    "Where should the arrow keys go next?":
+        "სად გადავიდეს ისრები შემდეგ?",
+    "Go to the first photo": "გადადი პირველ ფოტოზე",
+    "Go to the last photo": "გადადი ბოლო ფოტოზე",
+    "Go to the next folder": "გადადი მომდევნო ფოლდერში",
+    "Go to the previous folder": "გადადი წინა ფოლდერში",
+    "Remember my choice": "დაიმახსოვრე ჩემი არჩევანი",
+    "Back to the first photo": "დაბრუნდა პირველ ფოტოზე",
+    "Jumped to the last photo": "გადახტა ბოლო ფოტოზე",
+    "No more folders this way": "ამ მხარეს ფოლდერი აღარაა",
+    "Folder: {name}": "ფოლდერი: {name}",
+    # Folder-edge setting (settings.py · Culling tab)
+    "At the end of the folder": "ფოლდერის ბოლოს",
+    "When you pass the last photo": "როცა ბოლო ფოტოს გასცდები",
+    "← / → past the edge of the folder.": "← / → ფოლდერის კიდის მიღმა.",
+    "Ask": "მკითხე",
+    "First photo": "პირველი ფოტო",
+    "Next folder": "მომდევნო ფოლდერი",
+    "“Ask” pops a small chooser each time you reach the edge. “First photo” "
+    "loops back; “Next folder” opens the next folder that has photos.":
+        "„მკითხე“ ყოველ ჯერზე პატარა ფანჯარას აჩენს კიდესთან. „პირველი ფოტო“ "
+        "თავში აბრუნებს; „მომდევნო ფოლდერი“ შემდეგ ფოლდერს ხსნის, რომელშიც ფოტოა.",
     "Save?": "შენახვა?",
     "The image has changed": "სურათი შეცვლილია",
     "{fname} — save a copy to _edited?":

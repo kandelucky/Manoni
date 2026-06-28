@@ -11,7 +11,7 @@ import shutil
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import BG, BAR, FG, FG_DIM
+from ..config import BG, BAR, ACCENT, FG, FG_DIM, SUPPORTED
 from ..i18n import t
 from .dialogs import make_dialog_button, center_over
 
@@ -146,13 +146,181 @@ class NavMixin:
     def _folder_edge(self, direction):
         """Reached the first (-1) / last (+1) photo of the folder.
 
-        TODO (planned, see Settings): when a "continue into the adjacent folder"
-        option is enabled, load the previous/next sibling folder and select its
-        last/first photo instead of toasting. Until that option exists we only
-        report the edge.
+        What happens next is `self.edge_action`: "wrap" loops to the first/last
+        photo of THIS folder, "sibling" continues into the next/previous folder,
+        and None (unset) pops a small dialog that lets the user choose this time
+        (and optionally remember it). Either way a clear toast reports the result.
         """
-        self.toast(t("End of the folder") if direction > 0
-                   else t("Start of the folder"))
+        action = self.edge_action
+        if action is None:
+            action, remember = self._ask_edge_action(direction)
+            if action is None:
+                return                       # cancelled → stay on this photo
+            if remember:
+                self.edge_action = action    # "mark" it so it stops asking
+                self._save_state()
+        if action == "wrap":
+            self._edge_wrap(direction)
+        else:
+            self._edge_sibling(direction)
+
+    def _edge_wrap(self, direction):
+        "Loop to the first (after the last) / last (before the first) photo here."
+        if not self.files:
+            return
+        target = 0 if direction > 0 else len(self.files) - 1
+        before = self.index
+        self.go_to(target)
+        if self.index == target and target != before:   # actually moved (not cancelled)
+            self.toast(t("Back to the first photo") if direction > 0
+                       else t("Jumped to the last photo"))
+
+    def _edge_sibling(self, direction):
+        "Continue into the next (+1) / previous (-1) sibling folder that has photos."
+        dest = self._sibling_folder(direction)
+        if dest is None:
+            self.toast(t("No more folders this way"))
+            return
+        if not self._maybe_prompt_save():    # leaving the folder: honour unsaved edits
+            return
+        self.load_folder(dest)               # selects the first photo by default
+        if direction < 0 and self.files:     # entered from the end → land on the last
+            self.index = len(self.files) - 1
+            self.show_current()
+        self.toast(t("Folder: {name}").format(
+            name=os.path.basename(dest.rstrip("\\/"))))
+
+    def _sibling_folder(self, direction):
+        "The next (+1) / previous (-1) sibling folder holding photos, or None."
+        if not self.folder:
+            return None
+        parent = os.path.dirname(os.path.normpath(self.folder))
+        if not parent or not os.path.isdir(parent):
+            return None
+        try:
+            names = sorted(
+                (n for n in os.listdir(parent)
+                 if not n.startswith(".")
+                 and os.path.isdir(os.path.join(parent, n))),
+                key=str.lower)
+        except OSError:
+            return None
+        cur = os.path.basename(os.path.normpath(self.folder))
+        try:
+            i = next(k for k, n in enumerate(names) if n.lower() == cur.lower())
+        except StopIteration:
+            return None
+        j = i + direction
+        while 0 <= j < len(names):           # skip siblings with no photos
+            cand = os.path.join(parent, names[j])
+            if self._folder_has_photos(cand):
+                return cand
+            j += direction
+        return None
+
+    @staticmethod
+    def _folder_has_photos(path):
+        "True if `path` holds at least one supported image (best effort)."
+        try:
+            for f in os.listdir(path):
+                if os.path.splitext(f)[1].lower() in SUPPORTED \
+                        and os.path.isfile(os.path.join(path, f)):
+                    return True
+        except OSError:
+            pass
+        return False
+
+    def _ask_edge_action(self, direction):
+        """At the folder edge with no saved choice: ask what to do.
+
+        A small modal dialog with two radio choices (neither pre-selected) — wrap
+        to the first/last photo here, or continue into the next/previous folder —
+        plus a 'remember this' toggle. Returns (action, remember): action is
+        "wrap" / "sibling", or None if the user cancels.
+        """
+        st = {"action": None, "remember": False, "ok": False}
+        dlg = tk.Toplevel(self.root)
+        dlg.title(t("End of the folder") if direction > 0
+                  else t("Start of the folder"))
+        dlg.configure(bg=BG)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap.pack(fill="both", expand=True)
+
+        tk.Label(wrap, text=(t("You're on the last photo") if direction > 0
+                             else t("You're on the first photo")),
+                 bg=BG, fg=FG, font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(wrap, text=t("Where should the arrow keys go next?"),
+                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w",
+                                                              pady=(4, 14))
+
+        radios = []
+
+        def pick(val):
+            st["action"] = val
+            for v, dot in radios:
+                dot.configure(text="◉" if v == val else "○",
+                              fg=ACCENT if v == val else FG)
+
+        def radio(val, label):
+            row = tk.Frame(wrap, bg=BG, cursor="hand2")
+            row.pack(anchor="w", pady=3)
+            dot = tk.Label(row, text="○", bg=BG, fg=FG, font=("Segoe UI", 13),
+                           cursor="hand2")
+            dot.pack(side="left")
+            lb = tk.Label(row, text=label, bg=BG, fg=FG, font=("Segoe UI", 10),
+                          cursor="hand2")
+            lb.pack(side="left", padx=(8, 0))
+            radios.append((val, dot))
+            for w in (row, dot, lb):
+                w.bind("<Button-1>", lambda e, v=val: pick(v))
+
+        radio("wrap", t("Go to the first photo") if direction > 0
+              else t("Go to the last photo"))
+        radio("sibling", t("Go to the next folder") if direction > 0
+              else t("Go to the previous folder"))
+
+        # Remember-this-choice toggle (so the dialog stops popping up).
+        rem = tk.Frame(wrap, bg=BG, cursor="hand2")
+        rem.pack(anchor="w", pady=(14, 0))
+        bx = tk.Label(rem, text="☐", bg=BG, fg=FG, font=("Segoe UI", 13),
+                      cursor="hand2")
+        bx.pack(side="left")
+        rl = tk.Label(rem, text=t("Remember my choice"), bg=BG, fg=FG,
+                      font=("Segoe UI", 9), cursor="hand2")
+        rl.pack(side="left", padx=(8, 0))
+
+        def toggle_rem(_e=None):
+            st["remember"] = not st["remember"]
+            bx.configure(text="☑" if st["remember"] else "☐",
+                         fg=ACCENT if st["remember"] else FG)
+        for w in (rem, bx, rl):
+            w.bind("<Button-1>", toggle_rem)
+
+        def confirm():
+            if st["action"] is None:         # nothing chosen yet → ignore OK
+                return
+            st["ok"] = True
+            dlg.destroy()
+
+        brow = tk.Frame(wrap, bg=BG)
+        brow.pack(anchor="e", pady=(18, 0))
+        make_dialog_button(brow, t("Cancel"), dlg.destroy).pack(
+            side="right", padx=(8, 0))
+        make_dialog_button(brow, t("OK"), confirm, primary=True).pack(
+            side="right")
+
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.bind("<Return>", lambda e: confirm())
+        self._center_dialog(dlg)
+        dlg.grab_set()
+        dlg.focus_set()
+        self.root.wait_window(dlg)
+        if not st["ok"]:
+            return None, False
+        return st["action"], st["remember"]
 
     def _arrow_keep(self):
         "↑ sort the current photo into the keep (good) folder."

@@ -553,6 +553,21 @@ class SettingsMixin:
                             "the current photo into these folders. Ctrl+Z undoes "
                             "the last move."))
 
+        self._set_group(p, t("At the end of the folder"))
+        r = self._set_row(p, t("When you pass the last photo"),
+                          t("← / → past the edge of the folder."))
+        keys = [None, "wrap", "sibling"]
+        labels = [t("Ask"), t("First photo"), t("Next folder")]
+        active = keys.index(self.edge_action) if self.edge_action in keys else 0
+
+        def pick_edge(i):
+            self.edge_action = keys[i]
+            self._save_state()
+        _Segmented(r, self.dpi, labels, active=active, command=pick_edge).pack()
+        self._set_note(p, t("“Ask” pops a small chooser each time you reach the "
+                            "edge. “First photo” loops back; “Next folder” opens "
+                            "the next folder that has photos."))
+
     def _set_cull_row(self, parent, title, which):
         right = self._set_row(parent, title)
         cur = self.cull_keep if which == "keep" else self.cull_reject
