@@ -38,6 +38,7 @@ class ViewerMixin:
         self._reset_sliders()
         self._rotated = False    # fresh photo → no edits yet, nothing to save
         self._cropped = False
+        self._resized = False
         self._healed = False     # retouch edits live in current_pil; reloaded photo has none
         self._heal_before_img = None   # drop any half-finished stroke
         self._heal_dirty = self._heal_last = None

@@ -22,7 +22,7 @@ class EditPanelMixin:
 
     # The rail's selectable tools and their blue-header titles (Save is a
     # separate bottom action, not a section, so it is not listed here).
-    SECTION_TITLES = {"basic": "Basic Edits", "crop": "Crop",
+    SECTION_TITLES = {"basic": "Basic Edits", "crop": "Crop", "resize": "Resize",
                       "heal": "Heal & Clone", "focus": "Focus blur",
                       "color": "Color mixer",
                       "effects": "Effects", "filters": "Filters",
@@ -58,6 +58,7 @@ class EditPanelMixin:
         self.sections = {
             "basic":   self._build_basic_section(self.section_content),
             "crop":    self._build_crop_section(self.section_content),
+            "resize":  self._build_resize_section(self.section_content),
             "heal":    self._build_heal_section(self.section_content),
             "focus":   self._build_focus_section(self.section_content),
             "color":   self._build_color_section(self.section_content),
@@ -264,6 +265,7 @@ class EditPanelMixin:
         for key, icon_name, label in [
             ("basic",   "sliders-horizontal", "Basic Edit"),
             ("crop",    "crop",               "Crop"),
+            ("resize",  "scaling",            "Resize"),
             ("heal",    "bandage",            "Heal"),
             ("focus",   "aperture",           "Blur"),
             ("color",   "droplets",           "Colors"),
@@ -392,6 +394,8 @@ class EditPanelMixin:
         self._update_rail()
         if key == "crop":
             self._enter_crop()       # init a box + fit so the whole photo is seen
+        elif key == "resize":
+            self._enter_resize()     # refresh the size readout from the current photo
         elif key == "heal":
             self._enter_heal()       # show the brush cursor + ring
         elif key == "focus":

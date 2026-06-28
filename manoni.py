@@ -28,6 +28,7 @@ from manoni_app.ui.browser import BrowserMixin
 from manoni_app.ui.viewer import ViewerMixin
 from manoni_app.ui.nav import NavMixin
 from manoni_app.ui.crop import CropMixin
+from manoni_app.ui.resize import ResizeMixin
 from manoni_app.ui.heal import HealMixin
 from manoni_app.ui.focus import FocusMixin
 from manoni_app.ui.filters import FiltersMixin
@@ -37,8 +38,8 @@ from manoni_app.ui.metadata import MetadataMixin
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
-             ViewerMixin, NavMixin, CropMixin, HealMixin, FocusMixin,
-             FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin):
+             ViewerMixin, NavMixin, CropMixin, ResizeMixin, HealMixin,
+             FocusMixin, FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -194,6 +195,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._auto_luts = None
         self._rotated = False    # has the current photo been rotated since loaded?
         self._cropped = False    # has the current photo been cropped since loaded?
+        self._resized = False    # has the current photo been resized since loaded?
         self._edits_saved = False  # are the current photo's edits already saved to a copy?
         # Save model: "quick save" (rail button + leaving an edited photo) writes
         # silently using quick_save_cfg = {dir, fmt, quality}. It starts UNSET each

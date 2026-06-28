@@ -282,6 +282,31 @@ CATALOG_KA = {
         "დაარქვი სახელი და მიუთითე სიგანე : სიმაღლე (პიქსელი ან პროპორცია, მაგ. 4:5).",
     "Size — Width : Height": "ზომა — სიგანე : სიმაღლე",
 
+    # --- Resize tool (resize.py) ------------------------------------------
+    "Resize": "ზომის შეცვლა",
+    "Size": "ზომა",
+    "Long side": "გრძელი გვერდი",
+    "Percent": "პროცენტი",
+    "Current: {w} × {h}": "ამჟამად: {w} × {h}",
+    "The original stays untouched — Save writes the resized copy.":
+        "ორიგინალი ხელუხლებელია — შენახვა ჩაწერს შეცვლილ ასლს.",
+    "Enter a valid size": "შეიყვანე სწორი ზომა",
+    "That's already the current size": "ეს უკვე მიმდინარე ზომაა",
+    "Resized → {w}×{h}px  ·  Save to write it to a file":
+        "ზომა შეიცვალა → {w}×{h}px  ·  შენახვა ფაილში ჩასაწერად",
+    "Whole folder": "მთელი ფოლდერი",
+    "Resize every photo in the folder with the size above. "
+    "Originals are untouched; the copies go to a new folder.":
+        "ფოლდერის ყველა ფოტოს შეუცვლის ზომას ზემოთ მითითებულით. "
+        "ორიგინალები ხელუხლებელია; ასლები ახალ ფოლდერში შეინახება.",
+    "Resize the whole folder": "მთელი ფოლდერის რესიზე",
+    "Resize whole folder": "მთელი ფოლდერის რესიზე",
+    "Resize all {n} photos in the folder and save the copies.":
+        "შეუცვალე ზომა ფოლდერის ყველა ({n}) ფოტოს და შეინახე ასლები.",
+    "Resizing folder… {i}/{n}": "ფოლდერის რესიზე… {i}/{n}",
+    "Done — {ok} resized, {fail} failed  ·  {dir}":
+        "დასრულდა — {ok} შეიცვალა, {fail} ჩავარდა  ·  {dir}",
+
     # --- Retouch / heal tool (heal.py) ------------------------------------
     "Auto heal": "ავტო შეკეთება",
     "Clone": "კლონი",

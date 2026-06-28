@@ -384,22 +384,25 @@ class ActionsMixin:
         self.toast(t("Done — {ok} saved, {fail} failed  ·  {dir}").format(
             ok=ok, fail=fail, dir=os.path.basename(cfg["dir"]) or cfg["dir"]))
 
-    def _ask_batch_config(self, n):
+    def _ask_batch_config(self, n, title=None, intro=None, default_dir=None):
         "Dialog: output folder + format + quality for a folder batch. None = cancel."
         seed = self.quick_save_cfg or self.last_save or {}
-        st = {"dir": os.path.join(self.folder, "_actions"),
+        default_dir = default_dir or os.path.join(self.folder, "_actions")
+        title = title or t("Apply to whole folder")
+        intro = intro or t("Apply this action to all {n} photos and save copies.").format(n=n)
+        st = {"dir": default_dir,
               "fmt": seed.get("fmt") or "JPEG",
               "quality": int(seed.get("quality", 95)), "ok": False}
 
         dlg = tk.Toplevel(self.root)
-        dlg.title(t("Apply to whole folder"))
+        dlg.title(title)
         dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
         wrap = tk.Frame(dlg, bg=BG, padx=22, pady=16)
         wrap.pack(fill="both", expand=True)
 
-        tk.Label(wrap, text=t("Apply this action to all {n} photos and save copies.").format(n=n),
+        tk.Label(wrap, text=intro,
                  bg=BG, fg=FG, font=("Segoe UI", 10, "bold"),
                  wraplength=320, justify="left").pack(anchor="w", pady=(0, 10))
 
@@ -465,7 +468,7 @@ class ActionsMixin:
             set_chip_active(w, k == st["quality"])
 
         def confirm():
-            st["dir"] = dir_var.get().strip() or os.path.join(self.folder, "_actions")
+            st["dir"] = dir_var.get().strip() or default_dir
             st["ok"] = True
             dlg.destroy()
 
