@@ -220,6 +220,17 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # jump to the first/last photo of the same folder, "sibling" = continue
         # into the next/previous sibling folder. Persisted across sessions.
         self.edge_action = None
+        # Simple on/off preferences (Settings → General). All persisted.
+        self.restore_session = True   # reopen the last folder on launch
+        self.restore_photo = True     # …and land on the last photo (else the first)
+        self.confirm_reject = False   # ask before the reject (✗) move
+        self.warn_unsaved = True      # offer to save when leaving an edited photo
+        # Where the Save dialog defaults to (Settings → Export → Output):
+        #   "subfolder" → a folder named export_subfolder beside each photo,
+        #   "fixed"     → one fixed export_fixed_dir for every export.
+        self.export_dir_mode = "subfolder"
+        self.export_subfolder = "_edited"   # subfolder name (mode "subfolder")
+        self.export_fixed_dir = ""          # absolute folder (mode "fixed")
         self._menu_popup = None       # the ☰ dropdown Toplevel while open, else None
         # Crop tool: a non-destructive selection drawn over the preview, stored in
         # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
@@ -435,6 +446,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "view_mode": self.view_mode,
                  "grid_tile": self.grid_tile,
                  "show_rulers": self.show_rulers,
+                 "restore_session": self.restore_session,
+                 "restore_photo": self.restore_photo,
+                 "confirm_reject": self.confirm_reject,
+                 "warn_unsaved": self.warn_unsaved,
                  "language": i18n.get_language()}
         if self.folder_list_height is not None:
             state["folder_list_height"] = self.folder_list_height
@@ -446,6 +461,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             state["cull_reject"] = self.cull_reject  # ✗ reject destination
         if self.edge_action:
             state["edge_action"] = self.edge_action  # folder-edge behaviour
+        state["export_dir_mode"] = self.export_dir_mode
+        state["export_subfolder"] = self.export_subfolder
+        if self.export_fixed_dir:
+            state["export_fixed_dir"] = self.export_fixed_dir
         if self.crop_sizes:
             state["crop_sizes"] = self.crop_sizes    # user's saved crop sizes
         if self.folder:
@@ -483,6 +502,12 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         sr = state.get("show_rulers")
         if isinstance(sr, bool):
             self.show_rulers = sr
+        # Simple General toggles (each defaults as set in __init__ if absent).
+        for key in ("restore_session", "restore_photo", "confirm_reject",
+                    "warn_unsaved"):
+            val = state.get(key)
+            if isinstance(val, bool):
+                setattr(self, key, val)
         # UI language. Falls back to the default (Georgian) if unset/unknown.
         lang = state.get("language")
         if isinstance(lang, str):
@@ -508,6 +533,16 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         ea = state.get("edge_action")
         if ea in ("wrap", "sibling"):
             self.edge_action = ea
+        # Export output location (mode + subfolder name + fixed folder).
+        edm = state.get("export_dir_mode")
+        if edm in ("subfolder", "fixed"):
+            self.export_dir_mode = edm
+        esf = state.get("export_subfolder")
+        if isinstance(esf, str) and esf.strip():
+            self.export_subfolder = esf.strip()
+        efd = state.get("export_fixed_dir")
+        if isinstance(efd, str):
+            self.export_fixed_dir = efd
         # User's saved custom crop sizes. Keep only well-formed {name,w,h} with
         # positive dimensions, so a hand-edited state file can't break the panel.
         cs = state.get("crop_sizes")
@@ -527,6 +562,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
     def _restore_last_session(self):
         "On launch with no folder given, reopen the last session if it still exists."
+        if not self.restore_session:
+            return                       # the user opted out of reopening the folder
         try:
             with open(STATE_FILE, encoding="utf-8") as f:
                 state = json.load(f)
@@ -534,7 +571,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             return
         folder = state.get("folder")
         if folder and os.path.isdir(folder):
-            self.load_folder(folder, select=state.get("file"))
+            # Land on the last photo only if that's wanted; else open at the first.
+            select = state.get("file") if self.restore_photo else None
+            self.load_folder(folder, select=select)
 
     def _on_close(self):
         if not self._maybe_prompt_save():

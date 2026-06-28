@@ -378,6 +378,28 @@ CATALOG_KA = {
     "loops back; “Next folder” opens the next folder that has photos.":
         "„მკითხე“ ყოველ ჯერზე პატარა ფანჯარას აჩენს კიდესთან. „პირველი ფოტო“ "
         "თავში აბრუნებს; „მომდევნო ფოლდერი“ შემდეგ ფოლდერს ხსნის, რომელშიც ფოტოა.",
+    # General toggles (settings.py · General tab)
+    "On launch": "გაშვებისას",
+    "Reopen the last folder": "ბოლო ფოლდერის ხელახლა გახსნა",
+    "Jump back to the last photo": "ბოლო ფოტოზე დაბრუნება",
+    "Confirmations": "დადასტურებები",
+    "Ask before rejecting a photo": "ფოტოს გადაგდებამდე დამეკითხე",
+    "A quick confirm before a photo moves to the Reject folder.":
+        "სწრაფი დადასტურება, სანამ ფოტო გადაგდების ფოლდერში გადავა.",
+    "Warn about unsaved edits when leaving a photo":
+        "ფოტოს დატოვებისას შემატყობინე შეუნახავ ცვლილებებზე",
+    "Move this photo to the Reject folder?":
+        "გადავიტანო ეს ფოტო გადაგდების ფოლდერში?",
+    # Export output location (settings.py · Export tab)
+    "Output": "გამოტანა",
+    "Save edited photos to": "შენახე დამუშავებული ფოტოები",
+    "Subfolder": "ქვე-ფოლდერი",
+    "Fixed folder": "ფიქსირებული ფოლდერი",
+    "Subfolder name": "ქვე-ფოლდერის სახელი",
+    "Created next to each photo (e.g. folder/_edited).":
+        "იქმნება თითო ფოტოს გვერდით (მაგ. folder/_edited).",
+    "Not set": "მითითებული არაა",
+    "Change…": "შეცვლა…",
     "Save?": "შენახვა?",
     "The image has changed": "სურათი შეცვლილია",
     "{fname} — save a copy to _edited?":

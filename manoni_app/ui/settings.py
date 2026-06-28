@@ -488,6 +488,28 @@ class SettingsMixin:
         _Toggle(r, self.dpi, on=getattr(self, "show_rulers", True),
                 command=pick_rulers).pack()
 
+        self._set_group(p, t("On launch"))
+        r = self._set_row(p, t("Reopen the last folder"))
+        _Toggle(r, self.dpi, on=self.restore_session,
+                command=lambda on: self._set_pref("restore_session", on)).pack()
+        r = self._set_row(p, t("Jump back to the last photo"))
+        _Toggle(r, self.dpi, on=self.restore_photo,
+                command=lambda on: self._set_pref("restore_photo", on)).pack()
+
+        self._set_group(p, t("Confirmations"))
+        r = self._set_row(p, t("Ask before rejecting a photo"),
+                          t("A quick confirm before a photo moves to the Reject folder."))
+        _Toggle(r, self.dpi, on=self.confirm_reject,
+                command=lambda on: self._set_pref("confirm_reject", on)).pack()
+        r = self._set_row(p, t("Warn about unsaved edits when leaving a photo"))
+        _Toggle(r, self.dpi, on=self.warn_unsaved,
+                command=lambda on: self._set_pref("warn_unsaved", on)).pack()
+
+    def _set_pref(self, key, val):
+        "Set a simple on/off General preference attribute and persist it."
+        setattr(self, key, val)
+        self._save_state()
+
     def _set_view_index(self, keys):
         "Which segmented index reflects the live view (closest grid preset, or list)."
         if self.view_mode == "list":
@@ -541,7 +563,67 @@ class SettingsMixin:
         _Toggle(r, self.dpi, on=bool(self._set_export_get("to_srgb", False)),
                 command=lambda on: self._set_export_set("to_srgb", on)).pack()
 
+        self._set_group(p, t("Output"))
+        r = self._set_row(p, t("Save edited photos to"))
+        modes = ["subfolder", "fixed"]
+        labels = [t("Subfolder"), t("Fixed folder")]
+        active = modes.index(self.export_dir_mode) \
+            if self.export_dir_mode in modes else 0
+
+        def pick_mode(i):
+            if modes[i] == self.export_dir_mode:
+                return
+            self.export_dir_mode = modes[i]
+            self._save_state()
+            self._set_show_tab("export")     # re-render to show the matching control
+        _Segmented(r, self.dpi, labels, active=active, command=pick_mode).pack()
+        if self.export_dir_mode == "fixed":
+            self._set_export_fixed_row(p)
+        else:
+            self._set_export_subfolder_row(p)
+
         self._set_note(p, t("These are the defaults the Save dialog opens with."))
+
+    def _set_export_subfolder_row(self, parent):
+        "Edit the per-photo subfolder name (mode “subfolder”)."
+        right = self._set_row(parent, t("Subfolder name"),
+                              t("Created next to each photo (e.g. folder/_edited)."))
+        var = tk.StringVar(value=self.export_subfolder or "_edited")
+        ent = tk.Entry(right, textvariable=var, bg=CHIP_BG, fg=FG,
+                       insertbackground=FG, relief="flat", width=16,
+                       font=("Segoe UI", 9))
+        ent.pack(side="left", ipady=4, ipadx=6)
+
+        def commit(_e=None):
+            name = var.get().strip().strip("/\\").strip()
+            if name in ("", ".", ".."):
+                name = "_edited"
+            var.set(name)
+            self.export_subfolder = name
+            self._save_state()
+        ent.bind("<FocusOut>", commit)
+        ent.bind("<Return>", commit)
+
+    def _set_export_fixed_row(self, parent):
+        "Pick one fixed output folder for every export (mode “fixed”)."
+        right = self._set_row(parent, t("Folder"))
+        cur = self.export_fixed_dir
+        lbl = tk.Label(right,
+                       text=self._set_short_path(cur) if cur else t("Not set"),
+                       bg=CHIP_BG, fg=FG if cur else FG_DIM,
+                       font=("Segoe UI", 9), anchor="e", padx=10, pady=5)
+        lbl.pack(side="left", padx=(0, 8))
+
+        def change():
+            d = tkfd.askdirectory(
+                parent=self._settings_win, title=t("Output folder"),
+                initialdir=cur or self.folder or os.path.expanduser("~"))
+            if not d:
+                return
+            self.export_fixed_dir = d
+            self._save_state()
+            lbl.configure(text=self._set_short_path(d), fg=FG)
+        make_dialog_button(right, t("Change…"), change).pack(side="left")
 
     # --- Culling tab --------------------------------------------------------
 

@@ -27,7 +27,8 @@ manoni*.json
 manoni-*.json
 
 # Throwaway UI design / preview scratch files (standalone, not part of the app)
-ui_*_preview.py
+previews/
+*_preview.py
 
 # Personal planning / spec docs (kept local, not tracked)
 spec/

@@ -39,6 +39,8 @@ class NavMixin:
 
     def _maybe_prompt_save(self):
         "Before leaving an edited photo, offer to save a copy. Returns False to stay."
+        if not getattr(self, "warn_unsaved", True):
+            return True                  # the user turned the unsaved-edit warning off
         if not self._has_unsaved_edits():
             return True
         choice = self._ask_save_copy()
@@ -362,6 +364,9 @@ class NavMixin:
         "Reject: move the current photo into the configured ✗ reject folder."
         if not self._require_cull():
             return
+        if self.confirm_reject and not self._confirm(
+                t("Move this photo to the Reject folder?"), ok_label=t("Reject")):
+            return                       # asked to confirm and the user backed out
         os.makedirs(self.cull_reject, exist_ok=True)
         if self._move_current_to(self.cull_reject):
             self.toast(t("Rejected → {name}  ·  Ctrl+Z").format(

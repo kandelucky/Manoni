@@ -23,6 +23,19 @@ class SaveMixin:
         "Default output name for the current photo: its real name + _edited."
         return os.path.splitext(self.files[self.index])[0] + "_edited"
 
+    def _default_export_dir(self):
+        """The folder the Save dialog opens at, per Settings → Export → Output.
+
+        "subfolder" → a folder (export_subfolder, e.g. _edited) beside each photo;
+        "fixed" → one configured folder for every export. Falls back to a
+        <folder>/_edited subfolder if the fixed folder is unset.
+        """
+        if getattr(self, "export_dir_mode", "subfolder") == "fixed" \
+                and self.export_fixed_dir:
+            return self.export_fixed_dir
+        name = (self.export_subfolder or "_edited").strip() or "_edited"
+        return os.path.join(self.folder, name) if self.folder else name
+
     def _export_meta(self):
         """Metadata to carry from the source into the saved file, as save() kwargs.
 
@@ -130,7 +143,9 @@ class SaveMixin:
                        "WEBP" if src_ext == ".webp" else "JPEG")
         seed = self.quick_save_cfg or self.last_save or {}
         q_opts = (80, 90, 95, 100)
-        st = {"dir": seed.get("dir") or os.path.join(self.folder, "_edited"),
+        # The default folder comes from the Settings → Export → Output config
+        # (per-source subfolder or a fixed folder); a session quick-save dir wins.
+        st = {"dir": (self.quick_save_cfg or {}).get("dir") or self._default_export_dir(),
               "fmt": seed.get("fmt") or default_fmt,
               "quality": min(q_opts, key=lambda q: abs(q - int(seed.get("quality", 95)))),
               "keep_meta": bool(seed.get("keep_meta", True)),
@@ -249,7 +264,7 @@ class SaveMixin:
             if e.lower() in (".jpg", ".jpeg", ".png", ".webp"):
                 name = stem                        # strip a typed extension
             st["name"] = name or self._save_basename()
-            st["dir"] = dir_var.get().strip() or os.path.join(self.folder, "_edited")
+            st["dir"] = dir_var.get().strip() or self._default_export_dir()
             st["ok"] = True
             dlg.destroy()
 
