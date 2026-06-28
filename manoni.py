@@ -215,6 +215,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
         self.crop_rect = None         # [x0, y0, x1, y1] in source px, or None
         self.crop_ratio = None        # locked aspect ratio (w/h), or None = free
+        self.straighten = 0.0         # horizon-straighten tilt in degrees (0 = level),
+                                      # previewed live in the crop tool, baked on Crop
         self._crop_btn_active = None  # the highlighted preset chip (for restyle)
         self._crop_chips = []         # all preset chip widgets (for restyle)
         self._crop_drag = None        # in-progress drag state, or None

@@ -246,6 +246,10 @@ CATALOG_KA = {
     "Drag the corners; pick a shape or social network":
         "ჩავათრიე კუთხეები; აირჩიე ფორმა ან სოც. ქსელი",
     "Shape": "ფორმა",
+    "Straighten": "გასწორება",
+    "Angle": "კუთხე",
+    "Tilt to level the horizon (the crop trims the corners)":
+        "დახარე ჰორიზონტის გასასწორებლად (მოჭრა კუთხეებს მოაჭრის)",
     "Social networks": "სოციალური ქსელები",
     "⇄ Flip (3:4 ⇄ 4:3)": "⇄ გადატრიალება (3:4 ⇄ 4:3)",
     "Rotate the selection by 90°": "მონიშვნის 90°-ით გადატრიალება",

@@ -8,9 +8,11 @@ import math
 import tkinter as tk
 import tkinter.ttk as ttk
 
+from PIL import Image
+
 from ..config import (ACCENT, BAR, BG, FG, FG_DIM, HOVER,
                       EDIT_PANEL_W, EDIT_PAD, ON_ACCENT, ACCENT_HOVER, CHIP_BG)
-from ..widgets import Tooltip
+from ..widgets import Tooltip, Slider
 from ..i18n import t
 from .dialogs import make_dialog_button, center_over
 
@@ -51,6 +53,8 @@ class CropMixin:
         self._crop_group_header(f, "ratio", t("Shape"))
         self._build_crop_segment(f)
         self._build_ratio_cards(f)
+
+        self._build_straighten(f)
 
         self._crop_group_header(f, "share-2", t("Social networks"))
         self._build_social_rows(f)
@@ -225,6 +229,83 @@ class CropMixin:
             w.bind("<Enter>", lambda e: hover(True))
             w.bind("<Leave>", lambda e: hover(False))
         self._crop_register(card, paint)
+
+    # --- Straighten (horizon tilt) ------------------------------------------
+
+    def _build_straighten(self, parent):
+        "A horizon-straighten slider (−45…+45°, 0 = level). It tilts the photo"
+        " live; the crop box auto-fits so a straighten never keeps empty corners."
+        self._crop_group_header(parent, "scan-line", t("Straighten"))
+        row = tk.Frame(parent, bg=BAR)
+        row.pack(fill="x", padx=EDIT_PAD, pady=2)
+        self.s_straighten = Slider(row, t("Angle"), self._on_straighten,
+                                   lo=-45, hi=45, neutral=0)
+        self.s_straighten.pack(side="left", fill="x", expand=True)
+        self.s_straighten._tip = Tooltip(
+            self.s_straighten.canvas,
+            t("Tilt to level the horizon (the crop trims the corners)"))
+        self._straighten_reset_btn(row).pack(side="right", padx=(6, 0))
+
+    def _straighten_reset_btn(self, parent):
+        "A small reset icon that returns the straighten slider to 0 (level)."
+        img = self.icon("rotate-ccw", size=14)
+        if img is not None:
+            b = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+        else:
+            b = tk.Label(parent, text="↺", bg=BAR, fg=FG_DIM, cursor="hand2",
+                         font=("Segoe UI", 11))
+        b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
+        b.bind("<Leave>", lambda e: b.configure(bg=BAR))
+        b.bind("<Button-1>", lambda e: self._reset_straighten(render=True))
+        b._tip = Tooltip(b, t("Reset this slider"))
+        return b
+
+    def _on_straighten(self, deg):
+        "Live tilt: set the angle, fit the auto crop box, re-render the preview."
+        if self.current_pil is None:
+            return
+        self.straighten = float(deg)
+        # The rotation preview is correct only with the whole photo in view, so
+        # straightening always works on the fitted view (zoom is paused).
+        self.fit_mode = True
+        self.pan_x = self.pan_y = 0.0
+        self._straighten_box()
+        self._render_preview()
+
+    def _reset_straighten(self, render=False):
+        "Clear the pending tilt and zero the slider (on commit / geometry change)."
+        self.straighten = 0.0
+        if hasattr(self, "s_straighten"):
+            try:
+                self.s_straighten.set(0)
+            except tk.TclError:
+                pass
+        if render:
+            self._straighten_box()
+            self._render_preview()
+
+    def _straighten_box(self):
+        "Center the crop box on the largest upright rectangle that stays inside"
+        " the tilted photo — so committing the straighten never keeps empty"
+        " corners. Reduces to the plain centered ratio box when the tilt is 0."
+        if self.current_pil is None:
+            return
+        iw, ih = self.current_pil.size
+        r = self.crop_ratio or (iw / ih)
+        a = math.radians(abs(self.straighten))
+        ca, sa = math.cos(a), math.sin(a)
+        hx = min((iw / 2.0) / (ca + sa / r), (ih / 2.0) / (sa + ca / r))
+        hy = hx / r
+        cx, cy = iw / 2.0, ih / 2.0
+        self.crop_rect = [cx - hx, cy - hy, cx + hx, cy + hy]
+
+    @staticmethod
+    def _rotate_keep_size(img, angle):
+        "Rotate `img` about its center by `angle`° (positive = clockwise), keeping"
+        " the canvas size. Used to bake a straighten before the crop trims it."
+        if img.mode in ("P", "1"):
+            img = img.convert("RGB")
+        return img.rotate(-angle, resample=Image.BICUBIC, expand=False)
 
     # --- Social rows (name + subtitle + ratio, full width) ------------------
 
@@ -648,6 +729,10 @@ class CropMixin:
         self.crop_ratio = ratio
         if self.current_pil is None:
             return
+        if self.straighten:               # tilt active → inscribe the ratio box
+            self._straighten_box()
+            self._render_preview()
+            return
         iw, ih = self.current_pil.size
         if ratio is None:
             if self.crop_rect is None:
@@ -667,6 +752,12 @@ class CropMixin:
     def _flip_crop_ratio(self):
         "Rotate the crop 90°: swap its width↔height (and any locked ratio) in place."
         if self.current_pil is None or self.crop_rect is None:
+            return
+        if self.straighten:               # tilt active → flip ratio, re-inscribe
+            if self.crop_ratio:
+                self.crop_ratio = 1.0 / self.crop_ratio
+            self._straighten_box()
+            self._render_preview()
             return
         if self.crop_ratio:
             self.crop_ratio = 1.0 / self.crop_ratio
@@ -698,6 +789,7 @@ class CropMixin:
         self.crop_ratio = None
         self._crop_btn_active = None
         self._restyle_crop_chips()
+        self._reset_straighten()         # cancel drops any pending tilt too
         self._render_preview()
 
     def _enter_crop(self):
@@ -708,6 +800,8 @@ class CropMixin:
         if self.crop_rect is None:
             iw, ih = self.current_pil.size
             self.crop_rect = [0.0, 0.0, float(iw), float(ih)]
+        if self.straighten:              # a pending tilt → re-fit its inscribed box
+            self._straighten_box()
         self.preview.configure(cursor="crosshair")
         self.fit_view()          # fit + recenter + render (shows the overlay)
 
@@ -715,6 +809,7 @@ class CropMixin:
         "Crop current_pil to the selection (in memory; written out via Save)."
         if self.current_pil is None or self.crop_rect is None:
             return
+        angle = self.straighten
         iw, ih = self.current_pil.size
         x0, y0, x1, y1 = self.crop_rect
         box = (max(0, int(round(x0))), max(0, int(round(y0))),
@@ -724,16 +819,23 @@ class CropMixin:
             if not playing:
                 self.toast(t("The crop area is too small"))
             return
-        if box == (0, 0, iw, ih):
+        if box == (0, 0, iw, ih) and not angle:
             if not playing:
                 self.toast(t("The whole image is selected — nothing changes"))
             return
-        if getattr(self, "_recording", False):
+        # A straighten isn't recorded by Actions yet (like rotate/resize), so a
+        # plain crop step would replay without the tilt — skip recording then.
+        if getattr(self, "_recording", False) and not angle:
             self._record_crop_step(box, iw, ih)   # capture as a macro step
+        if angle:                          # bake the tilt, then crop the corners off
+            self.current_pil = self._rotate_keep_size(self.current_pil, angle)
         self.current_pil = self.current_pil.crop(box)
         if self._before_pil is not None:   # keep the compare "before" aligned to the edit
+            if angle:
+                self._before_pil = self._rotate_keep_size(self._before_pil, angle)
             self._before_pil = self._before_pil.crop(box)
             self._before_base_key = None
+        self._reset_straighten()           # the tilt is now baked in
         self._cropped = True
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a crop
         self._edits_saved = False
@@ -847,6 +949,8 @@ class CropMixin:
         "Begin a crop drag: grab a handle, the box body (move), or draw a fresh box."
         if not self._crop_active():
             return
+        if self.straighten:               # while tilting, the auto box owns the frame
+            return "break"
         hit = self._crop_hit(event.x, event.y)
         sx, sy = self._scr_to_src(event.x, event.y)
         if hit == "move":
@@ -900,6 +1004,9 @@ class CropMixin:
         "Show the right resize/move cursor while hovering over the crop box."
         if not self._crop_active() or self._crop_drag is not None:
             return
+        if self.straighten:               # auto box: no resize/move handles
+            self.preview.configure(cursor="crosshair")
+            return
         hit = self._crop_hit(event.x, event.y)
         self.preview.configure(cursor=self._CROP_CURSORS.get(hit, "crosshair"))
 
@@ -922,6 +1029,8 @@ class CropMixin:
             c.create_line(gx, y0, gx, y1, fill="#ffffff", stipple="gray25")
             c.create_line(x0, gy, x1, gy, fill="#ffffff", stipple="gray25")
         c.create_rectangle(x0, y0, x1, y1, outline="#ffffff", width=1)
+        if self.straighten:           # tilting: the box is auto-fitted, no handles
+            return
         r = self.CROP_HANDLE
         for hx, hy in self._crop_handles().values():
             c.create_rectangle(hx - r, hy - r, hx + r, hy + r,

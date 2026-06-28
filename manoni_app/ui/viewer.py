@@ -47,6 +47,7 @@ class ViewerMixin:
         self.crop_ratio = None
         self._crop_btn_active = None
         self._restyle_crop_chips()
+        self._reset_straighten()  # fresh photo → no pending horizon tilt
         self._edits_saved = False
         self._render_preview()
         self._refresh_filter_strip()   # rebuild the filter previews for this photo
@@ -122,6 +123,8 @@ class ViewerMixin:
         "Mouse wheel: zoom toward/away from the cursor, keeping that point fixed."
         if self.current_pil is None:
             return "break"
+        if self.straighten and self.active_section == "crop" and self.panel_open:
+            return "break"   # the straighten preview needs the photo fully fitted
         vw = max(self.preview.winfo_width(), 1)
         vh = max(self.preview.winfo_height(), 1)
         factor = self.ZOOM_STEP if event.delta > 0 else 1 / self.ZOOM_STEP
@@ -256,6 +259,7 @@ class ViewerMixin:
         if self._before_pil is not None:   # keep the compare "before" aligned to the edit
             self._before_pil = self._before_pil.transpose(transpose_op)
             self._before_base_key = None
+        self._reset_straighten()        # a 90° turn invalidates any pending tilt
         self._rotated = True            # rotation is an edit worth offering to save
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a rotate
         self._edits_saved = False
@@ -360,6 +364,13 @@ class ViewerMixin:
         if self._view_alpha is not None:
             bg = self._checker_bg(img.width, img.height)
             img = Image.composite(img, bg, self._view_alpha)
+        # Horizon straighten preview: with the whole photo fitted, _view_base is
+        # the full image scaled, so rotating it here matches rotating the full-res
+        # photo on commit. The empty corners fill with the canvas colour so they
+        # blend into the letterbox; the crop overlay marks what will be kept.
+        if self.straighten and self.active_section == "crop" and self.panel_open:
+            img = img.rotate(-self.straighten, resample=Image.BICUBIC,
+                             expand=False, fillcolor=BG)
         # Before/after compare: peek shows the full original; the split shows the
         # unedited photo left of a draggable divider, the edit to its right. The
         # span is recorded so the divider + its drag stay glued to the photo.
