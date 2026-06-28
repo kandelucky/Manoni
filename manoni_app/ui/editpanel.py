@@ -8,7 +8,8 @@ behaviour is identical to when it lived directly on the class.
 import tkinter as tk
 
 from ..config import (BAR, HOVER, ACCENT, FG, FG_DIM,
-                      EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP)
+                      EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP,
+                      ON_ACCENT, ACCENT_HOVER, CHIP_BG, BORDER, DIVIDER)
 from .. import imaging
 from ..widgets import Slider, Tooltip
 from ..i18n import t
@@ -23,6 +24,7 @@ class EditPanelMixin:
     # separate bottom action, not a section, so it is not listed here).
     SECTION_TITLES = {"basic": "Basic Edits", "crop": "Crop",
                       "heal": "Heal & Clone", "focus": "Focus blur",
+                      "color": "Color mixer",
                       "effects": "Effects", "filters": "Filters",
                       "actions": "Actions"}
 
@@ -45,7 +47,7 @@ class EditPanelMixin:
 
         # Blue header that names the open section (Fotor "Basic Edits" tab look).
         self.section_title = tk.Label(panel, text=t(self.SECTION_TITLES["basic"]),
-                                      bg=ACCENT, fg="#0b0b0b", anchor="w",
+                                      bg=ACCENT, fg=ON_ACCENT, anchor="w",
                                       font=("Segoe UI", 10, "bold"),
                                       padx=14, pady=8)
         self.section_title.pack(side="top", fill="x")
@@ -58,6 +60,7 @@ class EditPanelMixin:
             "crop":    self._build_crop_section(self.section_content),
             "heal":    self._build_heal_section(self.section_content),
             "focus":   self._build_focus_section(self.section_content),
+            "color":   self._build_color_section(self.section_content),
             "effects": self._build_effects_section(self.section_content),
             "filters": self._build_filters_section(self.section_content),
             "actions": self._build_actions_section(self.section_content),
@@ -122,7 +125,7 @@ class EditPanelMixin:
         "A thin divider + small bold caption that splits the basic sliders into"
         " Photoshop-style groups (white balance / tone / detail) instead of one"
         " glued strip."
-        tk.Frame(parent, bg="#333333", height=1).pack(fill="x", padx=EDIT_PAD,
+        tk.Frame(parent, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
                                                        pady=(12, 0))
         tk.Label(parent, text=text, bg=BAR, fg=FG_DIM, anchor="w",
                  font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
@@ -130,7 +133,7 @@ class EditPanelMixin:
 
     def _auto_btn(self, parent, text, mode, col, tip):
         "One auto-correction toggle button (accent-filled while its mode is on)."
-        b = tk.Label(parent, text=text, bg="#2f2f2f", fg=FG, cursor="hand2",
+        b = tk.Label(parent, text=text, bg=CHIP_BG, fg=FG, cursor="hand2",
                      font=("Segoe UI", 8, "bold"), padx=4, pady=6)
         b._mode = mode
         pad = (0, CHIP_GAP // 2) if col == 0 else (CHIP_GAP // 2, 0)
@@ -145,7 +148,7 @@ class EditPanelMixin:
         "Brighten an auto button on hover; the active one keeps its accent fill."
         if btn._mode == self.auto_mode:
             return
-        btn.configure(bg=HOVER if entering else "#2f2f2f")
+        btn.configure(bg=HOVER if entering else CHIP_BG)
 
     def _refresh_auto_buttons(self):
         "Repaint the auto buttons so the active mode is accent-filled, rest neutral."
@@ -153,8 +156,8 @@ class EditPanelMixin:
             return
         for mode, btn in self.auto_buttons.items():
             active = (mode == self.auto_mode)
-            btn.configure(bg=ACCENT if active else "#2f2f2f",
-                          fg="#0b0b0b" if active else FG)
+            btn.configure(bg=ACCENT if active else CHIP_BG,
+                          fg=ON_ACCENT if active else FG)
 
     def _build_effects_section(self, parent):
         "Effects: creative looks, each a 0→full strength slider. B&W + sepia +"
@@ -172,6 +175,69 @@ class EditPanelMixin:
 
         self._clear_button(f)
         return f
+
+    # The eight HSL bands: (attr, label) in the warm→cool order they sit on the
+    # hue wheel, matching imaging.HSL_BANDS. A small colour chip is drawn beside
+    # each so the band reads at a glance.
+    COLOR_BANDS = [
+        ("sat_red",     "Red",     "#e0564f"),
+        ("sat_orange",  "Orange",  "#e08a3c"),
+        ("sat_yellow",  "Yellow",  "#d9c13a"),
+        ("sat_green",   "Green",   "#5fb85f"),
+        ("sat_aqua",    "Aqua",    "#4fc2c2"),
+        ("sat_blue",    "Blue",    "#5a8fe0"),
+        ("sat_purple",  "Purple",  "#9b7ad6"),
+        ("sat_magenta", "Magenta", "#d066b0"),
+    ]
+
+    def _build_color_section(self, parent):
+        "Color mixer (HSL): per-hue saturation for the eight bands, plus a"
+        " separate 'gold shine'. Each slider strengthens (right) or weakens"
+        " (left) just that colour; they share the edit pipeline, undo and reset."
+        f = tk.Frame(parent, bg=BAR)
+
+        self._group_header(f, t("Saturation"))
+        for attr, label, chip in self.COLOR_BANDS:
+            self.sliders[attr] = self._color_slider(f, t(label), attr, chip)
+
+        # Gold gets its own three-slider mini-HSL — the special treatment for
+        # golden tones, unlike the plain (saturation-only) bands above.
+        self._group_header(f, t("Gold"))
+        self.sliders["gold_hue"] = self._color_slider(
+            f, t("Gold hue"), "gold_hue", "#d4af37")
+        self.sliders["gold_sat"] = self._color_slider(
+            f, t("Gold saturation"), "gold_sat", "#d4af37")
+        self.sliders["gold_light"] = self._color_slider(
+            f, t("Gold shine"), "gold_light", "#d4af37")
+
+        # Skin: the same targeted mini-HSL for skin tones (hue + saturation gated
+        # so only skin moves, not the warm walls behind it).
+        self._group_header(f, t("Skin"))
+        self.sliders["skin_hue"] = self._color_slider(
+            f, t("Skin hue"), "skin_hue", "#e0ac8b")
+        self.sliders["skin_sat"] = self._color_slider(
+            f, t("Skin saturation"), "skin_sat", "#e0ac8b")
+        self.sliders["skin_light"] = self._color_slider(
+            f, t("Skin brightness"), "skin_light", "#e0ac8b")
+
+        self._clear_button(f)
+        return f
+
+    def _color_slider(self, parent, label, attr, chip):
+        "A labeled live slider with a small colour chip, its own reset button."
+        row = tk.Frame(parent, bg=BAR)
+        row.pack(fill="x", padx=EDIT_PAD, pady=2)
+        sw = tk.Frame(row, bg=chip, width=self._edit_dpi_w(10),
+                      height=self._edit_dpi_w(10))
+        sw.pack(side="left", padx=(0, 6))
+        sw.pack_propagate(False)
+        s = Slider(row, label, lambda v, a=attr: self._on_slider(a, v),
+                   lo=0, hi=200, neutral=100,
+                   on_press=self._edit_gesture_start,
+                   on_release=self._edit_gesture_end)
+        s.pack(side="left", fill="x", expand=True)
+        self._slider_reset_button(row, attr).pack(side="right", padx=(6, 0))
+        return s
 
     # --- Tool rail (col 4): vertical labeled icon buttons, Fotor-style -------
 
@@ -192,7 +258,7 @@ class EditPanelMixin:
         self.btn_chevron = self._tool_button(
             top, "chevron-left", self.toggle_panel, t("Open / collapse the panel"))
         self.btn_chevron.pack(side="top", pady=(0, 6))
-        tk.Frame(top, bg="#3a3a3a", height=1).pack(side="top", fill="x",
+        tk.Frame(top, bg=BORDER, height=1).pack(side="top", fill="x",
                                                    padx=12, pady=(0, 6))
 
         for key, icon_name, label in [
@@ -200,6 +266,7 @@ class EditPanelMixin:
             ("crop",    "crop",               "Crop"),
             ("heal",    "bandage",            "Heal"),
             ("focus",   "aperture",           "Blur"),
+            ("color",   "droplets",           "Colors"),
             ("effects", "wand-sparkles",      "Effects"),
             ("filters", "palette",            "Filters"),
             ("actions", "clapperboard",       "Actions"),
@@ -218,7 +285,7 @@ class EditPanelMixin:
         "A full-width accent Save button pinned to the rail foot (icon over label)."
         wrap = tk.Frame(rail, bg=BAR)
         wrap.pack(side="bottom", fill="x")
-        tk.Frame(wrap, bg="#3a3a3a", height=1).pack(side="top", fill="x")
+        tk.Frame(wrap, bg=BORDER, height=1).pack(side="top", fill="x")
 
         btn = tk.Frame(wrap, bg=ACCENT, cursor="hand2")
         btn.pack(side="top", fill="x")
@@ -226,15 +293,15 @@ class EditPanelMixin:
         if img is not None:
             ic = tk.Label(btn, image=img, bg=ACCENT)
         else:
-            ic = tk.Label(btn, text="💾", bg=ACCENT, fg="#0b0b0b",
+            ic = tk.Label(btn, text="💾", bg=ACCENT, fg=ON_ACCENT,
                           font=("Segoe UI", 14))
         ic.pack(pady=(8, 2))
-        tx = tk.Label(btn, text=t("Save"), bg=ACCENT, fg="#0b0b0b",
+        tx = tk.Label(btn, text=t("Save"), bg=ACCENT, fg=ON_ACCENT,
                       font=("Segoe UI", 8, "bold"))
         tx.pack(pady=(0, 8))
         for w in (btn, ic, tx):
             w.bind("<Button-1>", lambda e: self.quick_save())
-            w.bind("<Enter>", lambda e: [c.configure(bg="#5ab0ff")
+            w.bind("<Enter>", lambda e: [c.configure(bg=ACCENT_HOVER)
                                          for c in (btn, ic, tx)])
             w.bind("<Leave>", lambda e: [c.configure(bg=ACCENT)
                                          for c in (btn, ic, tx)])
@@ -313,6 +380,8 @@ class EditPanelMixin:
         if key not in self.sections:
             return
         self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
+        if key in ("crop", "heal", "focus"):
+            self._set_compare(False)  # these need the canvas drag — compare can't intercept it
         self.active_section = key
         for k, frame in self.sections.items():
             if k == key:
@@ -338,7 +407,7 @@ class EditPanelMixin:
         for k, cell in self.rail_buttons.items():
             active = (k == self.active_section)
             bg = ACCENT if active else BAR
-            fg = "#0b0b0b" if active else FG_DIM
+            fg = ON_ACCENT if active else FG_DIM
             ic, tx = cell._widgets
             cell.configure(bg=bg)
             ic.configure(bg=bg)
@@ -377,7 +446,7 @@ class EditPanelMixin:
     def _clear_button(self, parent):
         "Full-width 'clear all' button (resets every slider as one undo step) —"
         " a real filled button, replacing the old plain-text reset link."
-        NORMAL = "#2f2f2f"
+        NORMAL = CHIP_BG
         btn = tk.Frame(parent, bg=NORMAL, cursor="hand2")
         btn.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
         inner = tk.Frame(btn, bg=NORMAL)          # centers the icon + label
@@ -474,6 +543,14 @@ class EditPanelMixin:
                 "blacks": self.blacks, "clarity": self.clarity,
                 "vibrance": self.vibrance, "texture": self.texture,
                 "sharpen": self.sharpen,
+                "sat_red": self.sat_red, "sat_orange": self.sat_orange,
+                "sat_yellow": self.sat_yellow, "sat_green": self.sat_green,
+                "sat_aqua": self.sat_aqua, "sat_blue": self.sat_blue,
+                "sat_purple": self.sat_purple, "sat_magenta": self.sat_magenta,
+                "gold_hue": self.gold_hue, "gold_sat": self.gold_sat,
+                "gold_light": self.gold_light,
+                "skin_hue": self.skin_hue, "skin_sat": self.skin_sat,
+                "skin_light": self.skin_light,
                 "bw": self.bw, "sepia": self.sepia, "vignette": self.vignette,
                 "focus": dict(self.focus) if self.focus else None,
                 "auto_mode": self.auto_mode}

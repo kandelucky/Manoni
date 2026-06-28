@@ -8,6 +8,7 @@ behaviour is identical to when it lived directly on the class.
 import os
 import sys
 import json
+import time
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as tkfd
@@ -15,7 +16,7 @@ import tkinter.filedialog as tkfd
 from PIL import Image, ImageTk
 
 from ..config import (BG, BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM, ICON_SIZE,
-                      ICON_DIR)
+                      ICON_DIR, CHIP_BG, BORDER)
 from ..widgets import Tooltip
 from .. import i18n
 from ..i18n import t
@@ -78,7 +79,7 @@ class ChromeMixin:
                 ("Vertical.Scrollbar.thumb",
                  {"expand": "1", "sticky": "nswe"})]})])
         style.configure("Sidebar.Vertical.TScrollbar",
-                        troughcolor=SIDEBAR, background="#3a3a3a",
+                        troughcolor=SIDEBAR, background=BORDER,
                         bordercolor=SIDEBAR, borderwidth=0, relief="flat",
                         arrowcolor=SIDEBAR, width=10)
         style.map("Sidebar.Vertical.TScrollbar",
@@ -97,7 +98,7 @@ class ChromeMixin:
 
     def _sep(self, parent):
         "Vertical separator in a bar."
-        return tk.Frame(parent, bg="#3a3a3a", width=1)
+        return tk.Frame(parent, bg=BORDER, width=1)
 
     # --- Hand (pan) tool toggle ---------------------------------------------
 
@@ -130,6 +131,8 @@ class ChromeMixin:
         if on == self.hand_tool:
             return
         self.hand_tool = on
+        if on:
+            self._set_compare(False)     # both claim the left-drag — only one at a time
         self._hand_btn_paint()
         # 'hand2' marks the tool as armed; turning it off clears the cursor and the
         # next pointer move lets the active edit tool (if any) reclaim its own.
@@ -138,6 +141,118 @@ class ChromeMixin:
     def toggle_hand_tool(self):
         "Toolbar action: flip the hand (pan) tool on/off."
         self._set_hand_tool(not self.hand_tool)
+
+    # --- Before/after compare (იყო / არის) ----------------------------------
+
+    def _build_compare_button(self, parent):
+        "A before/after toggle: click splits the photo with a draggable line;"
+        " press-and-hold peeks the full original, releasing back to the edit."
+        img = self.icon("square-split-horizontal")
+        if img is not None:
+            btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+        else:
+            btn = tk.Label(parent, text="◧", bg=BAR, fg=FG, cursor="hand2",
+                           font=("Segoe UI", 11))
+        btn.bind("<Enter>", lambda e: self._compare_btn_paint(hover=True))
+        btn.bind("<Leave>", lambda e: self._compare_btn_paint(hover=False))
+        # Press = start peeking the original; release = stop. A quick tap (no
+        # real hold) toggles the persistent split-line view instead.
+        btn.bind("<ButtonPress-1>", self._compare_btn_press)
+        btn.bind("<ButtonRelease-1>", self._compare_btn_release)
+        btn._tip = Tooltip(btn, t("Compare before / after — click to split, "
+                                  "hold to see the original"))
+        self.btn_compare = btn
+        return btn
+
+    def _compare_btn_paint(self, hover=False):
+        "Repaint the compare toggle: accent fill while split is on, else hover tint."
+        if not hasattr(self, "btn_compare"):
+            return
+        if self.compare_mode:
+            self.btn_compare.configure(bg=ACCENT)
+        else:
+            self.btn_compare.configure(bg=HOVER if hover else BAR)
+
+    def _compare_btn_press(self, event):
+        "Button pressed: peek the full original and start timing the hold."
+        self._compare_press_t = time.monotonic()
+        self._compare_peek_on()
+
+    def _compare_btn_release(self, event):
+        "Button released: stop peeking; a quick tap also toggles the split view."
+        self._compare_peek_off()
+        held = time.monotonic() - getattr(self, "_compare_press_t", 0.0)
+        if held < 0.25:
+            self.toggle_compare()
+
+    def _set_compare(self, on):
+        "Turn the split-line compare view on/off: repaint toggle + canvas cursor."
+        if on == self.compare_mode:
+            return
+        self.compare_mode = on
+        if on:
+            self._set_hand_tool(False)   # both claim the left-drag — only one at a time
+        self._compare_btn_paint()
+        self.preview.configure(cursor="sb_h_double_arrow" if on else "")
+        self._render_preview()
+
+    def toggle_compare(self):
+        "Toolbar action: flip the before/after split-line view on/off."
+        self._set_compare(not self.compare_mode)
+
+    # --- On-canvas peek button (hold to see the original) -------------------
+
+    PEEK_BG = CHIP_BG
+
+    def _build_peek_button(self):
+        "A small always-on button pinned to the preview's corner: hold = იყო, release = არის."
+        img = self.icon("eye")
+        if img is not None:
+            btn = tk.Label(self.preview, image=img, bg=self.PEEK_BG, cursor="hand2",
+                           padx=5, pady=5)
+        else:
+            btn = tk.Label(self.preview, text="👁", bg=self.PEEK_BG, fg=FG,
+                           cursor="hand2", font=("Segoe UI", 11), padx=6, pady=3)
+        btn.bind("<Enter>", lambda e: self._peek_btn_paint(hover=True))
+        btn.bind("<Leave>", lambda e: self._peek_btn_paint(hover=False))
+        btn.bind("<ButtonPress-1>", self._peek_btn_press)
+        btn.bind("<ButtonRelease-1>", self._peek_btn_release)
+        btn._tip = Tooltip(btn, t("Hold to see the original — press for before, release for after"))
+        self.peek_btn = btn
+        self._peek_shown = False
+        self._update_peek_button()
+
+    def _peek_btn_paint(self, hover=False):
+        "Accent while peeking, hover tint on hover, else the resting fill."
+        if not hasattr(self, "peek_btn"):
+            return
+        if self._compare_peek:
+            self.peek_btn.configure(bg=ACCENT)
+        else:
+            self.peek_btn.configure(bg=HOVER if hover else self.PEEK_BG)
+
+    def _peek_btn_press(self, event):
+        "Press the corner button → show the original (იყო)."
+        self._compare_peek_on()
+        self._peek_btn_paint()
+
+    def _peek_btn_release(self, event):
+        "Release → back to the edit (არის)."
+        self._compare_peek_off()
+        self._peek_btn_paint()
+
+    def _update_peek_button(self):
+        "Show the peek button only with a photo loaded; pin it to the bottom-left,"
+        " clear of the left ruler."
+        if not hasattr(self, "peek_btn"):
+            return
+        show = self.current_pil is not None
+        if show and not self._peek_shown:
+            self.peek_btn.place(x=self.RULER_W + 8, rely=1.0, y=-10, anchor="sw")
+            self._peek_shown = True
+        elif not show and self._peek_shown:
+            self.peek_btn.place_forget()
+            self._peek_shown = False
 
     # --- Top info bar -------------------------------------------------------
 
@@ -172,11 +287,19 @@ class ChromeMixin:
         # from the ☰ menu so saving is one click away.)
         self._tool_button(left, "save", self._save_as_dialog,
                           t("Save as…")).pack(side="left", padx=4, pady=8)
+        # Photo info: pops a window with the current photo's metadata (colour
+        # profile, camera, capture settings, GPS) — the same data the Save
+        # dialog can keep or strip.
+        self._tool_button(left, "info", self._metadata_dialog,
+                          t("Photo info (metadata)")).pack(side="left",
+                                                           padx=4, pady=8)
         # Hand (pan) tool: a toggle — while on, dragging with the left button
         # moves the photo on the canvas (like Photoshop's hand). Separated from
         # the open button so it reads as its own viewport control.
         self._sep(left).pack(side="left", fill="y", padx=6, pady=10)
         self._build_hand_button(left).pack(side="left", padx=4, pady=8)
+        # Before/after compare: a split line you drag, or hold to peek the original.
+        self._build_compare_button(left).pack(side="left", padx=4, pady=8)
 
         # CENTER zone: undo/redo, truly centered over the bar (placed, so the
         # left/right zones don't shift it off-center).
@@ -221,15 +344,10 @@ class ChromeMixin:
             self._close_menu()
             return
         self._open_dropdown([
-            ("settings",    t("Settings"),     self._open_settings_menu),
             ("languages",   t("Language"),     self._open_language_menu),
             ("sep",),
             ("info",        t("About Manoni"), self._about_dialog),
         ])
-
-    def _open_settings_menu(self):
-        "Settings submenu — placeholder for now (text only; no options yet)."
-        pass
 
     def _open_language_menu(self):
         "The Language sub-dropdown: 'Add your language' first, then each language"
@@ -248,7 +366,7 @@ class ChromeMixin:
         " clickable row. Tracked in self._menu_popup so a re-open toggles it."
         pop = tk.Toplevel(self.root)
         pop.overrideredirect(True)                 # borderless: a real popup menu
-        pop.configure(bg="#3a3a3a")                # 1px hairline border via inset
+        pop.configure(bg=BORDER)                # 1px hairline border via inset
         self._menu_popup = pop
         inner = tk.Frame(pop, bg=BAR)
         inner.pack(padx=1, pady=1)
@@ -282,7 +400,7 @@ class ChromeMixin:
 
         for spec in specs:
             if spec[0] == "sep":
-                tk.Frame(inner, bg="#3a3a3a", height=1).pack(fill="x")
+                tk.Frame(inner, bg=BORDER, height=1).pack(fill="x")
             else:
                 add_row(*spec)
 
@@ -549,6 +667,10 @@ class ChromeMixin:
         self.preview.bind("<ButtonRelease-1>", self._preview_release)
         self.preview.bind("<Motion>", self._preview_hover)
 
+        # An always-on "hold to see the original" button in the preview's corner —
+        # press = იყო (original), release = არის (edit). Sits over the canvas.
+        self._build_peek_button()
+
         # Fotor-style edit area on the right: section panel + labeled icon rail
         self._build_edit_panel(body)
         self._build_tool_rail(body)
@@ -581,7 +703,7 @@ class ChromeMixin:
         sash.pack_propagate(False)
         # Faint full-width hairline marks the boundary; the centred grip nub on top
         # of it says "drag me" (turns accent on hover). Same idiom as the side sash.
-        line = tk.Frame(sash, bg="#3a3a3a")
+        line = tk.Frame(sash, bg=BORDER)
         line.place(relx=0.0, rely=0.5, relwidth=1.0, height=1, anchor="w")
         grip = tk.Frame(sash, bg=FG_DIM)
         grip.place(relx=0.5, rely=0.5, anchor="center", width=40, height=4)
@@ -898,7 +1020,7 @@ class ChromeMixin:
             return
         pop = tk.Toplevel(self.root)
         pop.overrideredirect(True)                 # borderless: a real popup menu
-        pop.configure(bg="#3a3a3a")                # 1px hairline border via inset
+        pop.configure(bg=BORDER)                # 1px hairline border via inset
         self._view_popup = pop
         inner = tk.Frame(pop, bg=BAR)
         inner.pack(padx=1, pady=1)

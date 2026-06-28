@@ -8,8 +8,9 @@ import os
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import BG, BAR, HOVER, ACCENT, FG, FG_DIM
+from ..config import BG, BAR, ACCENT, FG, FG_DIM
 from ..i18n import t
+from .dialogs import make_dialog_button, make_chip, set_chip_active
 
 
 class SaveMixin:
@@ -21,19 +22,47 @@ class SaveMixin:
         "Default output name for the current photo: its real name + _edited."
         return os.path.splitext(self.files[self.index])[0] + "_edited"
 
+    def _export_meta(self):
+        """Metadata to carry from the source into the saved file, as save() kwargs.
+
+        ICC: keep the source colour profile (e.g. Display P3) so colours look
+        identical — edits stay in that space, so it's still valid after them.
+
+        EXIF: keep camera / date / exposure / GPS, but force Orientation = 1.
+        The viewer shows raw pixels and never auto-rotates, so the saved pixels
+        already match what was on screen; any stored orientation would make other
+        viewers double-rotate. (tobytes() also drops the stale embedded thumbnail.)"""
+        if self.current_pil is None:
+            return {}
+        info = self.current_pil.info
+        extra = {}
+        icc = info.get("icc_profile")
+        if icc:
+            extra["icc_profile"] = icc
+        exif = self.current_pil.getexif()
+        if exif:
+            exif[0x0112] = 1                       # Orientation → normal
+            extra["exif"] = exif.tobytes()
+        return extra
+
     def _write_save(self, cfg, base):
         """Apply the live edits to the FULL-RES original and write ONE file using
         cfg = {dir, fmt, quality}, named `base` + the format's extension. The
         original is never touched. Returns the output path on success, else None."""
+        from ..storage import unique_path
         fmt = cfg["fmt"]
-        out = os.path.join(cfg["dir"], base + self.FMT_EXT[fmt])
         try:
             os.makedirs(cfg["dir"], exist_ok=True)
+            # Never silently overwrite an existing file (a clashing name, or a
+            # second save of the same photo) — number it instead.
+            out = unique_path(os.path.join(cfg["dir"], base + self.FMT_EXT[fmt]))
+            # Carry ICC profile + EXIF across, unless this save strips metadata.
+            extra = self._export_meta() if cfg.get("keep_meta", True) else {}
             img = self._apply_edits(self.current_pil.convert("RGB"))
             if fmt == "PNG":
-                img.save(out, "PNG")               # lossless; quality not applicable
+                img.save(out, "PNG", **extra)      # lossless; quality not applicable
             else:
-                img.save(out, fmt, quality=int(cfg.get("quality", 95)))
+                img.save(out, fmt, quality=int(cfg.get("quality", 95)), **extra)
         except Exception as e:
             self.toast(t("Error: {e}").format(e=e))
             return None
@@ -70,6 +99,7 @@ class SaveMixin:
         st = {"dir": seed.get("dir") or os.path.join(self.folder, "_edited"),
               "fmt": seed.get("fmt") or default_fmt,
               "quality": min(q_opts, key=lambda q: abs(q - int(seed.get("quality", 95)))),
+              "keep_meta": bool(seed.get("keep_meta", True)),
               "name": "", "quick": False, "ok": False}
 
         dlg = tk.Toplevel(self.root)
@@ -84,28 +114,6 @@ class SaveMixin:
             tk.Label(wrap, text=text, bg=BG, fg=FG_DIM,
                      font=("Segoe UI", 8)).pack(anchor="w", pady=(10, 2))
 
-        def mkbtn(parent, text, command, primary=False):
-            bg = ACCENT if primary else BAR
-            hov = "#5ab0ff" if primary else HOVER
-            b = tk.Label(parent, text=text, bg=bg, fg="#0b0b0b" if primary else FG,
-                         cursor="hand2", padx=14, pady=7,
-                         font=("Segoe UI", 9, "bold" if primary else "normal"))
-            b.bind("<Enter>", lambda e: b.configure(bg=hov))
-            b.bind("<Leave>", lambda e: b.configure(bg=bg))
-            b.bind("<Button-1>", lambda e: command())
-            return b
-
-        def style_chip(w, active):
-            w.configure(bg=ACCENT if active else BAR,
-                        fg="#0b0b0b" if active else FG)
-
-        def mkchip(parent, text, command):
-            c = tk.Label(parent, text=text, bg=BAR, fg=FG, cursor="hand2",
-                         padx=13, pady=6, font=("Segoe UI", 9))
-            c.bind("<Button-1>", lambda e: command())
-            c.pack(side="left", padx=(0, 6))
-            return c
-
         # --- Folder (with a browse button) ---
         heading(t("Folder"))
         dir_var = tk.StringVar(value=st["dir"])
@@ -119,7 +127,7 @@ class SaveMixin:
                 dir_var.set(d)
 
         frow = tk.Frame(wrap, bg=BG); frow.pack(fill="x")
-        mkbtn(frow, t("Select"), pick_dir).pack(side="right", padx=(6, 0))
+        make_dialog_button(frow, t("Select"), pick_dir).pack(side="right", padx=(6, 0))
         tk.Entry(frow, textvariable=dir_var, bg=BAR, fg=FG, insertbackground=FG,
                  relief="flat", font=("Segoe UI", 9)).pack(
                      side="left", fill="x", expand=True, ipady=5)
@@ -145,25 +153,34 @@ class SaveMixin:
         def pick_q(q):
             st["quality"] = q
             for k, w in q_chips.items():
-                style_chip(w, k == q)
+                set_chip_active(w, k == q)
         for q in q_opts:
-            q_chips[q] = mkchip(qrow, str(q), lambda q=q: pick_q(q))
+            q_chips[q] = make_chip(qrow, str(q), lambda q=q: pick_q(q))
 
-        # --- Checkbox: arm quick save (built before format; format packs qbox here) ---
-        chk = tk.Frame(wrap, bg=BG)
-        box = tk.Label(chk, text="☐", bg=BG, fg=FG, font=("Segoe UI", 13),
-                       cursor="hand2")
-        box.pack(side="left")
-        ctxt = tk.Label(chk, text=t("Use this config for quick save"),
-                        bg=BG, fg=FG, font=("Segoe UI", 9), cursor="hand2")
-        ctxt.pack(side="left", padx=(6, 0))
+        # --- Checkboxes (built before format; format packs qbox above them) ---
+        def checkbox(label, key):
+            "A ☐/☑ toggle bound to st[key]; returns the (unpacked) row frame."
+            row = tk.Frame(wrap, bg=BG)
+            bx = tk.Label(row, text="☑" if st[key] else "☐", bg=BG,
+                          fg=ACCENT if st[key] else FG, font=("Segoe UI", 13),
+                          cursor="hand2")
+            bx.pack(side="left")
+            lb = tk.Label(row, text=label, bg=BG, fg=FG, font=("Segoe UI", 9),
+                          cursor="hand2")
+            lb.pack(side="left", padx=(6, 0))
 
-        def toggle_quick(_e=None):
-            st["quick"] = not st["quick"]
-            box.configure(text="☑" if st["quick"] else "☐",
-                          fg=ACCENT if st["quick"] else FG)
-        for w in (box, ctxt):
-            w.bind("<Button-1>", toggle_quick)
+            def toggle(_e=None):
+                st[key] = not st[key]
+                bx.configure(text="☑" if st[key] else "☐",
+                             fg=ACCENT if st[key] else FG)
+            for w in (bx, lb):
+                w.bind("<Button-1>", toggle)
+            return row
+
+        # Keep camera/colour metadata (ICC + EXIF). Quick save arms this config.
+        meta_chk = checkbox(t("Keep metadata (camera info, GPS, colour profile)"),
+                            "keep_meta")
+        chk = checkbox(t("Use this config for quick save"), "quick")
 
         # --- Format chips (drive the extension label + quality visibility) ---
         heading(t("Format"))
@@ -173,19 +190,20 @@ class SaveMixin:
         def pick_fmt(f):
             st["fmt"] = f
             for k, w in fmt_chips.items():
-                style_chip(w, k == f)
+                set_chip_active(w, k == f)
             ext_lbl.configure(text=self.FMT_EXT[f])
             if f == "PNG":
                 qbox.pack_forget()                 # PNG is lossless — no quality
             else:
-                qbox.pack(fill="x", anchor="w", before=chk)
+                qbox.pack(fill="x", anchor="w", before=meta_chk)
         for f in ("JPEG", "PNG", "WEBP"):
-            fmt_chips[f] = mkchip(fmt_row, f, lambda f=f: pick_fmt(f))
+            fmt_chips[f] = make_chip(fmt_row, f, lambda f=f: pick_fmt(f))
 
-        chk.pack(anchor="w", pady=(14, 0))         # below format/quality
+        meta_chk.pack(anchor="w", pady=(14, 0))    # below format/quality
+        chk.pack(anchor="w", pady=(8, 0))
         pick_fmt(st["fmt"])                        # initial styling + quality visibility
         for k, w in q_chips.items():
-            style_chip(w, k == st["quality"])
+            set_chip_active(w, k == st["quality"])
 
         # --- Confirm / cancel ---
         def confirm():
@@ -199,8 +217,8 @@ class SaveMixin:
             dlg.destroy()
 
         brow = tk.Frame(wrap, bg=BG); brow.pack(anchor="e", pady=(16, 0))
-        mkbtn(brow, t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
-        mkbtn(brow, t("Save"), confirm, primary=True).pack(side="right")
+        make_dialog_button(brow, t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
+        make_dialog_button(brow, t("Save"), confirm, primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -216,7 +234,8 @@ class SaveMixin:
 
         if not st["ok"]:
             return False
-        cfg = {"dir": st["dir"], "fmt": st["fmt"], "quality": st["quality"]}
+        cfg = {"dir": st["dir"], "fmt": st["fmt"], "quality": st["quality"],
+               "keep_meta": st["keep_meta"]}
         out = self._write_save(cfg, st["name"])
         if not out:
             return False

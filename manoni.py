@@ -33,11 +33,12 @@ from manoni_app.ui.focus import FocusMixin
 from manoni_app.ui.filters import FiltersMixin
 from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
+from manoni_app.ui.metadata import MetadataMixin
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, HealMixin, FocusMixin,
-             FiltersMixin, ActionsMixin, AboutMixin):
+             FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -68,6 +69,17 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     LIST_COL_MIN = 190  # min px per list column → list reflows to 2/3/4… cols when wide
     FOLDER_NAME_PAD = 38  # px reserved beside a folder name (glyph + gaps) per column
     MAX_GRID_COLS = 16  # safe upper bound when (re)configuring grid column weights
+
+    # Loading a folder with this many photos (or more) puts up a dark, input-
+    # blocking "please wait" screen until the thumbnails finish, so a slider or
+    # key press mid-load can't corrupt the half-built grid. See browser.py.
+    LOADING_OVERLAY_MIN = 40
+    # Thumbnail loading: images are decoded in parallel worker threads and turned
+    # into grid cells on the main thread in batches of up to THUMB_BUDGET seconds
+    # (so the progress bar still repaints). DECODE_WINDOW caps how many decoded
+    # thumbnails are held ahead of the cells being built (bounds memory).
+    THUMB_BUDGET = 0.03
+    DECODE_WINDOW = 64
 
     # The top sub-folder list never grows past min(FOLDER_LIST_MAX, a fraction of
     # the sidebar height) — so on a short laptop screen it can't crowd the photo
@@ -134,6 +146,24 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.color = 1.0
         self.temperature = 1.0   # >1.0 warmer (more red), <1.0 cooler (more blue)
         self.tint = 1.0          # >1.0 magenta (less green), <1.0 green (more green)
+        # HSL colour mixer: per-hue saturation (1.0 = unchanged, 0 = greyed, 2 =
+        # doubled) plus a separate "gold shine" that makes golden tones glow.
+        self.sat_red = 1.0
+        self.sat_orange = 1.0
+        self.sat_yellow = 1.0
+        self.sat_green = 1.0
+        self.sat_aqua = 1.0
+        self.sat_blue = 1.0
+        self.sat_purple = 1.0
+        self.sat_magenta = 1.0
+        # Gold and skin each get their own three controls (hue / sat / lightness),
+        # hue+saturation gated so they touch only that material.
+        self.gold_hue = 1.0
+        self.gold_sat = 1.0
+        self.gold_light = 1.0
+        self.skin_hue = 1.0
+        self.skin_sat = 1.0
+        self.skin_light = 1.0
         # ACR tone controls (factor 1.0 = neutral; amount = factor - 1.0 in [-1,1])
         self.highlights = 1.0    # + brightens / - recovers the bright tones
         self.shadows = 1.0       # + lifts / - deepens the dark tones
@@ -215,6 +245,18 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.pan_y = 0.0
         self._pan_anchor = None  # (mx, my, pan_x, pan_y) captured while panning
         self.hand_tool = False   # hand (pan) tool: while on, left-drag pans the canvas
+        # Before/after compare (იყო / არის): split-line view + hold-to-peek.
+        self.compare_mode = False  # split-line view on? (drag the line over the photo)
+        self.compare_frac = 0.5    # divider position, as a fraction of the canvas width
+        self._compare_peek = False  # holding the button → show the full original
+        self._compare_span = None   # (left_x, right_x): the photo's on-screen span
+        # The "before" image: current_pil's geometry but WITHOUT the destructive
+        # heal/clone strokes (and the sliders are skipped at render time). None =
+        # no heal yet, so "before" is just current_pil. Crop/rotate transform it
+        # in lockstep so it always lines up with the edit. Cached scaled view next.
+        self._before_pil = None
+        self._before_base = None    # cached cropped+scaled RGB of _before_pil for the view
+        self._before_base_key = None
         self._view_base = None   # cached cropped+scaled RGB image for the view
         self._view_key = None    # identity of _view_base (None forces a re-render)
         self._view_alpha = None  # matching alpha mask when the photo is transparent
@@ -229,6 +271,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.thumb_widgets = []  # cell frame per thumbnail (for highlight); may be None
         self.folder_widgets = []  # sub-folder rows in the top folder list
         self._thumb_job = None
+        self._loading_overlay = None    # the "please wait" screen while a folder loads
+        self._decode_pool = None        # worker pool decoding thumbnails in parallel
+        self._decode_futures = {}       # file index -> pending decode Future
         self.thumb_size = THUMB_W       # current thumbnail size (px), zoomable
         self.view_mode = "grid"         # sidebar layout: "grid" icons | "list" rows
         self.sidebar_width = THUMB_W + 30  # current sidebar width (px), drag-resizable
@@ -269,18 +314,16 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # Save the session (last folder + image) when the window is closed.
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # Undo / redo shortcuts (Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z to redo).
-        self.root.bind("<Control-z>", lambda e: self.undo())
-        self.root.bind("<Control-y>", lambda e: self.redo())
-        self.root.bind("<Control-Z>", lambda e: self.redo())  # Ctrl+Shift+Z
-
-        # [ / ] resize the heal brush (Photoshop-style), only while it is open.
-        self.root.bind("[", lambda e: self._heal_brush_key(-1))
-        self.root.bind("]", lambda e: self._heal_brush_key(1))
-
-        # Ctrl+R toggles the canvas rulers.
-        self.root.bind("<Control-r>", lambda e: self.toggle_rulers())
-        self.root.bind("<Control-R>", lambda e: self.toggle_rulers())
+        # Keyboard shortcuts dispatch by *physical* key, not by character, so
+        # they keep working under a non-Latin layout (e.g. Georgian). With such
+        # a layout Tk reports the localized letter as the keysym, so patterns
+        # like <Control-z> never match. The handlers below match the keysym OR
+        # the Windows virtual-key code (event.keycode), which stays put across
+        # layouts. See _on_ctrl_shortcut / _on_plain_key.
+        #   Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo, Ctrl+R toggle rulers.
+        self.root.bind("<Control-KeyPress>", self._on_ctrl_shortcut)
+        #   [ / ] resize the heal brush (Photoshop-style), only while it is open.
+        self.root.bind("<KeyPress>", self._on_plain_key)
 
         # Browse-mode arrow keys (only while the edit panel is closed — an open
         # panel keeps the arrows for its own controls). ←/→ step between photos
@@ -295,6 +338,43 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.load_folder(folder)
         else:
             self._restore_last_session()
+
+    # --- Keyboard shortcuts (layout-independent) ----------------------------
+
+    # Windows virtual-key codes for the shortcut keys. On Windows Tk puts the
+    # VK code in event.keycode and it does NOT change with the keyboard layout,
+    # so we use it as a fallback when a non-Latin layout hides the keysym.
+    _VK_Z, _VK_Y, _VK_R = 90, 89, 82
+    _VK_LBRACKET, _VK_RBRACKET = 219, 221
+
+    def _on_ctrl_shortcut(self, event):
+        "Ctrl shortcuts, matched by keysym or physical key (layout-independent)."
+        ks = event.keysym.lower()
+        kc = event.keycode
+        shift = bool(event.state & 0x0001)
+        if ks == "z" or kc == self._VK_Z:
+            self.redo() if shift else self.undo()   # Ctrl+Shift+Z = redo
+            return "break"
+        if ks == "y" or kc == self._VK_Y:
+            self.redo()
+            return "break"
+        if ks == "r" or kc == self._VK_R:
+            self.toggle_rulers()
+            return "break"
+        # Leave every other Ctrl combo (copy / paste / select-all, ...) alone.
+        return None
+
+    def _on_plain_key(self, event):
+        "Unmodified [ / ] resize the heal brush (a no-op while it is closed)."
+        if event.state & 0x0004:        # Control held → not ours
+            return None
+        ks = event.keysym
+        kc = event.keycode
+        if ks == "bracketleft" or kc == self._VK_LBRACKET:
+            self._heal_brush_key(-1)
+        elif ks == "bracketright" or kc == self._VK_RBRACKET:
+            self._heal_brush_key(1)
+        return None
 
     # --- Session state (last folder + image) --------------------------------
 
@@ -374,7 +454,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         if isinstance(ls, dict) and isinstance(ls.get("dir"), str) \
                 and ls.get("fmt") in ("JPEG", "PNG", "WEBP"):
             self.last_save = {"dir": ls["dir"], "fmt": ls["fmt"],
-                              "quality": int(ls.get("quality", 95))}
+                              "quality": int(ls.get("quality", 95)),
+                              "keep_meta": bool(ls.get("keep_meta", True))}
         # Cull destinations (keep + reject). Restored even if the folder no
         # longer exists — the cull action re-creates it (makedirs) on use.
         ck = state.get("cull_keep")
@@ -414,6 +495,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     def _on_close(self):
         if not self._maybe_prompt_save():
             return                       # unsaved edits + 'cancel' → keep window open
+        self._shutdown_decode_pool()     # stop any in-flight thumbnail decoding
         self._save_state()
         self.root.destroy()
 

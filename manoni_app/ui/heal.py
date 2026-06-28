@@ -16,10 +16,12 @@ is identical to when it lived directly on the class.
 
 import tkinter as tk
 
-from ..config import BAR, ACCENT, FG, FG_DIM, EDIT_PANEL_W, EDIT_PAD, CHIP_GAP
+from ..config import (BAR, ACCENT, FG_DIM, EDIT_PANEL_W, EDIT_PAD, CHIP_GAP,
+                      CHIP_BG)
 from .. import imaging
 from ..widgets import Slider
 from ..i18n import t
+from .dialogs import make_panel_chip, set_chip_active
 
 
 class HealMixin:
@@ -90,20 +92,14 @@ class HealMixin:
 
     def _heal_mode_chip(self, parent, label, mode, col):
         "One mode chip (accent-filled while its mode is active)."
-        chip = tk.Label(parent, text=t(label), bg="#2f2f2f", fg=FG, cursor="hand2",
-                        font=("Segoe UI", 8, "bold"), padx=4, pady=6)
-        chip.bind("<Button-1>", lambda e, m=mode: self._set_heal_mode(m))
-        pad = (0, CHIP_GAP // 2) if col == 0 else (CHIP_GAP // 2, 0)
-        chip.grid(row=0, column=col, sticky="ew", padx=pad)
+        chip = make_panel_chip(parent, t(label),
+                               lambda: self._set_heal_mode(mode), col, CHIP_GAP)
         self._heal_mode_chips[mode] = chip
 
     def _clone_toggle_chip(self, parent, label, key, col):
         "One clone-option toggle chip (accent-filled while on)."
-        chip = tk.Label(parent, text=t(label), bg="#2f2f2f", fg=FG, cursor="hand2",
-                        font=("Segoe UI", 8, "bold"), padx=4, pady=6)
-        chip.bind("<Button-1>", lambda e, k=key: self._toggle_clone_opt(k))
-        pad = (0, CHIP_GAP // 2) if col == 0 else (CHIP_GAP // 2, 0)
-        chip.grid(row=0, column=col, sticky="ew", padx=pad)
+        chip = make_panel_chip(parent, t(label),
+                               lambda: self._toggle_clone_opt(key), col, CHIP_GAP)
         self._clone_opt_chips[key] = chip
 
     def _toggle_clone_opt(self, key):
@@ -121,9 +117,7 @@ class HealMixin:
         "Repaint the aligned / mirror chips to match their on/off state."
         states = {"aligned": self.clone_aligned, "flip": self.clone_flip}
         for k, chip in self._clone_opt_chips.items():
-            on = states[k]
-            chip.configure(bg=ACCENT if on else "#2f2f2f",
-                           fg="#0b0b0b" if on else FG)
+            set_chip_active(chip, states[k], CHIP_BG)
 
     def _set_heal_mode(self, mode):
         "Switch retouch mode; clear any clone source so the next one is deliberate."
@@ -136,9 +130,7 @@ class HealMixin:
     def _refresh_heal_mode(self):
         "Repaint the mode chips, swap the hint, and show clone options in clone mode."
         for m, chip in self._heal_mode_chips.items():
-            active = (m == self.heal_mode)
-            chip.configure(bg=ACCENT if active else "#2f2f2f",
-                           fg="#0b0b0b" if active else FG)
+            set_chip_active(chip, m == self.heal_mode, CHIP_BG)
         if self.heal_mode == "clone":
             self._heal_hint.configure(
                 text=t("Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size."))
@@ -263,6 +255,8 @@ class HealMixin:
         self._heal_last = None
         if self.heal_mode == "clone" and not self.clone_aligned:
             self.clone_offset = None      # non-aligned: each stroke restarts at source
+        self._view_key = None             # one clean full-res rescale to settle seams
+        self._render_preview()
         return "break"
 
     def _heal_dab(self, scrx, scry):
@@ -287,13 +281,22 @@ class HealMixin:
                 feather=self.heal_feather, opacity=self.heal_opacity)
         if patched is None:
             return
+        # Snapshot the un-healed pixels the first time a stroke touches this photo,
+        # so the before/after compare can show the blemish in "before" (იყო).
+        if self._before_pil is None:
+            self._before_pil = self.current_pil.copy()
+            self._before_base_key = None
         self.current_pil.paste(patched, box)
         self._healed = True
         self._edits_saved = False
         self._grow_dirty(box)
         self._heal_last = (sx, sy)
         self._heal_cursor = (scrx, scry)
-        self._view_key = None        # mutated in place → drop the cached scaled view
+        # Patch only the dabbed box into the cached scaled view; fall back to a
+        # full re-render only if the cache can't be reused. This keeps a stroke
+        # smooth on a big photo (the old full-viewport rescale per dab froze it).
+        if not self._patch_view_base(box):
+            self._view_key = None
         self._render_preview()
 
     def _grow_dirty(self, box):

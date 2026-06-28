@@ -11,8 +11,9 @@ import shutil
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import BG, BAR, HOVER, ACCENT, FG, FG_DIM
+from ..config import BG, BAR, FG, FG_DIM
 from ..i18n import t
+from .dialogs import make_dialog_button, center_over
 
 
 class NavMixin:
@@ -72,22 +73,14 @@ class NavMixin:
         tk.Label(wrap, text=t("{fname} — save a copy to _edited?").format(fname=fname), bg=BG,
                  fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 16))
 
-        def mkbtn(text, command, primary=False):
-            bg = ACCENT if primary else BAR
-            hov = "#5ab0ff" if primary else HOVER
-            b = tk.Label(row, text=text, bg=bg, fg="#0b0b0b" if primary else FG,
-                         cursor="hand2", padx=14, pady=7,
-                         font=("Segoe UI", 9, "bold" if primary else "normal"))
-            b.bind("<Enter>", lambda e: b.configure(bg=hov))
-            b.bind("<Leave>", lambda e: b.configure(bg=bg))
-            b.bind("<Button-1>", lambda e: command())
-            return b
-
         row = tk.Frame(wrap, bg=BG)
         row.pack(anchor="e")
-        mkbtn(t("Cancel"), lambda: choose("cancel")).pack(side="right", padx=(8, 0))
-        mkbtn(t("Don't save"), lambda: choose("discard")).pack(side="right", padx=(8, 0))
-        mkbtn(t("Save"), lambda: choose("save"), primary=True).pack(side="right")
+        make_dialog_button(row, t("Cancel"), lambda: choose("cancel")).pack(
+            side="right", padx=(8, 0))
+        make_dialog_button(row, t("Don't save"), lambda: choose("discard")).pack(
+            side="right", padx=(8, 0))
+        make_dialog_button(row, t("Save"), lambda: choose("save"),
+                           primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
         dlg.bind("<Escape>", lambda e: choose("cancel"))
@@ -208,25 +201,9 @@ class NavMixin:
 
     # --- Cull configuration + help dialogs ----------------------------------
 
-    def _cull_dialog_button(self, parent, text, command, primary=False):
-        "Shared flat button for the cull dialogs (matches the Save-as dialog)."
-        bg = ACCENT if primary else BAR
-        hov = "#5ab0ff" if primary else HOVER
-        b = tk.Label(parent, text=text, bg=bg, fg="#0b0b0b" if primary else FG,
-                     cursor="hand2", padx=14, pady=7,
-                     font=("Segoe UI", 9, "bold" if primary else "normal"))
-        b.bind("<Enter>", lambda e: b.configure(bg=hov))
-        b.bind("<Leave>", lambda e: b.configure(bg=bg))
-        b.bind("<Button-1>", lambda e: command())
-        return b
-
     def _center_dialog(self, dlg):
         "Place a Toplevel centered over the main window."
-        dlg.update_idletasks()
-        dw, dh = dlg.winfo_width(), dlg.winfo_height()
-        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-        rw, rh = self.root.winfo_width(), self.root.winfo_height()
-        dlg.geometry(f"+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
+        center_over(self.root, dlg)
 
     def _cull_options_dialog(self):
         "Configure the two sort folders (keep + reject) used by the cull buttons."
@@ -264,8 +241,8 @@ class NavMixin:
                 dlg.grab_set()
                 if d:
                     var.set(d)
-            self._cull_dialog_button(row, t("Select"), pick).pack(side="right",
-                                                               padx=(6, 0))
+            make_dialog_button(row, t("Select"), pick).pack(side="right",
+                                                            padx=(6, 0))
             tk.Entry(row, textvariable=var, bg=BAR, fg=FG, insertbackground=FG,
                      relief="flat", font=("Segoe UI", 9), width=34).pack(
                          side="left", fill="x", expand=True, ipady=5)
@@ -281,9 +258,9 @@ class NavMixin:
 
         brow = tk.Frame(wrap, bg=BG)
         brow.pack(anchor="e", pady=(18, 0))
-        self._cull_dialog_button(brow, t("Cancel"), dlg.destroy).pack(
+        make_dialog_button(brow, t("Cancel"), dlg.destroy).pack(
             side="right", padx=(8, 0))
-        self._cull_dialog_button(brow, t("Save"), confirm, primary=True).pack(
+        make_dialog_button(brow, t("Save"), confirm, primary=True).pack(
             side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
@@ -347,8 +324,8 @@ class NavMixin:
 
         brow = tk.Frame(wrap, bg=BG)
         brow.pack(anchor="e", pady=(16, 0))
-        self._cull_dialog_button(brow, t("Got it"), dlg.destroy,
-                                 primary=True).pack(side="right")
+        make_dialog_button(brow, t("Got it"), dlg.destroy,
+                           primary=True).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())

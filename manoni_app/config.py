@@ -37,8 +37,13 @@ BAR       = "#262626"   # toolbar / info bar
 SIDEBAR   = "#1e1e1e"   # sidebar background
 HOVER     = "#3a3a3a"   # button hover
 ACCENT    = "#4aa3ff"   # selection / highlight
+ACCENT_HOVER = "#5ab0ff"  # brighter accent for a primary button's hover
+ON_ACCENT = "#0b0b0b"   # near-black text / icon drawn on an accent fill
 FG        = "#e6e6e6"   # primary text
 FG_DIM    = "#9a9a9a"   # secondary text
+CHIP_BG   = "#2f2f2f"   # neutral (inactive) chip / toggle background
+BORDER    = "#3a3a3a"   # 1px hairline borders, separators, popup edges
+DIVIDER   = "#333333"   # thin divider lines inside panels
 
 ICON_SIZE = 22
 THUMB_W   = 150   # default thumbnail size (px); adjustable at runtime

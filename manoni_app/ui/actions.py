@@ -27,14 +27,16 @@ import tkinter.filedialog as tkfd
 
 from PIL import Image
 
-from ..config import BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD
+from ..config import (BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD,
+                      CHIP_BG, DIVIDER)
 from .. import imaging
 from ..widgets import Tooltip
 from ..i18n import t
+from .dialogs import make_chip, set_chip_active
 
 
 # Row / button shades local to this panel (match the filters manager look).
-ROW_BG  = "#2f2f2f"
+ROW_BG  = CHIP_BG
 REC_ON  = "#5a2b2b"   # dark red while recording is armed
 
 
@@ -56,14 +58,12 @@ class ActionsMixin:
         self.user_actions = self._coerce_action_list(data)
 
     def _save_actions(self):
-        "Write self.user_actions back to ACTIONS_FILE (best effort)."
+        "Write self.user_actions back to ACTIONS_FILE (atomic; warns on failure)."
         from ..config import ACTIONS_FILE
-        try:
-            with open(ACTIONS_FILE, "w", encoding="utf-8") as fp:
-                json.dump({"manoni_actions": 1, "actions": self.user_actions},
-                          fp, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        from ..storage import save_json
+        if not save_json(ACTIONS_FILE, {"manoni_actions": 1,
+                                        "actions": self.user_actions}):
+            self.toast(t("Could not save actions"))
 
     def _coerce_action_list(self, data):
         "Accept a {actions:[…]} bundle or a bare list → clean [{name, steps}]."
@@ -359,6 +359,7 @@ class ActionsMixin:
         except OSError:
             self.toast(t("Could not create the output folder"))
             return
+        from ..storage import unique_path
         crops, live = self._resolve_action(action)
         ext = self.FMT_EXT[cfg["fmt"]]
         total, ok, fail = len(self.files), 0, 0
@@ -369,7 +370,10 @@ class ActionsMixin:
                 with Image.open(os.path.join(self.folder, fname)) as im:
                     im.load()
                     out = self._apply_action_to_image(im, crops, live)
-                dest = os.path.join(cfg["dir"], os.path.splitext(fname)[0] + ext)
+                # Don't let two sources (e.g. a.jpg + a.png → a.jpg) or a re-run
+                # silently overwrite each other — number a clashing name instead.
+                dest = unique_path(os.path.join(cfg["dir"],
+                                                os.path.splitext(fname)[0] + ext))
                 if cfg["fmt"] == "PNG":
                     out.save(dest, "PNG")
                 else:
@@ -403,17 +407,6 @@ class ActionsMixin:
             tk.Label(wrap, text=text, bg=BG, fg=FG_DIM,
                      font=("Segoe UI", 8)).pack(anchor="w", pady=(8, 2))
 
-        def style_chip(w, active):
-            w.configure(bg=ACCENT if active else BAR,
-                        fg="#0b0b0b" if active else FG)
-
-        def mkchip(parent, text, command):
-            c = tk.Label(parent, text=text, bg=BAR, fg=FG, cursor="hand2",
-                         padx=13, pady=6, font=("Segoe UI", 9))
-            c.bind("<Button-1>", lambda e: command())
-            c.pack(side="left", padx=(0, 6))
-            return c
-
         # Output folder + browse.
         heading(t("Output folder"))
         dir_var = tk.StringVar(value=st["dir"])
@@ -445,9 +438,9 @@ class ActionsMixin:
         def pick_q(q):
             st["quality"] = q
             for k, w in q_chips.items():
-                style_chip(w, k == q)
+                set_chip_active(w, k == q)
         for q in q_opts:
-            q_chips[q] = mkchip(qrow, str(q), lambda q=q: pick_q(q))
+            q_chips[q] = make_chip(qrow, str(q), lambda q=q: pick_q(q))
 
         # Format chips drive the quality visibility.
         heading(t("Format"))
@@ -458,18 +451,18 @@ class ActionsMixin:
         def pick_fmt(f):
             st["fmt"] = f
             for k, w in fmt_chips.items():
-                style_chip(w, k == f)
+                set_chip_active(w, k == f)
             if f == "PNG":
                 qbox.pack_forget()
             else:
                 qbox.pack(fill="x", anchor="w")
         for f in ("JPEG", "PNG", "WEBP"):
-            fmt_chips[f] = mkchip(fmt_row, f, lambda f=f: pick_fmt(f))
+            fmt_chips[f] = make_chip(fmt_row, f, lambda f=f: pick_fmt(f))
 
         pick_fmt(st["fmt"])
         st["quality"] = min(q_opts, key=lambda q: abs(q - st["quality"]))
         for k, w in q_chips.items():
-            style_chip(w, k == st["quality"])
+            set_chip_active(w, k == st["quality"])
 
         def confirm():
             st["dir"] = dir_var.get().strip() or os.path.join(self.folder, "_actions")
@@ -519,7 +512,7 @@ class ActionsMixin:
                                     font=("Segoe UI", 8))
         self._rec_status.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
 
-        tk.Frame(f, bg="#333333", height=1).pack(fill="x", padx=EDIT_PAD,
+        tk.Frame(f, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
                                                  pady=(4, 8))
 
         self._lbl_action_count = tk.Label(f, text="", bg=BAR, fg=FG, anchor="w",

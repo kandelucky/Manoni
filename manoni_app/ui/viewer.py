@@ -13,6 +13,7 @@ from PIL import Image, ImageTk
 
 from ..config import ACCENT, FG_DIM, BG, BAR
 from .. import imaging
+from ..i18n import t
 
 
 class ViewerMixin:
@@ -32,6 +33,8 @@ class ViewerMixin:
         self.fit_mode = True     # each photo starts fitted, un-panned
         self.pan_x = self.pan_y = 0.0
         self._view_key = None    # new photo → drop the cached scaled image
+        self._before_pil = None  # fresh photo → no heal yet, so "before" == current_pil
+        self._before_base_key = None
         self._reset_sliders()
         self._rotated = False    # fresh photo → no edits yet, nothing to save
         self._cropped = False
@@ -132,6 +135,8 @@ class ViewerMixin:
     def _preview_press(self, event):
         if self.hand_tool:                       # hand tool overrides every tool
             return self._on_pan_start(event)
+        if self.compare_mode:                    # split-line drag overrides the edit tools
+            return self._compare_drag(event)
         if self._focus_active():
             return self._focus_press(event)
         if self._heal_active():
@@ -148,6 +153,8 @@ class ViewerMixin:
     def _preview_drag(self, event):
         if self.hand_tool:
             return self._on_pan_move(event)
+        if self.compare_mode:
+            return self._compare_drag(event)
         if self._focus_active():
             return self._focus_move(event)
         if self._heal_active():
@@ -157,6 +164,8 @@ class ViewerMixin:
     def _preview_release(self, event):
         if self.hand_tool:
             return self._on_pan_end(event)
+        if self.compare_mode:                    # the line moves live on drag; nothing to finalize
+            return
         if self._focus_active():
             return self._focus_release(event)
         if self._heal_active():
@@ -165,6 +174,8 @@ class ViewerMixin:
 
     def _preview_hover(self, event):
         if self.hand_tool:                       # keep the hand cursor; no tool hover
+            return
+        if self.compare_mode:                    # keep the resize cursor; no tool hover
             return
         if self._focus_active():
             return self._focus_hover(event)
@@ -198,6 +209,34 @@ class ViewerMixin:
         self._pan_anchor = None
         self.preview.configure(cursor="hand2" if self.hand_tool else "")
 
+    # --- Before/after compare (იყო / არის) ----------------------------------
+
+    def _compare_drag(self, event):
+        "Move the split divider to the pointer (clamped to the photo's on-screen span)."
+        if self.current_pil is None:
+            return
+        vw = max(self.preview.winfo_width(), 1)
+        x = event.x
+        if self._compare_span:               # keep the line on the photo, not the gutter
+            lo, hi = self._compare_span
+            x = max(lo, min(hi, x))
+        self.compare_frac = max(0.0, min(1.0, x / vw))
+        self._render_preview()
+
+    def _compare_peek_on(self):
+        "Hold: show the full original (no edits) until the button is released."
+        if self.current_pil is None:
+            return
+        self._compare_peek = True
+        self._render_preview()
+
+    def _compare_peek_off(self):
+        "Release: drop the peek and re-render with the edits (and split, if on)."
+        if not self._compare_peek:
+            return
+        self._compare_peek = False
+        self._render_preview()
+
     # --- Rotation -----------------------------------------------------------
 
     def rotate_left(self):
@@ -213,6 +252,9 @@ class ViewerMixin:
         if self.current_pil is None:
             return
         self.current_pil = self.current_pil.transpose(transpose_op)
+        if self._before_pil is not None:   # keep the compare "before" aligned to the edit
+            self._before_pil = self._before_pil.transpose(transpose_op)
+            self._before_base_key = None
         self._rotated = True            # rotation is an edit worth offering to save
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a rotate
         self._edits_saved = False
@@ -242,6 +284,14 @@ class ViewerMixin:
             clarity=self.clarity, texture=self.texture,
             vibrance=self.vibrance, color=self.color,
             temperature=self.temperature, tint=self.tint,
+            sat_red=self.sat_red, sat_orange=self.sat_orange,
+            sat_yellow=self.sat_yellow, sat_green=self.sat_green,
+            sat_aqua=self.sat_aqua, sat_blue=self.sat_blue,
+            sat_purple=self.sat_purple, sat_magenta=self.sat_magenta,
+            gold_hue=self.gold_hue, gold_sat=self.gold_sat,
+            gold_light=self.gold_light,
+            skin_hue=self.skin_hue, skin_sat=self.skin_sat,
+            skin_light=self.skin_light,
             bw=self.bw, sepia=self.sepia,
             sharpen=self.sharpen, vignette=self.vignette, focus=self.focus)
 
@@ -260,6 +310,7 @@ class ViewerMixin:
         fast on a weak laptop. The cropped+scaled base is cached so slider edits
         only re-apply the cheap colour pass.
         """
+        self._update_peek_button()   # show/hide the corner peek button with the photo
         if self.current_pil is None:
             if self._message:
                 self._draw_message(self._message)
@@ -308,6 +359,13 @@ class ViewerMixin:
         if self._view_alpha is not None:
             bg = self._checker_bg(img.width, img.height)
             img = Image.composite(img, bg, self._view_alpha)
+        # Before/after compare: peek shows the full original; the split shows the
+        # unedited photo left of a draggable divider, the edit to its right. The
+        # span is recorded so the divider + its drag stay glued to the photo.
+        img_left = off_x + sx0 * scale
+        self._compare_span = (img_left, img_left + img.width)
+        if self._compare_peek or self.compare_mode:
+            img = self._compose_compare(img, img_left, vw)
         photo = ImageTk.PhotoImage(img)
         self.preview.delete("all")
         self.preview.create_image(off_x + sx0 * scale, off_y + sy0 * scale,
@@ -321,7 +379,106 @@ class ViewerMixin:
             self._draw_focus_overlay()
         if getattr(self, "show_rulers", True):
             self._draw_rulers(vw, vh, scale, off_x, off_y)
+        if self.compare_mode and not self._compare_peek:
+            self._draw_compare_divider(vw, vh)
         self._update_zoom_readout(scale)
+
+    def _before_view_base(self):
+        """The 'before' scaled viewport: the heal-free `_before_pil` if a stroke
+        has diverged it, else the plain `_view_base` (no heal → identical pixels).
+
+        Built at the SAME geometry as `_view_base` (same crop box + display size),
+        cached by (view key, before image) so it survives slider drags and divider
+        moves and only rebuilds on zoom/pan/heal/crop/rotate.
+        """
+        if self._before_pil is None or self._view_key is None:
+            return self._view_base
+        key = (self._view_key, id(self._before_pil))
+        if key != self._before_base_key or self._before_base is None:
+            _, _, sx0, sy0, sx1, sy1 = self._view_key
+            dw, dh = self._view_base.size
+            region = self._before_pil.crop((sx0, sy0, sx1, sy1))
+            self._before_base = region.convert("RGB").resize((dw, dh), Image.LANCZOS)
+            self._before_base_key = key
+        return self._before_base
+
+    def _compose_compare(self, img, img_left, vw):
+        """Blend the unedited 'before' into the edited `img` for compare.
+
+        "Before" (იყო) is the photo with NO slider/effect edits AND none of the
+        destructive heal/clone strokes — so a retouched blemish shows again on the
+        left. Peek replaces the whole frame with it; the split pastes its left part
+        over `img`. `img`/`before` may be a shared cache, so copy before pasting.
+        """
+        before = self._before_view_base()
+        if self._view_alpha is not None:        # match the edited frame's backdrop
+            before = Image.composite(
+                before, self._checker_bg(before.width, before.height),
+                self._view_alpha)
+        if self._compare_peek:
+            return before                       # hold → the full original
+        divider = self.compare_frac * vw
+        sp = max(0, min(img.width, int(round(divider - img_left))))
+        if sp > 0:
+            if img is self._view_base or img is before:
+                img = img.copy()
+            img.paste(before.crop((0, 0, sp, img.height)), (0, 0))
+        return img
+
+    def _draw_compare_divider(self, vw, vh):
+        "Draw the split line, a centre grab handle, and the იყო / არის tags."
+        x = self.compare_frac * vw
+        if self._compare_span:
+            lo, hi = self._compare_span
+            x = max(lo, min(hi, x))
+        c = self.preview
+        c.create_line(x, 0, x, vh, fill="#ffffff", width=1)
+        r, cy = 10, vh / 2
+        c.create_oval(x - r, cy - r, x + r, cy + r, fill=BAR, outline="#ffffff")
+        c.create_text(x, cy, text="‹ ›", fill="#ffffff", font=("Segoe UI", 9))
+        rw = self.RULER_W if getattr(self, "show_rulers", True) else 0
+        self._compare_tag(rw + 8, rw + 8, t("Before"), "nw")
+        self._compare_tag(vw - 8, rw + 8, t("After"), "ne")
+
+    def _compare_tag(self, cx, cy, text, anchor):
+        "A small white label with a 1px dark shadow, so it reads over any photo."
+        c = self.preview
+        c.create_text(cx + 1, cy + 1, text=text, fill="#000000", anchor=anchor,
+                      font=("Segoe UI", 9, "bold"))
+        c.create_text(cx, cy, text=text, fill="#ffffff", anchor=anchor,
+                      font=("Segoe UI", 9, "bold"))
+
+    def _patch_view_base(self, box):
+        """Refresh just `box` (source px) inside the cached scaled view.
+
+        A heal/clone dab mutates a tiny patch of current_pil. Re-scaling the
+        whole viewport for every dab (the old _view_key=None path) makes a
+        stroke freeze on a big photo. Instead we re-scale only the dab's box and
+        paste it into the cached _view_base, so the per-dab cost tracks the brush
+        size, not the image size. Returns False (→ caller forces a full render)
+        when the cache can't be patched in place.
+        """
+        if self._view_base is None or self._view_key is None:
+            return False
+        vid, scale, sx0, sy0, sx1, sy1 = self._view_key
+        if vid != id(self.current_pil):
+            return False
+        bx0 = max(box[0], sx0); by0 = max(box[1], sy0)
+        bx1 = min(box[2], sx1); by1 = min(box[3], sy1)
+        if bx1 <= bx0 or by1 <= by0:
+            return True                 # dab fell outside the visible region
+        dx0 = round((bx0 - sx0) * scale); dy0 = round((by0 - sy0) * scale)
+        dx1 = round((bx1 - sx0) * scale); dy1 = round((by1 - sy0) * scale)
+        dw = max(1, dx1 - dx0); dh = max(1, dy1 - dy0)
+        region = self.current_pil.crop((bx0, by0, bx1, by1))
+        if self._view_alpha is not None:
+            rgba = region.convert("RGBA").resize((dw, dh), Image.LANCZOS)
+            self._view_base.paste(rgba.convert("RGB"), (dx0, dy0))
+            self._view_alpha.paste(rgba.getchannel("A"), (dx0, dy0))
+        else:
+            patch = region.convert("RGB").resize((dw, dh), Image.LANCZOS)
+            self._view_base.paste(patch, (dx0, dy0))
+        return True
 
     # --- Transparency checkerboard ------------------------------------------
 

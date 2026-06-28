@@ -20,9 +20,10 @@ import math
 import tkinter as tk
 
 from ..config import (BAR, ACCENT, FG, FG_DIM,
-                      EDIT_PANEL_W, EDIT_PAD, CHIP_GAP)
+                      EDIT_PANEL_W, EDIT_PAD, CHIP_GAP, ON_ACCENT, CHIP_BG)
 from ..widgets import Slider, Tooltip
 from ..i18n import t
+from .dialogs import make_panel_chip, set_chip_active
 
 
 class FocusMixin:
@@ -81,11 +82,8 @@ class FocusMixin:
 
     def _focus_shape_chip(self, parent, label, shape, col):
         "One shape chip (accent-filled while its shape is active)."
-        chip = tk.Label(parent, text=t(label), bg="#2f2f2f", fg=FG, cursor="hand2",
-                        font=("Segoe UI", 8, "bold"), padx=4, pady=6)
-        chip.bind("<Button-1>", lambda e, s=shape: self._set_focus_shape(s))
-        pad = (0, CHIP_GAP // 2) if col == 0 else (CHIP_GAP // 2, 0)
-        chip.grid(row=0, column=col, sticky="ew", padx=pad)
+        chip = make_panel_chip(parent, t(label),
+                               lambda: self._set_focus_shape(shape), col, CHIP_GAP)
         self._focus_shape_chips[shape] = chip
 
     def _set_focus_shape(self, shape):
@@ -113,9 +111,7 @@ class FocusMixin:
             return
         active = (self.focus or {}).get("shape", "circle")
         for s, chip in self._focus_shape_chips.items():
-            on = (s == active)
-            chip.configure(bg=ACCENT if on else "#2f2f2f",
-                           fg="#0b0b0b" if on else FG)
+            set_chip_active(chip, s == active, CHIP_BG)
         if active == "line":
             self._focus_hint.configure(
                 text=t("Drag the band to set the focus; an edge changes its width, the end dot rotates it. Sharp in the band, blurred outside."))
@@ -325,7 +321,7 @@ class FocusMixin:
         c.create_line(cxs, cys - 6, cxs, cys + 6, fill=ACCENT)
         r = self.FOCUS_HANDLE
         c.create_rectangle(cxs + rs - r, cys - r, cxs + rs + r, cys + r,
-                           fill=ACCENT, outline="#0b0b0b")
+                           fill=ACCENT, outline=ON_ACCENT)
 
     def _draw_focus_line(self, c):
         "Line (tilt-shift) overlay: the two band edges, a falloff pair, handles."
@@ -348,9 +344,9 @@ class FocusMixin:
         c.create_line(cxs, cys, rhx, rhy, fill=ACCENT, dash=(2, 2))
         r = self.FOCUS_HANDLE
         c.create_oval(rhx - r, rhy - r, rhx + r, rhy + r,
-                      fill=ACCENT, outline="#0b0b0b")
+                      fill=ACCENT, outline=ON_ACCENT)
         # An edge resize handle on each band edge (where the across-axis crosses).
         for s in (1, -1):
             ex, ey = cxs + nx * hw * s, cys + ny * hw * s
             c.create_rectangle(ex - r, ey - r, ex + r, ey + r,
-                               fill=ACCENT, outline="#0b0b0b")
+                               fill=ACCENT, outline=ON_ACCENT)

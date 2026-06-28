@@ -23,10 +23,12 @@ import tkinter.filedialog as tkfd
 
 from PIL import Image, ImageTk
 
-from ..config import BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD
+from ..config import (BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD,
+                      CHIP_BG, BORDER, DIVIDER)
 from ..widgets import Tooltip
 from ..i18n import t
 from .. import imaging
+from .dialogs import make_dialog_button, center_over
 
 
 class FiltersMixin:
@@ -35,7 +37,12 @@ class FiltersMixin:
     # here so load/import can validate a (possibly hand-edited) file against it.
     FILTER_KEYS = ("brightness", "contrast", "color", "temperature", "tint",
                    "highlights", "shadows", "whites", "blacks", "clarity",
-                   "vibrance", "texture", "sharpen", "bw", "sepia", "vignette")
+                   "vibrance", "texture", "sharpen",
+                   "sat_red", "sat_orange", "sat_yellow", "sat_green",
+                   "sat_aqua", "sat_blue", "sat_purple", "sat_magenta",
+                   "gold_hue", "gold_sat", "gold_light",
+                   "skin_hue", "skin_sat", "skin_light",
+                   "bw", "sepia", "vignette")
     AUTO_MODES = (None, "levels", "contrast")
 
     # Standard built-in filters: a palette of popular looks shipped with the app.
@@ -70,32 +77,70 @@ class FiltersMixin:
                    "clarity": 0.95, "vignette": 1.14}),
     )
 
+    # --- Filter groups (organising the saved filters) -----------------------
+    # A filter belongs to exactly ONE group. Group IDENTITY is stored in a
+    # language-stable English form, so switching the UI language can never
+    # orphan a filter; the reserved names below are translated only for DISPLAY
+    # via t(). Custom group names are free text — stored and shown verbatim.
+    GROUP_STANDARD = "Standard"     # the built-in looks (code-defined, never in the store)
+    GROUP_MINE     = "My filters"   # default home for filters the user creates
+    GROUP_OTHERS   = "Others"       # default home for imported filters with no group
+    RESERVED_GROUPS = (GROUP_STANDARD, GROUP_MINE, GROUP_OTHERS)
+
     # --- Filter store (persisted to FILTERS_FILE) ---------------------------
 
     def _load_filters(self):
-        "Read the saved filters from FILTERS_FILE into self.user_filters."
+        "Read the saved filters + groups from FILTERS_FILE (migrating older files)."
         from ..config import FILTERS_FILE
         self.user_filters = []
+        self.filter_groups = []           # [{"name", "collapsed"}] — user/custom only
+        self._standard_collapsed = False  # the built-in 'Standard' group's fold state
         try:
             with open(FILTERS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
+            data = None
+        if data is not None:
+            for it in self._coerce_filter_list(data):
+                # On the user's OWN store a group-less filter (a v1 file) is
+                # theirs → home it in 'My filters'.
+                it["group"] = it["group"] or self.GROUP_MINE
+                self.user_filters.append(it)
+            self._load_groups(data)
+            if isinstance(data, dict):
+                self._standard_collapsed = bool(data.get("standard_collapsed"))
+        self._normalize_groups()
+
+    def _load_groups(self, data):
+        "Restore the saved group order + fold state (strings or {name,collapsed})."
+        raw = data.get("groups") if isinstance(data, dict) else None
+        if not isinstance(raw, list):
             return
-        for it in self._coerce_filter_list(data):
-            self.user_filters.append(it)
+        for g in raw:
+            if isinstance(g, str):
+                name, collapsed = g.strip(), False
+            elif isinstance(g, dict):
+                name = str(g.get("name") or "").strip()
+                collapsed = bool(g.get("collapsed"))
+            else:
+                continue
+            if name and name != self.GROUP_STANDARD and not self._group(name):
+                self.filter_groups.append({"name": name, "collapsed": collapsed})
 
     def _save_filters(self):
-        "Write self.user_filters back to FILTERS_FILE (best effort)."
+        "Write the filters + group order / fold state back to FILTERS_FILE (v2)."
         from ..config import FILTERS_FILE
-        try:
-            with open(FILTERS_FILE, "w", encoding="utf-8") as f:
-                json.dump({"manoni_filters": 1, "filters": self.user_filters},
-                          f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        from ..storage import save_json
+        ok = save_json(FILTERS_FILE, {"manoni_filters": 2,
+                                      "groups": self.filter_groups,
+                                      "standard_collapsed": self._standard_collapsed,
+                                      "filters": self.user_filters})
+        if not ok:
+            self.toast(t("Could not save filters"))
 
     def _coerce_filter_list(self, data):
-        "Accept either one filter object or a {filters:[…]} bundle → clean list."
+        "Accept one filter object or a {filters:[…]} bundle → clean list. Each item"
+        " is {name, group, values}; group is the stored group name, or None if absent."
         raw = []
         if isinstance(data, dict) and isinstance(data.get("filters"), list):
             raw = data["filters"]
@@ -110,8 +155,71 @@ class FiltersMixin:
             name = str(it.get("name") or "").strip()
             vals = self._sanitize_filter_values(it.get("values"))
             if name and vals:
-                out.append({"name": name, "values": vals})
+                grp = str(it.get("group") or "").strip() or None
+                out.append({"name": name, "group": grp, "values": vals})
         return out
+
+    # --- Group bookkeeping (order, defaults, fold state) --------------------
+
+    def _group(self, name):
+        "The stored group dict with this name, or None."
+        for g in self.filter_groups:
+            if g["name"] == name:
+                return g
+        return None
+
+    def _normalize_groups(self):
+        "Keep the group list consistent: every filter's group exists, 'My filters'"
+        " is present and first, auto 'Others' sits last and only while it is used,"
+        " no duplicates."
+        used = {fl["group"] for fl in self.user_filters}
+        # Any group a filter references but the list is missing → add it.
+        for name in used:
+            if name != self.GROUP_STANDARD and not self._group(name):
+                self.filter_groups.append({"name": name, "collapsed": False})
+        # 'Others' is automatic: keep it only while some filter lives there.
+        self.filter_groups = [g for g in self.filter_groups
+                              if g["name"] != self.GROUP_OTHERS
+                              or self.GROUP_OTHERS in used]
+        # 'My filters' always exists — it is the default home for new filters.
+        if not self._group(self.GROUP_MINE):
+            self.filter_groups.insert(0, {"name": self.GROUP_MINE,
+                                          "collapsed": False})
+        # Display order: My filters first, custom groups in between, Others last.
+        mine   = [g for g in self.filter_groups if g["name"] == self.GROUP_MINE]
+        others = [g for g in self.filter_groups if g["name"] == self.GROUP_OTHERS]
+        custom = [g for g in self.filter_groups
+                  if g["name"] not in (self.GROUP_MINE, self.GROUP_OTHERS)]
+        self.filter_groups = mine + custom + others
+
+    def _group_collapsed(self, gid):
+        "Whether a group (built-in 'Standard' or a user group) is folded."
+        if gid == self.GROUP_STANDARD:
+            return self._standard_collapsed
+        g = self._group(gid)
+        return bool(g and g["collapsed"])
+
+    def _set_group_collapsed(self, gid, value):
+        "Set a group's fold state and persist it (shared by strip + manager)."
+        if gid == self.GROUP_STANDARD:
+            self._standard_collapsed = value
+        else:
+            g = self._group(gid)
+            if g is None:
+                return
+            g["collapsed"] = value
+        self._save_filters()
+
+    def _unique_group_name(self, base):
+        "A group name not already taken and not a reserved name."
+        base = (base or "").strip() or t("Group")
+        taken = {g["name"] for g in self.filter_groups} | set(self.RESERVED_GROUPS)
+        if base not in taken:
+            return base
+        i = 2
+        while f"{base} {i}" in taken:
+            i += 1
+        return f"{base} {i}"
 
     def _sanitize_filter_values(self, vals):
         "Keep only known factors (coerced to float) + a valid auto_mode."
@@ -160,7 +268,7 @@ class FiltersMixin:
                             self._filter_edit,
                             t("Rename / refresh / delete saved filters"))
 
-        tk.Frame(f, bg="#333333", height=1).pack(fill="x", padx=EDIT_PAD,
+        tk.Frame(f, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
                                                  pady=(8, 8))
 
         self._filter_action(f, "folder-input", t("Import"),
@@ -175,7 +283,7 @@ class FiltersMixin:
 
     def _filter_action(self, parent, icon_name, label, command, tip):
         "One full-width filled action button (icon left, label) for the manager."
-        NORMAL = "#2f2f2f"
+        NORMAL = CHIP_BG
         btn = tk.Frame(parent, bg=NORMAL, cursor="hand2")
         btn.pack(fill="x", padx=EDIT_PAD, pady=3)
         inner = tk.Frame(btn, bg=NORMAL)
@@ -214,7 +322,7 @@ class FiltersMixin:
 
     FILTER_THUMB_W = 68       # logical px: the cell image's width budget
     FILTER_THUMB_H = 50       # logical px: the cell image's height budget
-    FSTRIP_BORDER  = "#3a3a3a"  # idle cell border (accent when that look is active)
+    FSTRIP_BORDER  = BORDER  # idle cell border (accent when that look is active)
 
     def _build_filter_strip(self, body):
         "Scaffold the strip (row 1, col 2). Cells are filled by _refresh_filter_strip."
@@ -223,7 +331,7 @@ class FiltersMixin:
         strip.grid_propagate(False)
         strip.configure(height=round((self.FILTER_THUMB_H + 40) * self.dpi))
         # A 1px divider on top so the strip reads as a band below the canvas.
-        tk.Frame(strip, bg="#333333", height=1).pack(side="top", fill="x")
+        tk.Frame(strip, bg=DIVIDER, height=1).pack(side="top", fill="x")
         self.filter_strip = strip
 
         # Horizontal scroll area: a canvas holding a left-packed row of cells.
@@ -248,7 +356,8 @@ class FiltersMixin:
         strip.grid_remove()            # hidden until there are filters + a photo
 
     def _refresh_filter_strip(self):
-        "Rebuild every cell for the current photo + saved filters (or hide the strip)."
+        "Rebuild the strip for the current photo: 'Original', then each non-empty"
+        " group ('Standard' built-ins + the user's groups) under a foldable caption."
         if not hasattr(self, "filter_strip"):
             return
         # Built-in filters are always present, so the strip shows whenever a photo
@@ -262,17 +371,78 @@ class FiltersMixin:
             w.destroy()
         self._filter_cells = []
         self._filter_thumb_imgs = []
-        # "Original" first: a neutral reference and a one-click way to drop the
-        # look. Then the standard built-in looks, then the user's saved filters.
+        # "Original" is pinned first: a neutral reference and a one-click way to
+        # drop the look. Then one labelled section per group; a collapsed group
+        # shows just its caption (its cells are skipped to save the row width).
         self._add_filter_cell(holder, t("Original"), {})
-        for name, vals in self.BUILTIN_FILTERS:
-            self._add_filter_cell(holder, t(name), vals)
-        for fl in self.user_filters:
-            self._add_filter_cell(holder, fl["name"], fl["values"])
+        for grp in self._strip_groups():
+            self._add_strip_separator(holder)
+            self._add_group_caption(holder, grp)
+            if not grp["collapsed"]:
+                for label, vals in grp["items"]:
+                    self._add_filter_cell(holder, label, vals)
         self.filter_strip.grid()
         self.filter_strip_canvas.xview_moveto(0.0)
         self.filter_strip_canvas.configure(
             scrollregion=self.filter_strip_canvas.bbox("all"))
+
+    def _strip_groups(self):
+        "Ordered groups for the strip: 'Standard' (built-ins) first, then every"
+        " user group that has filters. Each is {id,label,collapsed,items}; items"
+        " is a list of (cell_label, values). Empty user groups stay hidden here."
+        groups = [{"id": self.GROUP_STANDARD,
+                   "label": self._group_display(self.GROUP_STANDARD),
+                   "collapsed": self._standard_collapsed,
+                   "items": [(t(n), v) for n, v in self.BUILTIN_FILTERS]}]
+        for g in self.filter_groups:
+            items = [(fl["name"], fl["values"]) for fl in self.user_filters
+                     if fl["group"] == g["name"]]
+            if not items:
+                continue
+            groups.append({"id": g["name"],
+                           "label": self._group_display(g["name"]),
+                           "collapsed": g["collapsed"], "items": items})
+        return groups
+
+    def _group_display(self, name):
+        "A group's shown name: reserved names translate, custom names stay verbatim."
+        return t(name) if name in self.RESERVED_GROUPS else name
+
+    def _add_strip_separator(self, parent):
+        "A thin vertical divider that sets one strip group off from the next."
+        sep = tk.Frame(parent, bg=DIVIDER, width=1)
+        sep.pack(side="left", fill="y", padx=(8, 0), pady=10)
+        sep.bind("<MouseWheel>", lambda e: self.filter_strip_canvas.xview_scroll(
+            int(-e.delta / 120), "units"))
+        return sep
+
+    def _add_group_caption(self, parent, grp):
+        "A clickable caption (chevron + group name) that folds / unfolds the group."
+        frame = tk.Frame(parent, bg=BAR, cursor="hand2")
+        frame.pack(side="left", padx=(6, 2))     # pack centres it vertically
+        img = self.icon("chevron-right" if grp["collapsed"] else "chevron-down",
+                        size=12)
+        parts = [frame]
+        if img is not None:
+            ic = tk.Label(frame, image=img, bg=BAR)
+            ic.pack(side="left", padx=(0, 3))
+            parts.append(ic)
+        tx = tk.Label(frame, text=grp["label"], bg=BAR, fg=FG_DIM,
+                      font=("Segoe UI", 8, "bold"))
+        tx.pack(side="left")
+        parts.append(tx)
+        for w in parts:
+            w.bind("<Button-1>", lambda e, gid=grp["id"]: self._toggle_group(gid))
+            w.bind("<Enter>", lambda e: tx.configure(fg=FG))
+            w.bind("<Leave>", lambda e: tx.configure(fg=FG_DIM))
+            w.bind("<MouseWheel>", lambda e: self.filter_strip_canvas.xview_scroll(
+                int(-e.delta / 120), "units"))
+        return frame
+
+    def _toggle_group(self, gid):
+        "Fold / unfold a strip group (built-in 'Standard' or a user group); persist."
+        self._set_group_collapsed(gid, not self._group_collapsed(gid))
+        self._refresh_filter_strip()
 
     def _filter_thumb_base(self):
         "A small RGB copy of the current photo, cached by photo identity (or None)."
@@ -385,7 +555,9 @@ class FiltersMixin:
         if name is None:
             return
         name = self._unique_filter_name(name)
+        # New filters land in 'My filters' by default; the manager moves them.
         self.user_filters.append({"name": name,
+                                  "group": self.GROUP_MINE,
                                   "values": self._sanitize_filter_values(
                                       self._edit_state())})
         self._save_filters()
@@ -396,77 +568,335 @@ class FiltersMixin:
     # --- Edit (rename / refresh / delete) -----------------------------------
 
     def _filter_edit(self):
-        "Open the manage dialog: rename, refresh-from-current, or delete filters."
-        if not self.user_filters:
-            self.toast(t("No filters saved yet"))
-            return
+        "Open the grouped manager (collapsible groups; … menu on each group/filter)."
         self._open_filter_manager()
 
     def _open_filter_manager(self):
+        "The modeless grouped manager. Modeless so the user can still nudge the"
+        " sliders (e.g. before 'Refresh from current edit') with it open."
+        existing = getattr(self, "_fmgr_dlg", None)
+        if existing is not None and existing.winfo_exists():
+            existing.lift(); existing.focus_force(); return
         dlg, body = self._filter_dialog(t("Edit filters"))
+        self._fmgr_dlg = dlg
 
         def redraw():
+            self._close_filter_popup()
             for w in body.winfo_children():
                 w.destroy()
-            if not self.user_filters:
-                tk.Label(body, text=t("No filters left"), bg=BG, fg=FG_DIM,
-                         font=("Segoe UI", 9)).pack(pady=20)
-                return
-            for fl in list(self.user_filters):
-                self._manager_row(body, fl, redraw)
+            # Top action: start a new (empty) group.
+            self._filter_action_plain(body, "folder-plus", t("New group"),
+                                      lambda: self._do_new_group(redraw))
+            tk.Frame(body, bg=DIVIDER, height=1).pack(fill="x", pady=(6, 2))
+            # 'Standard' (built-ins, read-only) first, then the user's groups.
+            self._manager_group(body, self.GROUP_STANDARD, redraw)
+            for g in list(self.filter_groups):
+                self._manager_group(body, g["name"], redraw)
 
         redraw()
-        self._place_filter_dialog(dlg)
+        self._place_modeless(dlg)
 
-    def _manager_row(self, parent, fl, redraw):
-        "One row in the manage dialog: name + rename / refresh / delete icons."
+    def _manager_group(self, parent, name, redraw):
+        "One group section: a foldable header (with a … menu) + its filter rows."
+        builtin = (name == self.GROUP_STANDARD)
+        collapsed = self._group_collapsed(name)
+        if builtin:
+            rows = [(t(n), None) for n, _ in self.BUILTIN_FILTERS]
+        else:
+            rows = [(fl["name"], fl) for fl in self.user_filters
+                    if fl["group"] == name]
+
+        header = tk.Frame(parent, bg=BAR, cursor="hand2")
+        header.pack(fill="x", pady=(8, 0))
+        # The … menu sits at the right; pack it first so the title can expand.
+        self._kebab(header, lambda anc, gn=name: self._group_menu(anc, gn, redraw))
+        chev = self.icon("chevron-right" if collapsed else "chevron-down", size=13)
+        hcells = [header]
+        if chev is not None:
+            ic = tk.Label(header, image=chev, bg=BAR)
+            ic.pack(side="left", padx=(8, 4))
+            hcells.append(ic)
+        title = tk.Label(header,
+                         text=f"{self._group_display(name)}  ({len(rows)})",
+                         bg=BAR, fg=FG, anchor="w", font=("Segoe UI", 9, "bold"))
+        title.pack(side="left", fill="x", expand=True, pady=6)
+        hcells.append(title)
+        for w in hcells:
+            w.bind("<Button-1>", lambda e, gn=name: self._manager_toggle(gn, redraw))
+
+        if collapsed:
+            return
+        if not rows:
+            tk.Label(parent, text=t("No filters in this group"), bg=BAR,
+                     fg=FG_DIM, font=("Segoe UI", 8), anchor="w") \
+                .pack(fill="x", padx=(32, 8), pady=(1, 1))
+            return
+        for label, fl in rows:
+            self._manager_filter_row(parent, label, fl, redraw, builtin)
+
+    def _manager_toggle(self, name, redraw):
+        "Fold / unfold a group from the manager (keeps the strip in sync)."
+        self._set_group_collapsed(name, not self._group_collapsed(name))
+        self._refresh_filter_strip()
+        redraw()
+
+    def _manager_filter_row(self, parent, label, fl, redraw, builtin):
+        "One filter row inside a group: indented name + (user filters) a … menu."
         row = tk.Frame(parent, bg=BAR)
-        row.pack(fill="x", pady=2)
-        tk.Label(row, text=fl["name"], bg=BAR, fg=FG, anchor="w",
-                 font=("Segoe UI", 9)).pack(side="left", fill="x", expand=True,
-                                            padx=(10, 6), pady=6)
+        row.pack(fill="x")
+        if not builtin:
+            self._kebab(row, lambda anc, f=fl: self._filter_menu(anc, f, redraw))
+        tk.Label(row, text=label, bg=BAR, fg=FG if not builtin else FG_DIM,
+                 anchor="w", font=("Segoe UI", 9)).pack(
+            side="left", fill="x", expand=True, padx=(32, 6), pady=5)
 
-        def rename():
-            new = self._ask_filter_name(t("Rename"), fl["name"])
-            if new and new != fl["name"]:
-                fl["name"] = self._unique_filter_name(new)
-                self._save_filters()
-                self._refresh_filter_count()
-                self._refresh_filter_strip()
-                redraw()
-
-        def refresh():
-            fl["values"] = self._sanitize_filter_values(self._edit_state())
-            self._save_filters()
-            self._refresh_filter_strip()
-            self.toast(t("Filter refreshed: {name}").format(name=fl["name"]))
-
-        def delete():
-            self.user_filters.remove(fl)
-            self._save_filters()
-            self._refresh_filter_count()
-            self._refresh_filter_strip()
-            redraw()
-
-        self._row_icon(row, "pencil",     rename,
-                       t("Rename"))
-        self._row_icon(row, "refresh-cw", refresh,
-                       t("Refresh from current edit"))
-        self._row_icon(row, "trash-2",    delete, t("Delete"))
-
-    def _row_icon(self, parent, icon_name, command, tip):
-        "A small hover-highlighted icon button inside a dialog row."
-        img = self.icon(icon_name, size=15)
+    def _kebab(self, parent, open_menu):
+        "A small '…' button on the right of a row that opens its popup menu."
+        img = self.icon("ellipsis", size=15)
         if img is not None:
             b = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
         else:
-            b = tk.Label(parent, text="•", bg=BAR, fg=FG_DIM, cursor="hand2")
+            b = tk.Label(parent, text="⋯", bg=BAR, fg=FG, cursor="hand2",
+                         font=("Segoe UI", 12, "bold"))
         b.pack(side="right", padx=(0, 8))
         b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
         b.bind("<Leave>", lambda e: b.configure(bg=BAR))
-        b.bind("<Button-1>", lambda e: command())
-        b._tip = Tooltip(b, tip)
+        b.bind("<Button-1>", lambda e, w=b: open_menu(w))
         return b
+
+    # --- The … menus (group / filter / move) --------------------------------
+
+    def _group_menu(self, anchor, name, redraw):
+        "The … menu for a group. Reserved groups expose Export only."
+        export = ("share-2", t("Export group"), lambda: self._export_group(name))
+        if name in self.RESERVED_GROUPS:
+            specs = [export]
+        else:
+            specs = [("pencil", t("Rename group"),
+                      lambda: self._do_rename_group(name, redraw)),
+                     export, ("sep",),
+                     ("trash-2", t("Delete group"),
+                      lambda: self._do_delete_group(name, redraw))]
+        self._popup_menu(anchor, specs)
+
+    def _filter_menu(self, anchor, fl, redraw):
+        "The … menu for one user filter: rename / move / refresh / delete."
+        self._popup_menu(anchor, [
+            ("pencil", t("Rename"), lambda: self._do_rename_filter(fl, redraw)),
+            ("move", t("Move to group"), lambda: self._move_menu(anchor, fl, redraw)),
+            ("refresh-cw", t("Refresh from current edit"),
+             lambda: self._do_refresh_filter(fl)),
+            ("sep",),
+            ("trash-2", t("Delete"), lambda: self._do_delete_filter(fl, redraw)),
+        ])
+
+    def _move_menu(self, anchor, fl, redraw):
+        "A second popup: the groups this filter can move into (+ a new group)."
+        specs = []
+        for g in self.filter_groups:
+            if g["name"] == fl["group"]:
+                continue
+            specs.append((None, self._group_display(g["name"]),
+                          lambda gn=g["name"]: self._do_move_filter(fl, gn, redraw)))
+        if specs:
+            specs.append(("sep",))
+        specs.append(("folder-plus", t("New group…"),
+                      lambda: self._do_move_to_new_group(fl, redraw)))
+        self._popup_menu(anchor, specs)
+
+    # --- Group / filter operations (called from the menus) ------------------
+
+    def _do_new_group(self, redraw):
+        name = self._ask_text(t("New group"), t("Group name"))
+        if not name:
+            return
+        self.filter_groups.append({"name": self._unique_group_name(name),
+                                   "collapsed": False})
+        self._normalize_groups()
+        self._save_filters()
+        self._refresh_filter_strip()
+        redraw()
+
+    def _do_rename_group(self, name, redraw):
+        g = self._group(name)
+        if g is None:
+            return
+        new = self._ask_text(t("Rename group"), t("Group name"), name)
+        if not new or new == name:
+            return
+        new = self._unique_group_name(new)
+        for fl in self.user_filters:
+            if fl["group"] == name:
+                fl["group"] = new
+        g["name"] = new
+        self._save_filters()
+        self._refresh_filter_strip()
+        redraw()
+
+    def _do_delete_group(self, name, redraw):
+        members = [fl for fl in self.user_filters if fl["group"] == name]
+        if not self._confirm(
+                t("Delete the group “{name}” and its {n} filter(s)?").format(
+                    name=name, n=len(members)), ok_label=t("Delete")):
+            return
+        self.user_filters = [fl for fl in self.user_filters
+                             if fl["group"] != name]
+        self.filter_groups = [g for g in self.filter_groups
+                              if g["name"] != name]
+        self._normalize_groups()
+        self._save_filters()
+        self._refresh_filter_count()
+        self._refresh_filter_strip()
+        redraw()
+
+    def _export_group(self, name):
+        "Export every filter in a group (built-ins for 'Standard') to a file."
+        if name == self.GROUP_STANDARD:
+            filters = [{"name": n, "group": self.GROUP_STANDARD, "values": dict(v)}
+                       for n, v in self.BUILTIN_FILTERS]
+        else:
+            filters = [fl for fl in self.user_filters if fl["group"] == name]
+        if not filters:
+            self.toast(t("No filters in this group"))
+            return
+        self._export_filters(filters)
+
+    def _do_rename_filter(self, fl, redraw):
+        new = self._ask_text(t("Rename"), t("Filter name"), fl["name"])
+        if new and new != fl["name"]:
+            fl["name"] = self._unique_filter_name(new)
+            self._save_filters()
+            self._refresh_filter_strip()
+            redraw()
+
+    def _do_refresh_filter(self, fl):
+        fl["values"] = self._sanitize_filter_values(self._edit_state())
+        self._save_filters()
+        self._refresh_filter_strip()
+        self.toast(t("Filter refreshed: {name}").format(name=fl["name"]))
+
+    def _do_delete_filter(self, fl, redraw):
+        if fl in self.user_filters:
+            self.user_filters.remove(fl)
+        self._normalize_groups()
+        self._save_filters()
+        self._refresh_filter_count()
+        self._refresh_filter_strip()
+        redraw()
+
+    def _do_move_filter(self, fl, group_name, redraw):
+        fl["group"] = group_name
+        self._normalize_groups()
+        self._save_filters()
+        self._refresh_filter_strip()
+        redraw()
+
+    def _do_move_to_new_group(self, fl, redraw):
+        name = self._ask_text(t("New group"), t("Group name"))
+        if not name:
+            return
+        name = self._unique_group_name(name)
+        self.filter_groups.append({"name": name, "collapsed": False})
+        fl["group"] = name
+        self._normalize_groups()
+        self._save_filters()
+        self._refresh_filter_strip()
+        redraw()
+
+    # --- Popup menu + confirm + modeless placement --------------------------
+
+    def _popup_menu(self, anchor, specs):
+        "A borderless dark dropdown under `anchor`. Each spec is ('sep',) or"
+        " (icon_name|None, label, command). Closes on pick / Escape / focus-out."
+        self._close_filter_popup()
+        pop = tk.Toplevel(self.root)
+        pop.overrideredirect(True)
+        pop.configure(bg=BORDER)          # 1px hairline border via the inset
+        self._filter_popup = pop
+        inner = tk.Frame(pop, bg=BAR)
+        inner.pack(padx=1, pady=1)
+
+        def add_row(icon_name, label, command):
+            r = tk.Frame(inner, bg=BAR, cursor="hand2")
+            r.pack(fill="x")
+            cells = [r]
+            if icon_name:
+                img = self.icon(icon_name, size=14)
+                if img is not None:
+                    ic = tk.Label(r, image=img, bg=BAR)
+                    ic.pack(side="left", padx=(10, 8), pady=6)
+                    cells.append(ic)
+            lab = tk.Label(r, text=label, bg=BAR, fg=FG, anchor="w",
+                           font=("Segoe UI", 9))
+            lab.pack(side="left", padx=((0 if icon_name else 12), 18), pady=6)
+            cells.append(lab)
+            for w in cells:
+                w.bind("<Enter>", lambda e: [c.configure(bg=HOVER) for c in cells])
+                w.bind("<Leave>", lambda e: [c.configure(bg=BAR) for c in cells])
+                w.bind("<Button-1>",
+                       lambda e, c=command: (self._close_filter_popup(), c()))
+
+        for spec in specs:
+            if spec[0] == "sep":
+                tk.Frame(inner, bg=BORDER, height=1).pack(fill="x")
+            else:
+                add_row(*spec)
+
+        pop.update_idletasks()
+        x = anchor.winfo_rootx() + anchor.winfo_width() - pop.winfo_width()
+        y = anchor.winfo_rooty() + anchor.winfo_height() + 2
+        pop.geometry(f"+{max(0, x)}+{y}")
+        pop.bind("<Escape>", lambda e: self._close_filter_popup())
+        pop.bind("<FocusOut>", lambda e: self._close_filter_popup())
+        pop.focus_force()                    # so clicking elsewhere closes it
+
+    def _close_filter_popup(self):
+        "Tear down the open … popup, if any."
+        pop = getattr(self, "_filter_popup", None)
+        if pop is not None:
+            self._filter_popup = None
+            try:
+                pop.destroy()
+            except tk.TclError:
+                pass
+
+    def _confirm(self, message, ok_label=None):
+        "A small modal yes/no over the main window. Returns True if confirmed."
+        result = {"ok": False}
+        dlg = tk.Toplevel(self.root)
+        dlg.title(t("Please confirm"))
+        dlg.configure(bg=BG)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap.pack(fill="both", expand=True)
+        tk.Label(wrap, text=message, bg=BG, fg=FG, anchor="w", justify="left",
+                 wraplength=self._edit_dpi_w(280),
+                 font=("Segoe UI", 10)).pack(anchor="w")
+
+        def ok():
+            result["ok"] = True
+            dlg.destroy()
+        btnrow = tk.Frame(wrap, bg=BG)
+        btnrow.pack(anchor="e", pady=(16, 0))
+        self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(side="right",
+                                                                  padx=(8, 0))
+        self._dialog_btn(btnrow, ok_label or t("OK"), ok,
+                         primary=True).pack(side="right")
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.bind("<Return>", lambda e: ok())
+        self._place_filter_dialog(dlg)
+        return result["ok"]
+
+    def _place_modeless(self, dlg):
+        "Center a NON-modal dialog over the main window (no grab / no wait)."
+        dlg.update_idletasks()
+        dw, dh = dlg.winfo_width(), dlg.winfo_height()
+        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+        rw, rh = self.root.winfo_width(), self.root.winfo_height()
+        dlg.geometry(f"+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
+        dlg.lift()
+        dlg.focus_force()
 
     # --- Import / Export ----------------------------------------------------
 
@@ -486,9 +916,12 @@ class FiltersMixin:
                 continue
             for fl in self._coerce_filter_list(data):
                 fl["name"] = self._unique_filter_name(fl["name"])
+                # Keep the group the file carries; a group-less import → 'Others'.
+                fl["group"] = fl["group"] or self.GROUP_OTHERS
                 self.user_filters.append(fl)
                 added += 1
         if added:
+            self._normalize_groups()       # surface any new group ('Others' etc.)
             self._save_filters()
             self._refresh_filter_count()
             self._refresh_filter_strip()
@@ -507,7 +940,7 @@ class FiltersMixin:
             self._filter_action_plain(
                 body, "folder-output", t("All in one file"),
                 lambda: (self._export_filters(self.user_filters), dlg.destroy()))
-            tk.Frame(body, bg="#333333", height=1).pack(fill="x", pady=(6, 6))
+            tk.Frame(body, bg=DIVIDER, height=1).pack(fill="x", pady=(6, 6))
 
         for fl in self.user_filters:
             self._filter_action_plain(
@@ -563,6 +996,10 @@ class FiltersMixin:
 
     def _ask_filter_name(self, title, default=""):
         "Modal dark prompt for a filter name. Returns the trimmed text or None."
+        return self._ask_text(title, t("Filter name"), default)
+
+    def _ask_text(self, title, label, default=""):
+        "Modal dark text prompt (title + a labelled field). Trimmed text or None."
         result = {"val": None}
         dlg = tk.Toplevel(self.root)
         dlg.title(title)
@@ -572,7 +1009,7 @@ class FiltersMixin:
 
         wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("Filter name"), bg=BG, fg=FG,
+        tk.Label(wrap, text=label, bg=BG, fg=FG,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 8))
 
         e = tk.Entry(wrap, bg=BAR, fg=FG, insertbackground=FG, width=24,
@@ -601,16 +1038,9 @@ class FiltersMixin:
         return result["val"]
 
     def _dialog_btn(self, parent, text, command, primary=False):
-        "A small dialog button (accent if primary), matching the crop dialog."
-        bg = ACCENT if primary else BAR
-        hov = "#5ab0ff" if primary else HOVER
-        b = tk.Label(parent, text=text, bg=bg, fg="#0b0b0b" if primary else FG,
-                     cursor="hand2", padx=14, pady=7,
-                     font=("Segoe UI", 9, "bold" if primary else "normal"))
-        b.bind("<Enter>", lambda e: b.configure(bg=hov))
-        b.bind("<Leave>", lambda e: b.configure(bg=bg))
-        b.bind("<Button-1>", lambda e: command())
-        return b
+        "Shared flat dialog button (see ui/dialogs.py); kept as a thin alias "
+        "because it's called as self._dialog_btn across several mixins."
+        return make_dialog_button(parent, text, command, primary)
 
     def _filter_dialog(self, title):
         "A modal dark dialog with a scrollable body. Returns (dialog, body frame)."
@@ -659,11 +1089,7 @@ class FiltersMixin:
 
     def _place_filter_dialog(self, dlg):
         "Center a dialog over the main window, then make it modal."
-        dlg.update_idletasks()
-        dw, dh = dlg.winfo_width(), dlg.winfo_height()
-        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-        rw, rh = self.root.winfo_width(), self.root.winfo_height()
-        dlg.geometry(f"+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
+        center_over(self.root, dlg)
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.grab_set()
         dlg.focus_set()

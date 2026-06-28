@@ -9,13 +9,14 @@ import tkinter as tk
 import tkinter.ttk as ttk
 
 from ..config import (ACCENT, BAR, BG, FG, FG_DIM, HOVER,
-                      EDIT_PANEL_W, EDIT_PAD)
+                      EDIT_PANEL_W, EDIT_PAD, ON_ACCENT, ACCENT_HOVER, CHIP_BG)
 from ..widgets import Tooltip
 from ..i18n import t
+from .dialogs import make_dialog_button, center_over
 
 
 # Local palette for the crop panel (kept here so the rest of the app is unaffected).
-CHIP_BG   = "#2f2f2f"   # neutral preset / row background
+# CHIP_BG (neutral preset / row background) is the shared one from config.
 SEG_TRACK = "#202020"   # segmented-control trough
 SEL_BG    = "#26415c"   # accent-tinted fill for a selected row
 DARK_BTN  = "#141414"   # the black "Cancel" button
@@ -207,8 +208,8 @@ class CropMixin:
             bg = ACCENT if active else CHIP_BG
             card.configure(bg=bg)
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, "#0b0b0b" if active else GLYPH_DIM)
-            tx.configure(bg=bg, fg="#0b0b0b" if active else FG_DIM)
+            self._draw_ratio_glyph(glyph, ratio, ON_ACCENT if active else GLYPH_DIM)
+            tx.configure(bg=bg, fg=ON_ACCENT if active else FG_DIM)
 
         def hover(on):
             if card is self._crop_btn_active:
@@ -523,12 +524,12 @@ class CropMixin:
 
         apply_btn = tk.Frame(bar, bg=ACCENT, cursor="hand2")
         apply_btn.pack(side="left", fill="both", expand=True, padx=(8, 0))
-        atx = tk.Label(apply_btn, text=t("Crop"), bg=ACCENT, fg="#0b0b0b",
+        atx = tk.Label(apply_btn, text=t("Crop"), bg=ACCENT, fg=ON_ACCENT,
                        font=("Segoe UI", 10, "bold"))
         atx.pack(expand=True, pady=10)
         for w in (apply_btn, atx):
             w.bind("<Button-1>", lambda e: self.apply_crop())
-            w.bind("<Enter>", lambda e: [x.configure(bg="#5ab0ff")
+            w.bind("<Enter>", lambda e: [x.configure(bg=ACCENT_HOVER)
                                          for x in (apply_btn, atx)])
             w.bind("<Leave>", lambda e: [x.configure(bg=ACCENT)
                                          for x in (apply_btn, atx)])
@@ -622,19 +623,10 @@ class CropMixin:
         btnrow = tk.Frame(wrap, bg=BG)
         btnrow.pack(anchor="e", pady=(14, 0))
 
-        def mkbtn(text_, command, primary=False):
-            bg = ACCENT if primary else BAR
-            hov = "#5ab0ff" if primary else HOVER
-            b = tk.Label(btnrow, text=text_, bg=bg, fg="#0b0b0b" if primary else FG,
-                         cursor="hand2", padx=14, pady=7,
-                         font=("Segoe UI", 9, "bold" if primary else "normal"))
-            b.bind("<Enter>", lambda e: b.configure(bg=hov))
-            b.bind("<Leave>", lambda e: b.configure(bg=bg))
-            b.bind("<Button-1>", lambda e: command())
-            return b
-
-        mkbtn(t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
-        mkbtn(t("Save"), confirm, primary=True).pack(side="right")
+        make_dialog_button(btnrow, t("Cancel"), dlg.destroy).pack(
+            side="right", padx=(8, 0))
+        make_dialog_button(btnrow, t("Save"), confirm, primary=True).pack(
+            side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Return>", lambda e: confirm())
@@ -645,11 +637,7 @@ class CropMixin:
         else:
             e_w.select_range(0, "end")
 
-        dlg.update_idletasks()
-        dw, dh = dlg.winfo_width(), dlg.winfo_height()
-        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-        rw, rh = self.root.winfo_width(), self.root.winfo_height()
-        dlg.geometry(f"+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
+        center_over(self.root, dlg)
         dlg.grab_set()
         dlg.focus_set()
         self.root.wait_window(dlg)
@@ -743,6 +731,9 @@ class CropMixin:
         if getattr(self, "_recording", False):
             self._record_crop_step(box, iw, ih)   # capture as a macro step
         self.current_pil = self.current_pil.crop(box)
+        if self._before_pil is not None:   # keep the compare "before" aligned to the edit
+            self._before_pil = self._before_pil.crop(box)
+            self._before_base_key = None
         self._cropped = True
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a crop
         self._edits_saved = False
@@ -934,4 +925,4 @@ class CropMixin:
         r = self.CROP_HANDLE
         for hx, hy in self._crop_handles().values():
             c.create_rectangle(hx - r, hy - r, hx + r, hy + r,
-                               fill=ACCENT, outline="#0b0b0b")
+                               fill=ACCENT, outline=ON_ACCENT)

@@ -29,6 +29,12 @@ CATALOG_KA = {
     # --- Toolbar / window chrome ------------------------------------------
     "Open folder": "ფოლდერის გახსნა",
     "Hand tool — drag to pan the photo": "ხელის ხელსაწყო — გადაათრიე სურათი",
+    "Compare before / after — click to split, hold to see the original":
+        "შედარება იყო / არის — დააწკაპუნე ხაზისთვის, ეჭირე ორიგინალის სანახავად",
+    "Before": "იყო",
+    "After": "არის",
+    "Hold to see the original — press for before, release for after":
+        "ეჭირე ორიგინალის სანახავად — დააჭირე იყო, აუშვი არის",
     "Undo (Ctrl+Z)": "დაბრუნება (Ctrl+Z)",
     "Redo (Ctrl+Y)": "გამეორება (Ctrl+Y)",
     "Menu": "მენიუ",
@@ -52,6 +58,8 @@ CATALOG_KA = {
     "Zoom out": "დაპატარავება",
     "Zoom in": "გადიდება",
     "No photos found": "ფოტოები ვერ მოიძებნა",
+    "Please wait…": "დაელოდეთ…",
+    "Loading photos…": "სურათები იტვირთება…",
 
     # --- Edit panel: sections, sliders, auto tone (editpanel.py) ----------
     "Heal & Clone": "შეკეთება & კლონი",
@@ -93,6 +101,26 @@ CATALOG_KA = {
     "Color": "ფერი",
     "Texture": "ტექსტურა",
     "Sharpen": "სიმკვეთრე",
+    # --- Color mixer (HSL) section (editpanel.py) -------------------------
+    "Color mixer": "ფერების მიქსერი",
+    "Colors": "ფერები",
+    "Saturation": "გაჯერება",
+    "Red": "წითელი",
+    "Orange": "ნარინჯისფერი",
+    "Yellow": "ყვითელი",
+    "Green": "მწვანე",
+    "Aqua": "ცისფერი",
+    "Blue": "ლურჯი",
+    "Purple": "იისფერი",
+    "Magenta": "მაჯენტა",
+    "Gold": "ოქრო",
+    "Gold hue": "ოქროს ელფერი",
+    "Gold saturation": "ოქროს გაჯერება",
+    "Gold shine": "ოქროს ბზინვარება",
+    "Skin": "კანი",
+    "Skin hue": "კანის ელფერი",
+    "Skin saturation": "კანის გაჯერება",
+    "Skin brightness": "კანის სიკაშკაშე",
     "Black & White": "შავ-თეთრი",
     "Sepia": "სეპია",
     "Vignette": "ვინიეტი",
@@ -140,6 +168,7 @@ CATALOG_KA = {
     "Save filters": "ფილტრების შენახვა",
     "Exported {n} filter(s)": "ექსპორტი დასრულდა: {n} ფილტრი",
     "Could not write the file": "ფაილის ჩაწერა ვერ მოხერხდა",
+    "Could not save filters": "ფილტრების შენახვა ვერ მოხერხდა",
     "Close": "დახურვა",
 
     # --- Filter preview strip (filters.py) --------------------------------
@@ -156,6 +185,26 @@ CATALOG_KA = {
     "Vintage": "ვინტაჟი",
     "Matte": "მქრქალი",
     "Mono": "მონო",
+
+    # --- Filter group names (filters.py reserved groups) ------------------
+    "Standard": "სტანდარტული",
+    "My filters": "ჩემი ფილტრები",
+    "Others": "დანარჩენი",
+
+    # --- Filter groups manager (filters.py) -------------------------------
+    "New group": "ახალი ჯგუფი",
+    "New group…": "ახალი ჯგუფი…",
+    "Group name": "ჯგუფის სახელი",
+    "Group": "ჯგუფი",
+    "Rename group": "ჯგუფის გადარქმევა",
+    "Delete group": "ჯგუფის წაშლა",
+    "Export group": "ჯგუფის ექსპორტი",
+    "Move to group": "ჯგუფში გადატანა",
+    "No filters in this group": "ამ ჯგუფში ფილტრები არ არის",
+    "Please confirm": "დაადასტურე",
+    "Delete the group “{name}” and its {n} filter(s)?":
+        "წავშალო ჯგუფი „{name}“ და მისი {n} ფილტრი?",
+    "OK": "კარგი",
 
     # --- Actions / macros (actions.py) ------------------------------------
     "Actions": "მოქმედებები",
@@ -187,6 +236,7 @@ CATALOG_KA = {
     "Could not create the output folder": "გამოსატანი ფოლდერი ვერ შეიქმნა",
     "Done — {ok} saved, {fail} failed  ·  {dir}":
         "დასრულდა — {ok} შენახულია, {fail} ჩავარდა  ·  {dir}",
+    "Could not save actions": "მოქმედებების შენახვა ვერ მოხერხდა",
 
     # --- Crop tool (crop.py) ----------------------------------------------
     "Free": "თავისუფ.",
@@ -344,6 +394,43 @@ CATALOG_KA = {
     "Language added: {name}": "ენა დაემატა: {name}",
     "No languages to export yet": "ჯერ საექსპორტო ენა არ არის",
     "Exported → {name}": "ექსპორტი დასრულდა → {name}",
+
+    # --- Metadata: keep/strip toggle + photo info window (metadata.py) -----
+    "Photo info (metadata)": "ფოტოს ინფო (მეტამონაცემები)",
+    "Keep metadata (camera info, GPS, colour profile)":
+        "მეტამონაცემის შენახვა (კამერა, GPS, ფერის პროფილი)",
+    "Photo info": "ფოტოს ინფო",
+    "File": "ფაილი",
+    "Dimensions": "ზომები",
+    "Megapixels": "მეგაპიქსელი",
+    "Colour mode": "ფერის რეჟიმი",
+    "File size": "ფაილის ზომა",
+    "Colour profile": "ფერის პროფილი",
+    "Profile": "პროფილი",
+    "Size": "ზომა",
+    "embedded": "ჩაშენებული",
+    "Camera": "კამერა",
+    "Make": "მწარმოებელი",
+    "Model": "მოდელი",
+    "Lens": "ობიექტივი",
+    "Software": "პროგრამა",
+    "Capture": "გადაღება",
+    "Date taken": "გადაღების თარიღი",
+    "Shutter": "ჩამკეტი",
+    "Aperture": "დიაფრაგმა",
+    "Focal length": "ფოკუსური მანძილი",
+    "Exposure bias": "ექსპოზიციის კომპენსაცია",
+    "Location": "მდებარეობა",
+    "Coordinates": "კოორდინატები",
+    "Altitude": "სიმაღლე",
+    "This photo has no embedded metadata (no colour profile or EXIF).":
+        "ამ ფოტოს არ აქვს ჩაშენებული მეტამონაცემი (არც ფერის პროფილი, არც EXIF).",
+    "Delete metadata": "წაშალე მონაცემები",
+    "Permanently remove the colour profile and all EXIF (including GPS location) "
+    "from “{name}”?\n\nThe pixels are kept exactly; this can't be undone.":
+        "სამუდამოდ წავშალო ფერის პროფილი და მთელი EXIF (GPS მდებარეობის ჩათვლით) "
+        "ფაილიდან „{name}“?\n\nპიქსელები უცვლელად რჩება; ეს შეუქცევადია.",
+    "Metadata removed → {name}": "მონაცემები წაშლილია → {name}",
 }
 
 # Register the built-in Georgian pack, then any user-imported packs on disk (so a
