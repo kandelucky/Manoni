@@ -4,6 +4,7 @@ Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
 """
 
+import io
 import os
 import tkinter as tk
 import tkinter.filedialog as tkfd
@@ -45,6 +46,30 @@ class SaveMixin:
             extra["exif"] = exif.tobytes()
         return extra
 
+    def _to_srgb(self, img, icc):
+        """Convert `img` (RGB pixels in the source ICC space) to sRGB.
+
+        The save normally only CARRIES the source profile across; a wide-gamut
+        photo (Adobe RGB / ProPhoto / Display P3) then looks wrong on the web,
+        where browsers, Facebook and Instagram often ignore the embedded profile.
+        This re-maps the pixels into sRGB so they look right untagged.
+
+        Returns (converted_img, srgb_icc_bytes). If the source is already sRGB —
+        or colour management fails for any reason — returns (img, icc) unchanged:
+        a save must never break over colour conversion."""
+        try:
+            from PIL import ImageCms
+            src = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            if "srgb" in (ImageCms.getProfileDescription(src) or "").lower():
+                return img, icc                    # already sRGB → nothing to do
+            srgb = ImageCms.createProfile("sRGB")
+            out = ImageCms.profileToProfile(img, src, srgb, outputMode="RGB")
+            if out is None:
+                return img, icc
+            return out, ImageCms.ImageCmsProfile(srgb).tobytes()
+        except Exception:
+            return img, icc
+
     def _write_save(self, cfg, base):
         """Apply the live edits to the FULL-RES original and write ONE file using
         cfg = {dir, fmt, quality}, named `base` + the format's extension. The
@@ -59,6 +84,15 @@ class SaveMixin:
             # Carry ICC profile + EXIF across, unless this save strips metadata.
             extra = self._export_meta() if cfg.get("keep_meta", True) else {}
             img = self._apply_edits(self.current_pil.convert("RGB"))
+            # Convert wide-gamut colours into sRGB for the web, if asked. Needs the
+            # source profile to convert FROM; an untagged photo is already sRGB.
+            if cfg.get("to_srgb"):
+                icc = (self.current_pil.info or {}).get("icc_profile")
+                if icc:
+                    img, srgb_icc = self._to_srgb(img, icc)
+                    if cfg.get("keep_meta", True):
+                        extra["icc_profile"] = srgb_icc   # re-tag as sRGB
+                    # stripped metadata → leave untagged (viewers assume sRGB)
             if fmt == "PNG":
                 img.save(out, "PNG", **extra)      # lossless; quality not applicable
             else:
@@ -100,6 +134,7 @@ class SaveMixin:
               "fmt": seed.get("fmt") or default_fmt,
               "quality": min(q_opts, key=lambda q: abs(q - int(seed.get("quality", 95)))),
               "keep_meta": bool(seed.get("keep_meta", True)),
+              "to_srgb": bool(seed.get("to_srgb", False)),
               "name": "", "quick": False, "ok": False}
 
         dlg = tk.Toplevel(self.root)
@@ -180,6 +215,7 @@ class SaveMixin:
         # Keep camera/colour metadata (ICC + EXIF). Quick save arms this config.
         meta_chk = checkbox(t("Keep metadata (camera info, GPS, colour profile)"),
                             "keep_meta")
+        srgb_chk = checkbox(t("Convert colours to sRGB (best for web)"), "to_srgb")
         chk = checkbox(t("Use this config for quick save"), "quick")
 
         # --- Format chips (drive the extension label + quality visibility) ---
@@ -200,6 +236,7 @@ class SaveMixin:
             fmt_chips[f] = make_chip(fmt_row, f, lambda f=f: pick_fmt(f))
 
         meta_chk.pack(anchor="w", pady=(14, 0))    # below format/quality
+        srgb_chk.pack(anchor="w", pady=(8, 0))
         chk.pack(anchor="w", pady=(8, 0))
         pick_fmt(st["fmt"])                        # initial styling + quality visibility
         for k, w in q_chips.items():
@@ -235,7 +272,7 @@ class SaveMixin:
         if not st["ok"]:
             return False
         cfg = {"dir": st["dir"], "fmt": st["fmt"], "quality": st["quality"],
-               "keep_meta": st["keep_meta"]}
+               "keep_meta": st["keep_meta"], "to_srgb": st["to_srgb"]}
         out = self._write_save(cfg, st["name"])
         if not out:
             return False

@@ -354,6 +354,8 @@ CATALOG_KA = {
     "Quality": "ხარისხი",
     "Use this config for quick save":
         "გამოვიყენე ეს კონფიგი სწრაფი შენახვისთვის",
+    "Convert colours to sRGB (best for web)":
+        "ფერების sRGB-ში გადაყვანა (ვებისთვის საუკეთესო)",
     "Format": "ფორმატი",
     "Saved → {name}": "შენახულია → {name}",
 
