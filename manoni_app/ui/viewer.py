@@ -327,12 +327,12 @@ class ViewerMixin:
             sharpen=self.sharpen, vignette=self.vignette, focus=self.focus,
             texts=list(self.texts))
 
-    def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None):
+    def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None, fast=False):
         "Apply the live edit factors via the pure imaging module."
         return imaging.apply_edits(
             img, self._edits(), auto_luts=self._auto_luts, scale=scale,
             src_box=src_box, full_size=full_size, vig_cache=self._vig_cache,
-            focus_cache=self._focus_cache)
+            focus_cache=self._focus_cache, fast=fast)
 
     # Long side (display px) below which a draft render is pointless: the viewport
     # is already small enough that the full edit pass is cheap.
@@ -347,17 +347,20 @@ class ViewerMixin:
         denoise, grain, text) then cost a quarter as much, so the photo still
         tracks the slider live, just a touch softer until the drag settles. On
         release a full render (this path with `_interacting` False) replaces it.
-        Small viewports skip the draft — they are already fast at full size."""
+        Small viewports skip the draft — they are already fast at full size.
+        With Fast preview on, the drag also drops the heavy filters (fast=True);
+        the release render (not interacting) brings them back at full quality."""
         base = self._view_base
+        fast = self._interacting and getattr(self, "fast_preview", True)
         if self._interacting and max(base.size) > self.DRAFT_MIN_SIDE:
             dw, dh = base.size
             q = self.DRAFT_FACTOR
             small = base.resize((max(1, dw // q), max(1, dh // q)), Image.BILINEAR)
-            edited = self._apply_edits(small, scale / q, src_box, full_size)
+            edited = self._apply_edits(small, scale / q, src_box, full_size, fast=fast)
             if edited.size != (dw, dh):
                 edited = edited.resize((dw, dh), Image.BILINEAR)
             return edited
-        return self._apply_edits(base, scale, src_box, full_size)
+        return self._apply_edits(base, scale, src_box, full_size, fast=fast)
 
     def _schedule_preview(self):
         """Coalesce a burst of slider-drag renders into one.

@@ -329,6 +329,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._checker_size = (0, 0)
         self.show_rulers = True  # top + left pixel rulers (Ctrl+R); persisted
         self.show_filter_strip = True  # the filter-preview filmstrip; persisted
+        self.show_histogram = True  # the edit panel's live histogram; persisted
+        self.fast_preview = True  # drop heavy filters during a slider drag; persisted
         self._message = None     # placeholder text shown when no photo is loaded
         self.icons = {}          # name -> PhotoImage (kept alive)
         self._folder_imgs = {}   # cached small folder glyph for the list rows (kept alive)
@@ -487,6 +489,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "grid_tile": self.grid_tile,
                  "show_rulers": self.show_rulers,
                  "show_filter_strip": self.show_filter_strip,
+                 "show_histogram": self.show_histogram,
+                 "fast_preview": self.fast_preview,
                  "restore_session": self.restore_session,
                  "restore_photo": self.restore_photo,
                  "confirm_reject": self.confirm_reject,
@@ -555,7 +559,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.show_rulers = sr
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
-                    "warn_unsaved", "show_filter_strip"):
+                    "warn_unsaved", "show_filter_strip", "show_histogram",
+                    "fast_preview"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)

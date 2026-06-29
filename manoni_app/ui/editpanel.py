@@ -64,6 +64,7 @@ class EditPanelMixin:
         # One swappable content frame per section, stacked in this holder.
         self.section_content = tk.Frame(panel, bg=BAR)
         self.section_content.pack(side="top", fill="both", expand=True)
+        self._refresh_histogram()    # honour the "Show histogram" setting
         self.sections = {
             "basic":   self._build_basic_section(self.section_content),
             "crop":    self._build_crop_section(self.section_content),
@@ -78,6 +79,19 @@ class EditPanelMixin:
             "actions": self._build_actions_section(self.section_content),
         }
         self.sections[self.active_section].pack(fill="both", expand=True)
+
+    def _refresh_histogram(self):
+        "Show or hide the panel's live histogram per the General setting."
+        hist = getattr(self, "histogram", None)
+        if hist is None:
+            return
+        if getattr(self, "show_histogram", True):
+            if not hist.canvas.winfo_manager():   # re-insert above the section content
+                hist.pack(side="top", fill="x", padx=EDIT_PAD, pady=(8, 4),
+                          before=self.section_content)
+            self._update_histogram()
+        else:
+            hist.canvas.pack_forget()
 
     def _build_basic_section(self, parent):
         "Basic Edits: auto-fix buttons + grouped live sliders (Photoshop order)."

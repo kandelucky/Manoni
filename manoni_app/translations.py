@@ -442,9 +442,19 @@ CATALOG_KA = {
     "Show filter strip": "ფილტრების ზოლის ჩვენება",
     "The row of filter previews under the photo.":
         "ფილტრების გადახედვების ზოლი ფოტოს ქვეშ.",
+    "Show histogram": "ჰისტოგრამის ჩვენება",
+    "The live tonal graph at the top of the edit panel.":
+        "ცოცხალი ტონალური გრაფიკი რედაქტირების პანელის თავში.",
     "Show pixel rulers": "სახაზავების ჩვენება",
     "The top and left rulers over the photo (Ctrl+R).":
         "ზედა და მარცხენა სახაზავები ფოტოზე (Ctrl+R).",
+    "Performance": "წარმადობა",
+    "Fast preview while dragging": "სწრაფი გადახედვა თრევისას",
+    "Skip the heavy filters (clarity, sharpen, denoise, dehaze, focus, grain) "
+    "while a slider is dragged; full quality returns the moment you let go.":
+        "სლაიდერის თრევისას გამოტოვებს მძიმე ფილტრებს (სიმკვეთრე, გამახვილება, "
+        "ხმაურის ჩახშობა, ნისლი, ფოკუსი, მარცვალი); სრული ხარისხი ხელის "
+        "აშვებისთანავე ბრუნდება.",
     "On launch": "გაშვებისას",
     "Reopen the last folder": "ბოლო ფოლდერის ხელახლა გახსნა",
     "Jump back to the last photo": "ბოლო ფოტოზე დაბრუნება",

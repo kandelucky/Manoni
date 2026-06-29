@@ -871,8 +871,13 @@ def apply_color_mixer(img, e):
 # --- The full edit pass ------------------------------------------------------
 
 def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
-                vig_cache=None, focus_cache=None):
-    "Apply the live edit factors `e`. Cheap on the small preview, exact on full-res."
+                vig_cache=None, focus_cache=None, fast=False):
+    """Apply the live edit factors `e`. Cheap on the small preview, exact on full-res.
+
+    `fast` skips the heavy convolution passes (denoise, dehaze, clarity, texture,
+    sharpen/blur, focus blur, grain) so a slider drag stays fluid; the cheap tone
+    and colour passes still track live. The next non-fast render restores them.
+    """
     # Geometry for position-dependent effects (vignette). Default: `img` IS the
     # whole photo (the full-res save path). The preview passes the visible box.
     if full_size is None:
@@ -894,15 +899,15 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
     lut = tone_lut(e)
     if lut is not None:
         img = img.point(lut * len(img.getbands()))   # same table for each band
-    if e.denoise > 0.0:
+    if e.denoise > 0.0 and not fast:
         # Clean noise BEFORE the detail pass, so clarity/texture/sharpen below
         # crisp the cleaned pixels rather than amplifying the speckle.
         img = apply_denoise(img, e.denoise, scale)
-    if e.dehaze != 1.0:
+    if e.dehaze != 1.0 and not fast:
         # Atmospheric-haze clear/add: a global tone+saturation move, before the
         # local-contrast (clarity/texture) and colour passes refine it.
         img = apply_dehaze(img, e.dehaze - 1.0)
-    if e.clarity != 1.0:
+    if e.clarity != 1.0 and not fast:
         # Midtone local contrast. Like blur, the radius is in full-res pixels
         # and scaled to the preview's display pixels so on-screen matches save.
         amt = e.clarity - 1.0
@@ -914,7 +919,7 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
             # Negative = soft glow: blend toward a large-radius blur.
             soft = img.filter(ImageFilter.GaussianBlur(radius))
             img = Image.blend(img, soft, min(0.7, -amt * 0.6))
-    if e.texture != 1.0:
+    if e.texture != 1.0 and not fast:
         # Medium-frequency detail. Small radius (scaled to display px like
         # clarity/blur, so preview matches save). Positive sharpens surface
         # detail but skips diffs below the threshold (noise / flat tone);
@@ -975,22 +980,22 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
         # Colour grade: warm/cool tint the highlights and shadows separately
         # (sits with the toning effects, after any B&W / sepia conversion).
         img = apply_split_tone(img, e.split_hi - 1.0, e.split_sh - 1.0)
-    if e.sharpen > 1.0:
+    if e.sharpen > 1.0 and not fast:
         # Right of neutral = sharpen (1.0→2.0 maps to Sharpness 1.0→3.0).
         img = ImageEnhance.Sharpness(img).enhance(1.0 + (e.sharpen - 1.0) * 2.0)
-    elif e.sharpen < 1.0:
+    elif e.sharpen < 1.0 and not fast:
         # Left of neutral = Gaussian blur. The radius is in full-res pixels;
         # scale it to the preview's display pixels so on-screen blur matches
         # what the saved full-res file will get.
         radius = (1.0 - e.sharpen) * MAX_BLUR * scale
         if radius > 0.1:
             img = img.filter(ImageFilter.GaussianBlur(radius))
-    if e.focus:
+    if e.focus and not fast:
         img = apply_focus_blur(img, e.focus, scale, src_box, focus_cache)
     if e.vignette != 1.0:
         img = apply_vignette(img, e.vignette - 1.0, scale, src_box, full_size,
                              vig_cache)
-    if e.grain > 0.0:
+    if e.grain > 0.0 and not fast:
         # Grain goes LAST of the looks — on top of the whole image (after focus
         # blur and vignette), the way real film grain sits over the photo.
         img = apply_grain(img, e.grain, scale)

@@ -489,6 +489,16 @@ class SettingsMixin:
         _Toggle(r, self.dpi, on=getattr(self, "show_filter_strip", True),
                 command=pick_filters).pack()
 
+        r = self._set_row(p, t("Show histogram"),
+                          t("The live tonal graph at the top of the edit panel."))
+
+        def pick_histogram(on):
+            self.show_histogram = on
+            self._save_state()
+            self._refresh_histogram()            # show / hide the graph live
+        _Toggle(r, self.dpi, on=getattr(self, "show_histogram", True),
+                command=pick_histogram).pack()
+
         r = self._set_row(p, t("Show pixel rulers"),
                           t("The top and left rulers over the photo (Ctrl+R)."))
 
@@ -497,6 +507,14 @@ class SettingsMixin:
                 self.toggle_rulers()             # re-renders + persists itself
         _Toggle(r, self.dpi, on=getattr(self, "show_rulers", True),
                 command=pick_rulers).pack()
+
+        self._set_group(p, t("Performance"))
+        r = self._set_row(p, t("Fast preview while dragging"),
+                          t("Skip the heavy filters (clarity, sharpen, denoise, "
+                            "dehaze, focus, grain) while a slider is dragged; "
+                            "full quality returns the moment you let go."))
+        _Toggle(r, self.dpi, on=getattr(self, "fast_preview", True),
+                command=lambda on: self._set_pref("fast_preview", on)).pack()
 
         self._set_group(p, t("On launch"))
         r = self._set_row(p, t("Reopen the last folder"))
@@ -753,6 +771,9 @@ class SettingsMixin:
             self.toggle_rulers()
         self.show_filter_strip = True                # filter strip default = on
         self._refresh_filter_strip()
+        self.show_histogram = True                   # histogram default = on
+        self._refresh_histogram()
+        self.fast_preview = True                      # fast preview default = on
         self.last_save = {"dir": "", "fmt": "JPEG", "quality": 95,
                           "keep_meta": True, "to_srgb": False}
         self._save_state()
