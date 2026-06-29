@@ -37,12 +37,12 @@ class FiltersMixin:
     # here so load/import can validate a (possibly hand-edited) file against it.
     FILTER_KEYS = ("brightness", "contrast", "color", "temperature", "tint",
                    "highlights", "shadows", "whites", "blacks", "clarity",
-                   "vibrance", "texture", "sharpen",
+                   "vibrance", "texture", "sharpen", "denoise", "dehaze",
                    "sat_red", "sat_orange", "sat_yellow", "sat_green",
                    "sat_aqua", "sat_blue", "sat_purple", "sat_magenta",
                    "gold_hue", "gold_sat", "gold_light",
                    "skin_hue", "skin_sat", "skin_light",
-                   "bw", "sepia", "vignette", "grain")
+                   "bw", "sepia", "vignette", "grain", "split_hi", "split_sh")
     AUTO_MODES = (None, "levels", "contrast")
 
     # Standard built-in filters: a palette of popular looks shipped with the app.

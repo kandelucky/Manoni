@@ -78,6 +78,35 @@ SEPIA_RAMP = ((0.843, 40), (0.765, 25), (0.588, 10))   # R, G, B: gray*scale + o
 GRAIN_MAX_SIGMA = 40.0
 GRAIN_SIZE      = 1.5
 
+# Noise reduction (high-ISO clean-up). The ugly part of digital noise is CHROMA
+# — random colour specks; luminance noise reads as natural film-like grain. So
+# we work in YCbCr and median-filter the chroma (Cb/Cr) HARD, where there is
+# little real detail to lose, while touching luma (Y) only gently so edges and
+# texture stay sharp. Median beats Gaussian on impulse/speckle noise. The window
+# is in full-res px, scaled to the preview's display px (like blur/grain) so the
+# preview tracks the saved file. LUMA_MAX caps how far luma is smoothed.
+DENOISE_CHROMA_SIZE = 5.0   # full-res median window (px) for chroma at full slider
+DENOISE_LUMA_SIZE   = 3.0   # gentler luma median window (px) at full slider
+DENOISE_LUMA_MAX    = 0.6   # max luma blend fraction (keep detail) at a full slider
+
+# Dehaze: approximate atmospheric-haze removal (Pillow has no true dark-channel
+# prior, so this is a tasteful stand-in). Positive (+) CLEARS haze — pull the
+# black point up to kill the milky veil, raise contrast, and re-saturate (haze
+# washes colour out); negative (-) ADDS haze — lift the blacks, soften contrast
+# and desaturate, for a soft atmospheric look. Global point/enhance ops, so it
+# is scale-free (preview = save).
+DEHAZE_BLACK    = 34    # black-point shift (0–255) at a full slider
+DEHAZE_CONTRAST = 0.45  # contrast change at a full slider
+DEHAZE_COLOR    = 0.45  # saturation change at a full slider
+
+# Split-tone (colour grading): tint the SHADOWS and HIGHLIGHTS with independent
+# warm↔cool shifts — the cinematic "teal & orange" look and its kin. Each amount
+# is signed -1..+1: + warms (toward orange, R↑/B↓), - cools (toward teal/blue,
+# R↓/B↑), exactly the temperature axis but applied through a luminance mask so
+# the highlight tone touches only bright pixels and the shadow tone only dark
+# ones — the midtones (skin) stay cleaner. SPLIT_MAX = the per-channel push.
+SPLIT_MAX = 38.0   # max per-channel push (0–255) at a full slider
+
 
 @dataclass
 class Edits:
@@ -96,6 +125,9 @@ class Edits:
     clarity:     float = 1.0
     texture:     float = 1.0
     vibrance:    float = 1.0
+    # Dehaze: 1.0 = neutral; amount = factor - 1.0 in [-1, 1] (+ clears haze, -
+    # adds it). Approximate (Pillow has no dark-channel prior). See apply_dehaze.
+    dehaze:      float = 1.0
     color:       float = 1.0
     temperature: float = 1.0
     tint:        float = 1.0
@@ -119,12 +151,21 @@ class Edits:
     skin_hue:    float = 1.0
     skin_sat:    float = 1.0
     skin_light:  float = 1.0
+    # Noise reduction: 1.0 = off (kept at 1.0 so it shares the slider/factor
+    # plumbing), down to 0.0 here it is OFF and 1.0 here would be full — see the
+    # editpanel slider, which rests this at 0.0 (off → full). See apply_denoise.
+    denoise:     float = 0.0
     bw:          float = 0.0
     sepia:       float = 0.0
     sharpen:     float = 1.0
     vignette:    float = 1.0
     # Film grain: 0.0 = off, up to 1.0 = full strength. See apply_grain.
     grain:       float = 0.0
+    # Split-tone (colour grading): warm↔cool tint for highlights / shadows.
+    # 1.0 = neutral; amount = factor - 1.0 in [-1, 1] (+ warm, - cool). See
+    # apply_split_tone.
+    split_hi:    float = 1.0
+    split_sh:    float = 1.0
     # Selective "focus" blur (Fotor-style depth of field): a circle kept sharp
     # while everything outside it is Gaussian-blurred. None = off, else a dict
     # {cx, cy, r (source px), blur 0..1, feather 0..1}. See apply_focus_blur.
@@ -275,6 +316,92 @@ def apply_grain(img, amount, scale):
     hi = noise.point(lambda x: x - 128 if x > 128 else 0).convert("RGB")
     lo = noise.point(lambda x: 128 - x if x < 128 else 0).convert("RGB")
     return ImageChops.subtract(ImageChops.add(img, hi), lo)
+
+
+# --- Noise reduction ---------------------------------------------------------
+
+def _median_scaled(chan, size_px, scale):
+    "MedianFilter at `size_px` full-res px, scaled to display px (odd int >= 3)."
+    s = int(round(size_px * scale))
+    if s % 2 == 0:
+        s += 1
+    s = max(3, s)
+    return chan.filter(ImageFilter.MedianFilter(s))
+
+
+def apply_denoise(img, amount, scale):
+    """Reduce high-ISO noise. `amount` 0..1 = strength. Chroma noise (the random
+    colour speckle) is removed aggressively with a median filter on Cb/Cr; luma
+    is smoothed only lightly (capped by DENOISE_LUMA_MAX) so real detail / edges
+    survive — luminance grain is far less objectionable than colour blotches.
+    The median window is in full-res px, scaled to the preview's display px so
+    the preview tracks the saved full-res file. Pure Pillow (YCbCr median)."""
+    a = max(0.0, min(1.0, amount))
+    if a <= 0.0:
+        return img
+    y, cb, cr = img.convert("YCbCr").split()
+    # Chroma: lean on the median hard (chroma carries little detail), blend by `a`.
+    cb = Image.blend(cb, _median_scaled(cb, DENOISE_CHROMA_SIZE, scale), a)
+    cr = Image.blend(cr, _median_scaled(cr, DENOISE_CHROMA_SIZE, scale), a)
+    # Luma: a gentle median, blended in only up to DENOISE_LUMA_MAX so texture
+    # and edges stay crisp.
+    y = Image.blend(y, _median_scaled(y, DENOISE_LUMA_SIZE, scale),
+                    a * DENOISE_LUMA_MAX)
+    return Image.merge("YCbCr", (y, cb, cr)).convert("RGB")
+
+
+# --- Split-tone (colour grading) ---------------------------------------------
+
+def apply_split_tone(img, hi_amt, sh_amt):
+    """Warm/cool tint the highlights by `hi_amt` and shadows by `sh_amt`, each
+    signed -1..+1 (+ warm / - cool). The tint is the temperature axis (R up & B
+    down for warm) pushed through a luminance mask — squared so it concentrates
+    at each tonal end and fades through the midtones — so the highlight tone
+    only colours bright pixels and the shadow tone only dark ones. Pure Pillow;
+    reuses `_shift_weighted` (the HSL mixer's weighted additive offset)."""
+    if hi_amt == 0.0 and sh_amt == 0.0:
+        return img
+    img = img.convert("RGB")
+    lum = img.convert("L")
+    r, g, b = img.split()
+    if hi_amt != 0.0:
+        w = lum.point(lambda x: int(round((x / 255.0) ** 2 * 255)))   # bright end
+        push = hi_amt * SPLIT_MAX
+        r = _shift_weighted(r, w, +push)
+        b = _shift_weighted(b, w, -push)
+    if sh_amt != 0.0:
+        w = lum.point(lambda x: int(round((1.0 - x / 255.0) ** 2 * 255)))  # dark end
+        push = sh_amt * SPLIT_MAX
+        r = _shift_weighted(r, w, +push)
+        b = _shift_weighted(b, w, -push)
+    return Image.merge("RGB", (r, g, b))
+
+
+# --- Dehaze ------------------------------------------------------------------
+
+def apply_dehaze(img, amount):
+    """Clear (or add) atmospheric haze. `amount` signed -1..+1: + removes haze
+    (deepen the black point, lift contrast, re-saturate), - adds it (lift the
+    blacks, soften contrast, desaturate). A Pillow-only approximation of the
+    dark-channel dehaze — global point + enhance ops, so it is scale-free."""
+    a = max(-1.0, min(1.0, amount))
+    if a == 0.0:
+        return img
+    img = img.convert("RGB")
+    bp = abs(a) * DEHAZE_BLACK
+    if a > 0:
+        # Clear: clip the bottom `bp` levels to black, then rescale up — this
+        # pulls down the milky veil that haze lays over the shadows.
+        sc = 255.0 / (255.0 - bp)
+        lut = [max(0, min(255, int(round((i - bp) * sc)))) for i in range(256)]
+    else:
+        # Haze: compress the whole range into [bp, 255] — lifts the blacks and
+        # flattens contrast, the classic washed-out look.
+        lut = [int(round(bp + i * (255.0 - bp) / 255.0)) for i in range(256)]
+    img = img.point(lut * 3)
+    img = ImageEnhance.Contrast(img).enhance(1.0 + a * DEHAZE_CONTRAST)
+    img = ImageEnhance.Color(img).enhance(1.0 + a * DEHAZE_COLOR)
+    return img
 
 
 # --- Selective focus blur (depth of field) -----------------------------------
@@ -630,6 +757,14 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
     lut = tone_lut(e)
     if lut is not None:
         img = img.point(lut * len(img.getbands()))   # same table for each band
+    if e.denoise > 0.0:
+        # Clean noise BEFORE the detail pass, so clarity/texture/sharpen below
+        # crisp the cleaned pixels rather than amplifying the speckle.
+        img = apply_denoise(img, e.denoise, scale)
+    if e.dehaze != 1.0:
+        # Atmospheric-haze clear/add: a global tone+saturation move, before the
+        # local-contrast (clarity/texture) and colour passes refine it.
+        img = apply_dehaze(img, e.dehaze - 1.0)
     if e.clarity != 1.0:
         # Midtone local contrast. Like blur, the radius is in full-res pixels
         # and scaled to the preview's display pixels so on-screen matches save.
@@ -699,6 +834,10 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
             gray.point(lambda x: max(0, min(255, int(x * bs + bo)))),
         ))
         img = Image.blend(img, toned, e.sepia)
+    if e.split_hi != 1.0 or e.split_sh != 1.0:
+        # Colour grade: warm/cool tint the highlights and shadows separately
+        # (sits with the toning effects, after any B&W / sepia conversion).
+        img = apply_split_tone(img, e.split_hi - 1.0, e.split_sh - 1.0)
     if e.sharpen > 1.0:
         # Right of neutral = sharpen (1.0→2.0 maps to Sharpness 1.0→3.0).
         img = ImageEnhance.Sharpness(img).enhance(1.0 + (e.sharpen - 1.0) * 2.0)
@@ -869,3 +1008,74 @@ def clone_region(img, dst_cx, dst_cy, src_cx, src_cy, radius,
         a = max(0.0, min(1.0, opacity))
         mask = mask.point(lambda v: int(round(v * a)))
     return Image.composite(src, target, mask), box
+
+
+# --- Perspective / keystone correction ---------------------------------------
+# Fix converging verticals (a building shot from below) or horizontals. The
+# corrected image is a PROJECTIVE warp: the output rectangle samples a trapezoid
+# of the source. Because that trapezoid stays INSIDE the source, the output is
+# always fully filled — no empty corners to crop or fill. KEYSTONE_MAX caps how
+# far an edge is pinched (a fraction of that dimension) at a full ±slider. The
+# warp is defined in image-fraction terms, so it is scale-free: applying it to
+# the small fitted preview and to the full-res photo gives the identical result.
+
+KEYSTONE_MAX = 0.30   # max edge inset as a fraction of W/H, at a full ±1 slider
+
+
+def _solve_linear(A, b):
+    "Solve the n×n system A·x = b by Gauss-Jordan with partial pivoting (no numpy)."
+    n = len(A)
+    m = [list(row) + [b[i]] for i, row in enumerate(A)]
+    for col in range(n):
+        piv = max(range(col, n), key=lambda r: abs(m[r][col]))
+        if abs(m[piv][col]) < 1e-12:
+            return None                       # singular (degenerate quad)
+        m[col], m[piv] = m[piv], m[col]
+        pv = m[col][col]
+        for c in range(col, n + 1):
+            m[col][c] /= pv
+        for r in range(n):
+            if r != col and m[r][col] != 0.0:
+                f = m[r][col]
+                for c in range(col, n + 1):
+                    m[r][c] -= f * m[col][c]
+    return [m[i][n] for i in range(n)]
+
+
+def perspective_coeffs(out_pts, in_pts):
+    """The 8 PERSPECTIVE coefficients for Image.transform: for each OUTPUT corner
+    in `out_pts` give the INPUT point in `in_pts` it should sample from. Returns
+    (a,b,c,d,e,f,g,h) such that output (X,Y) maps to input
+    ((aX+bY+c)/(gX+hY+1), (dX+eY+f)/(gX+hY+1)); None if the quad is degenerate."""
+    A, bvec = [], []
+    for (X, Y), (x, y) in zip(out_pts, in_pts):
+        A.append([X, Y, 1, 0, 0, 0, -x * X, -x * Y]); bvec.append(x)
+        A.append([0, 0, 0, X, Y, 1, -y * X, -y * Y]); bvec.append(y)
+    return _solve_linear(A, bvec)
+
+
+def apply_perspective(img, v, h):
+    """Keystone-correct `img`: `v` vertical, `h` horizontal, each signed -1..+1.
+    v>0 widens the top (fixes verticals that converge upward), v<0 widens the
+    bottom; h>0 widens the left, h<0 the right. The output is the same size and
+    fully filled (the sampled trapezoid lies inside the source). Scale-free, so
+    the fitted-preview warp matches the full-res commit. Pure Pillow."""
+    if v == 0.0 and h == 0.0:
+        return img
+    if img.mode in ("P", "1"):
+        img = img.convert("RGB")
+    w, hh = img.size
+    kx = KEYSTONE_MAX * w
+    ky = KEYSTONE_MAX * hh
+    vt = kx * v if v > 0 else 0.0     # inset each TOP corner in x (v>0)
+    vb = -kx * v if v < 0 else 0.0    # inset each BOTTOM corner in x (v<0)
+    hl = ky * h if h > 0 else 0.0     # inset each LEFT corner in y (h>0)
+    hr = -ky * h if h < 0 else 0.0    # inset each RIGHT corner in y (h<0)
+    # Input trapezoid (TL, TR, BR, BL) sampled across the full output rectangle.
+    in_pts = [(vt, hl), (w - vt, hr), (w - vb, hh - hr), (vb, hh - hl)]
+    out_pts = [(0, 0), (w, 0), (w, hh), (0, hh)]
+    coeffs = perspective_coeffs(out_pts, in_pts)
+    if coeffs is None:
+        return img
+    return img.transform((w, hh), Image.PERSPECTIVE, coeffs,
+                         resample=Image.BICUBIC)

@@ -108,10 +108,12 @@ CATALOG_KA = {
     "Blacks": "შავები",
     "Detail & Color": "დეტალი და ფერი",
     "Clarity": "სიცხადე",
+    "Dehaze": "ნისლის მოცილება",
     "Vibrance": "სიხასხასე",
     "Color": "ფერი",
     "Texture": "ტექსტურა",
     "Sharpen": "სიმკვეთრე",
+    "Noise reduction": "ხმაურის შემცირება",
     # --- Color mixer (HSL) section (editpanel.py) -------------------------
     "Color mixer": "ფერების მიქსერი",
     "Colors": "ფერები",
@@ -136,6 +138,9 @@ CATALOG_KA = {
     "Sepia": "სეპია",
     "Vignette": "ვინიეტი",
     "Film grain": "ფირის მარცვალი",
+    "Split tone": "გაყოფილი ტონი",
+    "Highlights tone": "ნათლების ტონი",
+    "Shadows tone": "ჩრდილების ტონი",
     "Soon": "მალე",
     "Open / collapse the panel": "პანელის გახსნა / დაკეცვა",
     "Heal": "შეკეთება",
@@ -263,6 +268,23 @@ CATALOG_KA = {
     "Angle": "კუთხე",
     "Tilt to level the horizon (the crop trims the corners)":
         "დახარე ჰორიზონტის გასასწორებლად (მოჭრა კუთხეებს მოაჭრის)",
+    # --- Perspective / keystone tool (perspective.py) --------------------
+    "Perspective": "პერსპექტივა",
+    "Straighten converging verticals or horizontals "
+    "(buildings shot from below / to the side).":
+        "გაასწორე გადახრილი ვერტიკალები ან ჰორიზონტალები "
+        "(ქვემოდან/გვერდიდან გადაღებული შენობები).",
+    "Vertical": "ვერტიკალური",
+    "Tilt the top/bottom — fix verticals that lean in or out":
+        "დახარე ზედა/ქვედა — გაასწორე გადახრილი ვერტიკალები",
+    "Tilt the left/right — fix horizontals that lean in or out":
+        "დახარე მარცხენა/მარჯვენა — გაასწორე გადახრილი ჰორიზონტალები",
+    "Apply perspective": "პერსპექტივის დადება",
+    "Reset": "განულება",
+    "Reset both sliders to zero": "ორივე სლაიდერის განულება",
+    "Move a slider first": "ჯერ სლაიდერი გადაწიე",
+    "Perspective applied  ·  Save to write it to a file":
+        "პერსპექტივა დადებულია  ·  შესანახად დააჭირე Save-ს",
     "Social networks": "სოციალური ქსელები",
     "⇄ Flip (3:4 ⇄ 4:3)": "⇄ გადატრიალება (3:4 ⇄ 4:3)",
     "Rotate the selection by 90°": "მონიშვნის 90°-ით გადატრიალება",

@@ -39,6 +39,7 @@ class ViewerMixin:
         self._rotated = False    # fresh photo → no edits yet, nothing to save
         self._cropped = False
         self._resized = False
+        self._perspd = False     # fresh photo → no pending keystone correction
         self._healed = False     # retouch edits live in current_pil; reloaded photo has none
         self._heal_before_img = None   # drop any half-finished stroke
         self._heal_dirty = self._heal_last = None
@@ -48,6 +49,7 @@ class ViewerMixin:
         self._crop_btn_active = None
         self._restyle_crop_chips()
         self._reset_straighten()  # fresh photo → no pending horizon tilt
+        self._reset_perspective()  # fresh photo → no pending keystone correction
         self._edits_saved = False
         self._render_preview()
         self._refresh_filter_strip()   # rebuild the filter previews for this photo
@@ -126,6 +128,9 @@ class ViewerMixin:
             return "break"
         if self.straighten and self.active_section == "crop" and self.panel_open:
             return "break"   # the straighten preview needs the photo fully fitted
+        if (self.active_section == "perspective" and self.panel_open
+                and (self.persp_v or self.persp_h)):
+            return "break"   # the perspective preview needs the photo fully fitted
         vw = max(self.preview.winfo_width(), 1)
         vh = max(self.preview.winfo_height(), 1)
         factor = self.ZOOM_STEP if event.delta > 0 else 1 / self.ZOOM_STEP
@@ -288,7 +293,7 @@ class ViewerMixin:
             highlights=self.highlights, shadows=self.shadows,
             whites=self.whites, blacks=self.blacks,
             clarity=self.clarity, texture=self.texture,
-            vibrance=self.vibrance, color=self.color,
+            vibrance=self.vibrance, color=self.color, dehaze=self.dehaze,
             temperature=self.temperature, tint=self.tint,
             sat_red=self.sat_red, sat_orange=self.sat_orange,
             sat_yellow=self.sat_yellow, sat_green=self.sat_green,
@@ -299,6 +304,8 @@ class ViewerMixin:
             skin_hue=self.skin_hue, skin_sat=self.skin_sat,
             skin_light=self.skin_light,
             bw=self.bw, sepia=self.sepia, grain=self.grain,
+            denoise=self.denoise,
+            split_hi=self.split_hi, split_sh=self.split_sh,
             sharpen=self.sharpen, vignette=self.vignette, focus=self.focus)
 
     def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None):
@@ -375,6 +382,14 @@ class ViewerMixin:
         if self.straighten and self.active_section == "crop" and self.panel_open:
             img = img.rotate(-self.straighten, resample=Image.BICUBIC,
                              expand=False, fillcolor=BG)
+        # Perspective preview: with the whole photo fitted, the warp on the scaled
+        # view matches the full-res commit (apply_perspective is scale-free) and
+        # fills the frame fully — no empty corners. The crop overlay isn't shown
+        # here; the sliders alone drive it.
+        if (self.active_section == "perspective" and self.panel_open
+                and (self.persp_v or self.persp_h)):
+            img = imaging.apply_perspective(
+                img, self.persp_v / 100.0, self.persp_h / 100.0)
         # Before/after compare: peek shows the full original; the split shows the
         # unedited photo left of a draggable divider, the edit to its right. The
         # span is recorded so the divider + its drag stay glued to the photo.

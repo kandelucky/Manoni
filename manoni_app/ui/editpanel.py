@@ -23,6 +23,7 @@ class EditPanelMixin:
     # The rail's selectable tools and their blue-header titles (Save is a
     # separate bottom action, not a section, so it is not listed here).
     SECTION_TITLES = {"basic": "Basic Edits", "crop": "Crop", "resize": "Resize",
+                      "perspective": "Perspective",
                       "heal": "Heal & Clone", "focus": "Focus blur",
                       "color": "Color mixer",
                       "effects": "Effects", "filters": "Filters",
@@ -66,6 +67,7 @@ class EditPanelMixin:
             "basic":   self._build_basic_section(self.section_content),
             "crop":    self._build_crop_section(self.section_content),
             "resize":  self._build_resize_section(self.section_content),
+            "perspective": self._build_perspective_section(self.section_content),
             "heal":    self._build_heal_section(self.section_content),
             "focus":   self._build_focus_section(self.section_content),
             "color":   self._build_color_section(self.section_content),
@@ -108,10 +110,14 @@ class EditPanelMixin:
 
         self._group_header(f, t("Detail & Color"))
         self.s_clarity    = self._slider(f, t("Clarity"), "clarity")
+        self.s_dehaze     = self._slider(f, t("Dehaze"), "dehaze")
         self.s_vibrance   = self._slider(f, t("Vibrance"), "vibrance")
         self.s_color      = self._slider(f, t("Color"), "color")
         self.s_texture    = self._slider(f, t("Texture"), "texture")
         self.s_sharpen    = self._slider(f, t("Sharpen"), "sharpen")
+        # Noise reduction rests at 0 (off → full strength), like the effects.
+        self.s_denoise    = self._slider(f, t("Noise reduction"), "denoise",
+                                         hi=100, neutral=0)
         self.sliders = {"brightness": self.s_exposure,
                         "contrast": self.s_contrast,
                         "highlights": self.s_highlights,
@@ -119,10 +125,12 @@ class EditPanelMixin:
                         "whites": self.s_whites,
                         "blacks": self.s_blacks,
                         "clarity": self.s_clarity,
+                        "dehaze": self.s_dehaze,
                         "vibrance": self.s_vibrance,
                         "color": self.s_color,
                         "texture": self.s_texture,
                         "sharpen": self.s_sharpen,
+                        "denoise": self.s_denoise,
                         "temperature": self.s_temp,
                         "tint": self.s_tint}
 
@@ -177,6 +185,13 @@ class EditPanelMixin:
         # Sepia: a warm-toned monochrome — grouped with B&W (both desaturating looks).
         self.s_sepia = self._slider(f, t("Sepia"), "sepia", hi=100, neutral=0)
         self.sliders["sepia"] = self.s_sepia
+        # Split-tone (colour grading): warm↔cool tint for highlights vs shadows.
+        # Bidirectional (neutral 100): left = cool/teal, right = warm/orange.
+        self._group_header(f, t("Split tone"))
+        self.s_split_hi = self._slider(f, t("Highlights tone"), "split_hi")
+        self.sliders["split_hi"] = self.s_split_hi
+        self.s_split_sh = self._slider(f, t("Shadows tone"), "split_sh")
+        self.sliders["split_sh"] = self.s_split_sh
         # Bidirectional (centred at 0): left lightens the corners, right darkens.
         self.s_vignette = self._slider(f, t("Vignette"), "vignette")
         self.sliders["vignette"] = self.s_vignette
@@ -276,6 +291,7 @@ class EditPanelMixin:
             ("basic",   "sliders-horizontal", "Basic Edit"),
             ("crop",    "crop",               "Crop"),
             ("resize",  "scaling",            "Resize"),
+            ("perspective", "frame",          "Perspective"),
             ("heal",    "bandage",            "Heal"),
             ("focus",   "aperture",           "Blur"),
             ("color",   "droplets",           "Colors"),
@@ -392,8 +408,8 @@ class EditPanelMixin:
         if key not in self.sections:
             return
         self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
-        if key in ("crop", "heal", "focus"):
-            self._set_compare(False)  # these need the canvas drag — compare can't intercept it
+        if key in ("crop", "heal", "focus", "perspective"):
+            self._set_compare(False)  # these warp/drag the canvas — compare can't intercept it
         self.active_section = key
         for k, frame in self.sections.items():
             if k == key:
@@ -406,6 +422,8 @@ class EditPanelMixin:
             self._enter_crop()       # init a box + fit so the whole photo is seen
         elif key == "resize":
             self._enter_resize()     # refresh the size readout from the current photo
+        elif key == "perspective":
+            self._enter_perspective()  # fit the photo so the live warp is visible
         elif key == "heal":
             self._enter_heal()       # show the brush cursor + ring
         elif key == "focus":
@@ -556,7 +574,8 @@ class EditPanelMixin:
                 "shadows": self.shadows, "whites": self.whites,
                 "blacks": self.blacks, "clarity": self.clarity,
                 "vibrance": self.vibrance, "texture": self.texture,
-                "sharpen": self.sharpen,
+                "dehaze": self.dehaze,
+                "sharpen": self.sharpen, "denoise": self.denoise,
                 "sat_red": self.sat_red, "sat_orange": self.sat_orange,
                 "sat_yellow": self.sat_yellow, "sat_green": self.sat_green,
                 "sat_aqua": self.sat_aqua, "sat_blue": self.sat_blue,
@@ -567,6 +586,7 @@ class EditPanelMixin:
                 "skin_light": self.skin_light,
                 "bw": self.bw, "sepia": self.sepia, "vignette": self.vignette,
                 "grain": self.grain,
+                "split_hi": self.split_hi, "split_sh": self.split_sh,
                 "focus": dict(self.focus) if self.focus else None,
                 "auto_mode": self.auto_mode}
 

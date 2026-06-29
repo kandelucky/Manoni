@@ -29,6 +29,7 @@ from manoni_app.ui.viewer import ViewerMixin
 from manoni_app.ui.nav import NavMixin
 from manoni_app.ui.crop import CropMixin
 from manoni_app.ui.resize import ResizeMixin
+from manoni_app.ui.perspective import PerspectiveMixin
 from manoni_app.ui.heal import HealMixin
 from manoni_app.ui.focus import FocusMixin
 from manoni_app.ui.filters import FiltersMixin
@@ -40,9 +41,9 @@ from manoni_app.ui.gridview import GridViewMixin
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
-             ViewerMixin, NavMixin, CropMixin, ResizeMixin, HealMixin,
-             FocusMixin, FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin,
-             SettingsMixin, GridViewMixin):
+             ViewerMixin, NavMixin, CropMixin, ResizeMixin, PerspectiveMixin,
+             HealMixin, FocusMixin, FiltersMixin, ActionsMixin, AboutMixin,
+             MetadataMixin, SettingsMixin, GridViewMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -102,7 +103,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # Most factors rest at 1.0; creative effects rest at 0.0 (off → full). List
     # the 0-neutral ones here so reset / "is edited" use the right rest point.
     # auto_mode is not a slider; its rest is None (no auto correction active).
-    SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "grain": 0.0,
+    SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "grain": 0.0, "denoise": 0.0,
                       "focus": None, "auto_mode": None}
 
     def __init__(self, folder=None):
@@ -177,12 +178,18 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.clarity = 1.0       # + midtone local contrast / - soft glow
         self.vibrance = 1.0      # + saturate the muted colours (protects saturated)
         self.texture = 1.0       # + crisper medium detail / - gentle surface smoothing
+        self.dehaze = 1.0        # >1.0 clears haze, <1.0 adds it (1.0 = unchanged)
         self.sharpen = 1.0       # >1.0 sharpen, <1.0 blur (1.0 = unchanged)
+        self.denoise = 0.0       # noise reduction: 0 = off, up to 1 = full strength
         # Effects (creative looks) rest at 0.0 = off, up to 1.0 = full strength.
         self.bw = 0.0            # black-and-white: blend toward grayscale (0 = colour)
         self.sepia = 0.0         # sepia: blend toward a warm-toned monochrome (0 = colour)
         self.vignette = 1.0      # vignette: <1 lightens corners, >1 darkens; 1 = off
         self.grain = 0.0         # film grain: 0 = off, up to 1 = full strength
+        # Split-tone (colour grading): warm↔cool tint for highlights / shadows.
+        # 1.0 = neutral (>1 warm, <1 cool); bidirectional like temperature/tint.
+        self.split_hi = 1.0
+        self.split_sh = 1.0
         self._vig_cache = {}     # geometry key -> mask; reused across slider drags
         # Selective focus blur (Fotor-style depth of field): a draggable shape
         # kept sharp while the rest blurs. None = off, else a dict with shape
@@ -201,6 +208,11 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._rotated = False    # has the current photo been rotated since loaded?
         self._cropped = False    # has the current photo been cropped since loaded?
         self._resized = False    # has the current photo been resized since loaded?
+        self._perspd = False     # has the current photo been keystone-corrected?
+        # Perspective / keystone correction (pending, like straighten): −100..100
+        # vertical / horizontal, 0 = none. A destructive in-memory bake on commit.
+        self.persp_v = 0.0
+        self.persp_h = 0.0
         self._edits_saved = False  # are the current photo's edits already saved to a copy?
         # Save model: "quick save" (rail button + leaving an edited photo) writes
         # silently using quick_save_cfg = {dir, fmt, quality}. It starts UNSET each
