@@ -2,7 +2,7 @@
 
 Why this exists: opening a folder used to re-decode every full-resolution photo
 into a thumbnail on every load, resize, cull *or* relaunch (see
-``browser._build_thumbs`` / ``gridview._build_grid_thumbs``). On a weak laptop a
+``browser._build_thumbs``). On a weak laptop a
 folder of hundreds of JPEG/RAW files took many seconds, and every small change —
 a different thumbnail size, a moved file, reopening the app — paid the full cost
 again. This stores each decoded thumbnail (as WebP bytes) in a single SQLite file

@@ -51,21 +51,11 @@ class ViewerMixin:
         self._reset_straighten()  # fresh photo → no pending horizon tilt
         self._reset_perspective()  # fresh photo → no pending keystone correction
         self._edits_saved = False
-        if getattr(self, "grid_view", False):
-            # Sorting (grid) mode: the big preview, the live histogram and the
-            # filter strip (an apply_edits per filter — the heaviest part) are all
-            # hidden behind the culling grid. Skip every effect render so paging
-            # through photos stays instant; they refresh the moment the grid closes
-            # (see _set_grid_view). _view_key is already None here, so the big view
-            # rebuilds cleanly on exit.
-            pass
-        else:
-            self._render_preview()
-            self._refresh_filter_strip()   # rebuild the filter previews for this photo
+        self._render_preview()
+        self._refresh_filter_strip()   # rebuild the filter previews for this photo
         self._update_info(path)
         self._highlight_thumb()
         self._scroll_to_thumb()
-        self._grid_on_navigate()       # keep the grid-view selection in sync (no-op if off)
         self.lbl_pos.configure(text=f"{self.index + 1} / {len(self.files)}")
         self._save_state()
 

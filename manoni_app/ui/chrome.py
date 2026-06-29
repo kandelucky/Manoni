@@ -348,11 +348,6 @@ class ChromeMixin:
         self._glyph_button(cull, "?", self._cull_help_dialog,
                            t("Culling — Help")).pack(side="left", padx=4, pady=8)
 
-        # Grid (culling) view toggle, just left of the cull group: fills the
-        # preview area with a big-thumbnail grid for fast side-by-side culling.
-        self._sep(right).pack(side="right", fill="y", padx=6, pady=10)
-        self._build_gridview_button(right).pack(side="right", padx=4, pady=8)
-
         # The edit panel's open/close lives on the always-visible icon rail
         # (a collapse chevron), not here — see _build_tool_rail / toggle_panel.
 
@@ -637,7 +632,9 @@ class ChromeMixin:
         self._build_sidebar_footer(side)
 
         self.canvas = tk.Canvas(side, bg=SIDEBAR, highlightthickness=0)
-        sb = ttk.Scrollbar(side, orient="vertical", command=self.canvas.yview,
+        # The scrollbar drives a wrapper, not canvas.yview directly, so dragging it
+        # also realizes the newly-visible cells (the strip is virtualized).
+        sb = ttk.Scrollbar(side, orient="vertical", command=self._thumb_yview,
                            style="Sidebar.Vertical.TScrollbar")
         self._thumb_scrollbar = sb     # folder list packs just above this
         self.thumb_holder = tk.Frame(self.canvas, bg=SIDEBAR)
@@ -701,13 +698,15 @@ class ChromeMixin:
         # until there are saved filters AND a photo to render them on.
         self._build_filter_strip(body)
 
-        # Grid (culling) view: a full-area big-thumbnail grid that overlays the
-        # preview column. Built hidden; the toolbar grid-2x2 toggle reveals it.
-        self._build_grid_view(body)
-
     def _on_wheel(self, event):
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
+        self._render_window()        # realize cells that scrolled into view
         return "break"
+
+    def _thumb_yview(self, *args):
+        "Scrollbar command: scroll the strip, then realize the newly-visible cells."
+        self.canvas.yview(*args)
+        self._render_window()
 
     # --- Sidebar top section: the auto-height sub-folder list ---------------
 
@@ -1114,7 +1113,7 @@ class ChromeMixin:
             if isinstance(size, int):
                 self.thumb_size = max(self.THUMB_MIN, min(self.THUMB_MAX, size))
         self._thumb_cols = self._calc_cols()
-        self._build_thumbs()
+        self._build_thumbs(overlay=True)   # cover the rebuild like a folder load
         self._update_view_button()
 
     # --- Sidebar resize (drag-sash) + thumbnail-size zoom -------------------
@@ -1149,7 +1148,7 @@ class ChromeMixin:
         self.thumb_size = size
         self.view_mode = "grid"
         self._thumb_cols = self._calc_cols()
-        self._build_thumbs()
+        self._build_thumbs(overlay=True)   # cover the rebuild like a folder load
         self._update_view_button()
 
     def _calc_cols(self, width=None):
@@ -1162,35 +1161,19 @@ class ChromeMixin:
         return max(1, int(max(width, 1) // cell_w))
 
     def _on_sidebar_configure(self, event):
-        "Match the inner frame to the viewport so the grid wraps; reflow if cols change."
-        self.canvas.itemconfigure(self._thumb_window, width=event.width)
+        "On a sidebar resize: re-size the scroll content, then re-realize the window."
+        " A changed column count (or list view, whose cell width tracks the panel)"
+        " needs every live cell re-placed, so clear and let _render_window rebuild."
         # The sidebar's height changed too (window resize): re-evaluate the folder
         # cap so it keeps its fair share of the height.
         self._on_folder_holder_configure()
         cols = self._calc_cols(event.width)
-        if cols != self._thumb_cols:
-            self._thumb_cols = cols
-            self._reflow_thumbs()
+        changed = cols != getattr(self, "_thumb_cols", 0)
+        self._thumb_cols = cols
+        self._layout_strip()                  # content height + holder width for the new size
+        if changed or self.view_mode == "list":
+            self._clear_cells()               # positions/widths moved → rebuild the window
+        self._render_window()
         # Re-fit list names AFTER the column count settles (the room per name is the
         # per-column width, so it shrinks/grows as the list gains/loses columns).
         self._reflow_list_names()
-
-    def _config_thumb_columns(self, cols):
-        "Weight the thumbnail grid columns: list columns stretch equally (so rows fill"
-        " and tile into 2/3/4…); grid columns stay unweighted (fixed, centered cells)."
-        listy = self.view_mode == "list"
-        for c in range(self.MAX_GRID_COLS):
-            used = listy and c < cols
-            self.thumb_holder.grid_columnconfigure(
-                c, weight=1 if used else 0, uniform="listcols" if used else "")
-
-    def _reflow_thumbs(self):
-        "Re-place every loaded thumbnail cell into the current column count."
-        cols = self._thumb_cols
-        self._config_thumb_columns(cols)          # weights follow the new column count
-        pos = 0
-        for cell in self.thumb_widgets:           # sub-folders live in their own list now
-            if cell is None:
-                continue
-            cell.grid_configure(row=pos // cols, column=pos % cols)
-            pos += 1

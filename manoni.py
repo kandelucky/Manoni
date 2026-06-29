@@ -38,13 +38,12 @@ from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
 from manoni_app.ui.metadata import MetadataMixin
 from manoni_app.ui.settings import SettingsMixin
-from manoni_app.ui.gridview import GridViewMixin
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, ResizeMixin, PerspectiveMixin,
              HealMixin, FocusMixin, TextMixin, FiltersMixin, ActionsMixin,
-             AboutMixin, MetadataMixin, SettingsMixin, GridViewMixin):
+             AboutMixin, MetadataMixin, SettingsMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -63,7 +62,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # Sidebar thumbnail grid (file-manager style: drag-resizable + zoomable).
     THUMB_MIN   = THUMB_LEVELS[0]   # smallest thumbnail (px)
     THUMB_MAX   = THUMB_LEVELS[-1]  # largest thumbnail (px)
-    THUMB_PAD   = 16    # a cell's footprint beyond the image (padding + border)
+    THUMB_PAD   = 16    # a grid cell's width beyond the image (padding + border)
+    THUMB_NAME_H = 20   # px reserved under a grid thumbnail for its (one-line) name
+    THUMB_CELL_V = 12   # a grid cell's height beyond the image + name (border + gaps)
+    LIST_ROW_H  = 44    # fixed height of one list-view row (px)
     SIDEBAR_MIN = 110   # narrowest the sidebar can be dragged
     SIDEBAR_MAX = 720   # widest the sidebar can be dragged
 
@@ -80,18 +82,15 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     LIST_NAME_PAD = 30  # px reserved beside a list name (thumb gaps + border + scrollbar)
     LIST_COL_MIN = 190  # min px per list column → list reflows to 2/3/4… cols when wide
     FOLDER_NAME_PAD = 38  # px reserved beside a folder name (glyph + gaps) per column
-    MAX_GRID_COLS = 16  # safe upper bound when (re)configuring grid column weights
 
-    # Loading a folder with this many photos (or more) puts up a dark, input-
-    # blocking "please wait" screen until the thumbnails finish, so a slider or
-    # key press mid-load can't corrupt the half-built grid. See browser.py.
+    # Loading/rebuilding a strip with this many photos (or more) puts up a dark,
+    # input-blocking "please wait" screen until the *visible* thumbnails finish, so
+    # a slider or key press mid-load can't act on a half-painted strip. See browser.py.
     LOADING_OVERLAY_MIN = 40
-    # Thumbnail loading: images are decoded in parallel worker threads and turned
-    # into grid cells on the main thread in batches of up to THUMB_BUDGET seconds
-    # (so the progress bar still repaints). DECODE_WINDOW caps how many decoded
-    # thumbnails are held ahead of the cells being built (bounds memory).
-    THUMB_BUDGET = 0.03
-    DECODE_WINDOW = 64
+    # Thumbnail virtualization: only the cells inside the viewport (plus this many
+    # rows of buffer above and below) are ever realized + decoded, so cost is bound
+    # to the screen, not the folder size. See browser._render_window.
+    THUMB_BUFFER_ROWS = 3
 
     # The top sub-folder list never grows past min(FOLDER_LIST_MAX, a fraction of
     # the sidebar height) — so on a short laptop screen it can't crowd the photo
@@ -334,39 +333,25 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._message = None     # placeholder text shown when no photo is loaded
         self.icons = {}          # name -> PhotoImage (kept alive)
         self._folder_imgs = {}   # cached small folder glyph for the list rows (kept alive)
-        self.thumb_images = []   # thumbnail PhotoImages (kept alive)
-        self.thumb_widgets = []  # cell frame per thumbnail (for highlight); may be None
         self.folder_widgets = []  # sub-folder rows in the top folder list
-        self._thumb_job = None
+        # Virtualized thumbnail strip: only the cells in (or near) the viewport are
+        # ever realized, so a 50- or 5000-file folder opens equally fast. See
+        # ui/browser.py — _render_window builds/destroys cells as you scroll.
+        self._cells = {}                # file index -> realized cell Frame (visible window)
+        self._cell_imgs = {}            # file index -> PhotoImage for a realized cell
+        self._cell_failed = set()       # file indices whose thumbnail couldn't be decoded
+        self._poll_job = None           # after-job draining finished decodes into cells
+        self._overlay_active = False    # is the "please wait" screen up for this build?
         self._loading_overlay = None    # the "please wait" screen while a folder loads
         self._decode_pool = None        # worker pool decoding thumbnails in parallel
         self._decode_futures = {}       # file index -> pending decode Future
+        self._decode_tsize = self.THUMB_LEVELS[0]  # px the workers decode at (view-dependent)
         self.thumb_size = self.THUMB_LEVELS[0]  # current thumbnail size (px), zoomable
         self.view_mode = "grid"         # sidebar layout: "grid" icons | "list" rows
         self.sidebar_width = THUMB_W + 30  # current sidebar width (px), drag-resizable
         self.folder_list_height = None  # user-dragged sub-folder list height (px); None = auto
         self._thumb_cols = 1            # columns in the thumbnail grid (recomputed)
         self._folder_cols = 1          # columns in the top folder list (1 or 2, by width)
-        self._thumb_pos = 0            # next free grid slot while loading
-        # Grid view (full-area big-thumbnail grid over the preview, for culling).
-        # Off by default; toggled from the toolbar. Tiles are cached per filename
-        # for the open folder so culling rebuilds cheaply. See ui/gridview.py.
-        self.grid_view = False
-        self.grid_cells = []           # cell per file index in the grid (None on fail)
-        self.grid_images = []          # grid tile PhotoImages (kept alive)
-        self._grid_job = None          # pending incremental-build after-job
-        self._grid_pool = None         # worker pool decoding grid tiles
-        self._grid_futures = {}        # file index -> pending tile decode Future
-        # Grid tiles are served from the shared thumbnail cache (thumbcache.py), the
-        # same source the sidebar strip reads — no separate per-grid cache anymore.
-        # Grid multi-select + drag-to-sort: a set of selected file indices, and the
-        # transient drag state used to drop them onto the კარგი / ცუდი zones.
-        self._grid_sel = set()         # selected file indices in the grid
-        self._grid_press_xy = None     # (x_root, y_root) where a tile press began
-        self._grid_dragging = False    # is a tile drag in progress?
-        self._drag_chip = None         # floating "{n} photos" label following the cursor
-        self.grid_tile = self.GRID_TILE_DEFAULT  # grid tile size (px), Ctrl+wheel zoomable
-        self._grid_zoom_job = None     # debounce handle for tile-zoom rebuilds
         self._load_prefs()             # restore remembered sidebar width + thumb size
         self._load_filters()           # restore the user's saved filters (presets)
         self._load_actions()           # restore the user's saved actions (macros)
@@ -486,7 +471,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         state = {"thumb_size": self.thumb_size,
                  "sidebar_width": self.sidebar_width,
                  "view_mode": self.view_mode,
-                 "grid_tile": self.grid_tile,
                  "show_rulers": self.show_rulers,
                  "show_filter_strip": self.show_filter_strip,
                  "show_histogram": self.show_histogram,
@@ -545,9 +529,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         sw = state.get("sidebar_width")
         if isinstance(sw, int):
             self.sidebar_width = max(self.SIDEBAR_MIN, min(self.SIDEBAR_MAX, sw))
-        gt = state.get("grid_tile")
-        if isinstance(gt, int):
-            self.grid_tile = self._snap_thumb_level(gt)    # old sizes snap to a level
         flh = state.get("folder_list_height")
         if isinstance(flh, int):       # clamped to the live sidebar at apply time
             self.folder_list_height = max(self.FOLDER_LIST_MIN, flh)
@@ -635,7 +616,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         if not self._maybe_prompt_save():
             return                       # unsaved edits + 'cancel' → keep window open
         self._shutdown_decode_pool()     # stop any in-flight thumbnail decoding
-        self._shutdown_grid_pool()       # stop any in-flight grid-tile decoding
         self._save_state()
         self.root.destroy()
 

@@ -6,7 +6,6 @@ behaviour is identical to when it lived directly on the class.
 """
 
 import os
-import time
 import tkinter as tk
 import tkinter.filedialog as tkfd
 import tkinter.font as tkfont
@@ -19,9 +18,8 @@ from ..i18n import t
 # The thumbnail workers call _decode_thumb; it is the disk-cached version, so the
 # first decode of a file is stored and every later load / resize / cull / relaunch
 # is a cheap blob read (see thumbcache.py — it falls back to a direct decode if the
-# cache is unavailable). Re-exported here so gridview, which does
-# `from .browser import _decode_thumb`, shares the same cached path.
-from ..thumbcache import cached_thumb as _decode_thumb  # noqa: F401
+# cache is unavailable).
+from ..thumbcache import cached_thumb as _decode_thumb
 
 # Near-black backdrop for the "please wait" loading screen (darker than the app
 # background so it clearly reads as a blocking overlay, not just the sidebar).
@@ -125,14 +123,11 @@ class BrowserMixin:
             if os.path.splitext(f)[1].lower() in SUPPORTED
             and os.path.isfile(os.path.join(folder, f))]
         self.index = self.files.index(select) if select in self.files else 0
-        # A big folder takes a while to thumbnail; cover the window with a dark,
-        # input-blocking "please wait" screen so a stray slider drag or key press
-        # can't corrupt the half-loaded grid. It lifts as the last thumbnail lands.
-        if len(self.files) >= self.LOADING_OVERLAY_MIN:
-            self._show_loading_overlay(len(self.files))
         self._build_folder_list()        # top section: minimalist sub-folder list
-        self._build_thumbs()             # bottom section: photo thumbnail grid
-        self._refresh_grid_if_open()     # rebuild the full-area grid for the new folder
+        # A big folder covers the window with a dark, input-blocking "please wait"
+        # screen so a stray slider drag or key press can't act on a half-painted
+        # strip; it lifts once the visible thumbnails land (overlay=True).
+        self._build_thumbs(overlay=True)  # bottom section: photo thumbnail strip
         if self.files:
             self.show_current()
         else:
@@ -225,54 +220,214 @@ class BrowserMixin:
 
     # --- Thumbnails ---------------------------------------------------------
 
-    def _build_thumbs(self):
-        "Rebuild the sidebar thumbnail grid: decode in parallel worker threads,"
-        " build the Tk cells on the main thread in time-budgeted batches."
-        if self._thumb_job is not None:
-            self.root.after_cancel(self._thumb_job)
-            self._thumb_job = None
-        self._shutdown_decode_pool()    # abandon any in-flight decodes from a prior load
-        for w in self.thumb_holder.winfo_children():
-            w.destroy()
-        self.thumb_images = []
-        self.thumb_widgets = []         # cell frame per file index (None on failure)
-        self._list_name_labels = []     # (name Label, full filename) for width-reflow
-        self._thumb_idx = 0             # next file to turn into a cell (main thread)
-        self._submit_idx = 0            # next file handed to the decode pool
-        self._thumb_pos = 0
+    def _build_thumbs(self, overlay=False):
+        "(Re)build the virtualized thumbnail strip: lay out the full scroll height up"
+        " front, then realize + decode only the cells in (or near) the viewport. Cost"
+        " is bound to the screen, not the folder — 50 or 5000 files open the same."
+        " `overlay` puts up the blocking 'please wait' screen until the visible cells"
+        " fill (folder load + thumb-size/view change pass it; a single cull doesn't)."
+        self._shutdown_decode_pool()    # cancels the poll job + any in-flight decodes
+        self._clear_cells()             # drop every realized cell from the old build
         self._decode_tsize = self.LIST_THUMB if self.view_mode == "list" \
             else self.thumb_size
         self._thumb_cols = self._calc_cols()
-        # Set the column weights for this view: list columns stretch equally (so the
-        # rows fill the panel and tile into 2/3/4…); grid cells stay fixed + centered.
-        self._config_thumb_columns(self._thumb_cols)
-        # Sub-folders are NOT in this grid anymore — they live in the auto-height
-        # list above it (_build_folder_list), so the grid is pure photos.
-        if self.files:
-            workers = min(8, (os.cpu_count() or 4))
-            self._decode_pool = ThreadPoolExecutor(max_workers=workers)
-            self._decode_futures = {}
-            self._top_up_decodes()      # prime the decode window before the first cell
-        self._thumb_job = self.root.after(1, self._add_thumb)
-
-    # --- Parallel thumbnail decode (worker pool) ----------------------------
-
-    def _top_up_decodes(self):
-        "Keep the decode pipeline a fixed distance ahead of the cells we've built —"
-        " bounds memory (only ~DECODE_WINDOW thumbnails are ever held decoded)."
-        pool = self._decode_pool
-        if pool is None:
+        # Sub-folders are NOT in this strip — they live in the auto-height list above
+        # it (_build_folder_list), so the strip is pure photos.
+        self._layout_strip()            # size the canvas content so the scrollbar is right
+        if not self.files:
+            self._overlay_active = False
+            self._hide_loading_overlay()
             return
-        target = min(len(self.files), self._thumb_idx + self.DECODE_WINDOW)
-        while self._submit_idx < target:
-            i = self._submit_idx
-            path = os.path.join(self.folder, self.files[i])
-            self._decode_futures[i] = pool.submit(
-                _decode_thumb, path, self._decode_tsize)
-            self._submit_idx += 1
+        if overlay and len(self.files) >= self.LOADING_OVERLAY_MIN:
+            self._overlay_active = True
+            self._show_loading_overlay(len(self.files))
+        else:
+            self._overlay_active = False
+        workers = min(8, (os.cpu_count() or 4))
+        self._decode_pool = ThreadPoolExecutor(max_workers=workers)
+        self._decode_futures = {}
+        # Keep the current photo on screen (folder load = index 0 → top); this also
+        # realizes + decodes the first visible window via _render_window.
+        self._scroll_to_thumb()
+        self._ensure_poll()
+
+    # --- Cell geometry (fixed, so any index's x/y is known without a widget) -----
+
+    def _cell_metrics(self):
+        "The fixed (cell_w, cell_h, cols) for the current view — the strip's grid is"
+        " uniform, so any file index maps to a known row/column and pixel position."
+        cols = self._calc_cols()
+        if self.view_mode == "list":
+            view_w = max(1, self.canvas.winfo_width())
+            cell_w = max(self.LIST_COL_MIN, view_w // max(1, cols))
+            cell_h = self.LIST_ROW_H
+        else:
+            cell_w = self.thumb_size + self.THUMB_PAD
+            cell_h = self.thumb_size + self.THUMB_NAME_H + self.THUMB_CELL_V
+        return cell_w, cell_h, cols
+
+    def _layout_strip(self):
+        "Size the inner holder to the full content height so the scrollbar reflects all"
+        " files even though only the visible cells exist."
+        cell_w, cell_h, cols = self._cell_metrics()
+        n = len(self.files)
+        rows = (n + cols - 1) // cols if cols else 0
+        content_h = max(1, rows * cell_h)
+        view_w = max(1, self.canvas.winfo_width())
+        try:
+            self.canvas.itemconfigure(self._thumb_window, width=view_w,
+                                      height=content_h)
+            self.canvas.configure(scrollregion=(0, 0, view_w, content_h))
+        except tk.TclError:
+            pass
+
+    def _visible_range(self, cell_h, cols):
+        "First/last file index inside the viewport, padded by THUMB_BUFFER_ROWS rows."
+        n = len(self.files)
+        if n == 0 or cols <= 0:
+            return 0, -1
+        try:
+            self.canvas.update_idletasks()
+            view_h = self.canvas.winfo_height()
+            top = self.canvas.canvasy(0)
+        except tk.TclError:
+            view_h, top = 0, 0
+        if view_h <= 1:
+            view_h = 600                 # canvas not laid out yet → assume a screenful
+        first_row = max(0, int(top // cell_h) - self.THUMB_BUFFER_ROWS)
+        last_row = int((top + view_h) // cell_h) + self.THUMB_BUFFER_ROWS
+        first = first_row * cols
+        last = min(n - 1, (last_row + 1) * cols - 1)
+        return first, max(first - 1, last)
+
+    # --- Realize / recycle the visible window ------------------------------------
+
+    def _render_window(self):
+        "Create the cells now in the viewport, destroy those that scrolled out, and"
+        " request decodes for the freshly-visible ones. Cheap to call on every scroll."
+        if not hasattr(self, "thumb_holder") or not self.files:
+            return
+        cell_w, cell_h, cols = self._cell_metrics()
+        self._thumb_cols = cols
+        first, last = self._visible_range(cell_h, cols)
+        want = set(range(first, last + 1))
+        for i in list(self._cells):
+            if i not in want:
+                self._destroy_cell(i)
+        for i in range(first, last + 1):
+            if i not in self._cells:
+                self._make_cell_at(i, cell_w, cell_h, cols)
+            self._request_decode(i)
+        self._ensure_poll()
+
+    def _clear_cells(self):
+        "Destroy every realized cell (keeps the decode pool/futures alive)."
+        for cell in self._cells.values():
+            try:
+                cell.destroy()
+            except tk.TclError:
+                pass
+        self._cells = {}
+        self._cell_imgs = {}
+        self._cell_failed = set()
+
+    def _destroy_cell(self, i):
+        "Recycle one cell that scrolled out of the window (its decode result, if it"
+        " arrives later, is discarded — the shared cache keeps it cheap to redo)."
+        cell = self._cells.pop(i, None)
+        if cell is not None:
+            try:
+                cell.destroy()
+            except tk.TclError:
+                pass
+        self._cell_imgs.pop(i, None)
+        self._cell_failed.discard(i)
+
+    def _make_cell_at(self, i, cell_w, cell_h, cols):
+        "Build one placeholder cell for file index i and place it at its fixed slot."
+        file = self.files[i]
+        row, col = divmod(i, cols)
+        if self.view_mode == "list":
+            cell = self._make_list_cell(i, file)
+            cell.place(x=col * cell_w + 2, y=row * cell_h + 1,
+                       width=cell_w - 4, height=cell_h - 2)
+        else:
+            cell = self._make_grid_cell(i, file)
+            cell.place(x=col * cell_w, y=row * cell_h,
+                       width=cell_w, height=cell_h)
+        self._cells[i] = cell
+        if i in self._cell_imgs:         # survived a relayout → re-show its image
+            try:
+                cell._img_lbl.configure(image=self._cell_imgs[i])
+            except tk.TclError:
+                pass
+
+    # --- Decode pool: realize-on-demand, drained by a polling after-job ----------
+
+    def _request_decode(self, i):
+        "Submit a decode for file index i unless it is already imaged or in flight."
+        pool = self._decode_pool
+        if pool is None or i in self._cell_imgs or i in self._decode_futures:
+            return
+        path = os.path.join(self.folder, self.files[i])
+        self._decode_futures[i] = pool.submit(_decode_thumb, path,
+                                              self._decode_tsize)
+
+    def _ensure_poll(self):
+        "Schedule the decode-draining poll if there is work and none is queued."
+        if self._poll_job is not None or self._decode_pool is None:
+            return
+        if self._decode_futures or self._overlay_active:
+            self._poll_job = self.root.after(16, self._poll_decodes)
+
+    def _resolved(self, i):
+        "True once cell i has its image (or its decode failed) — nothing left to wait."
+        return i in self._cell_imgs or i in self._cell_failed
+
+    def _poll_decodes(self):
+        "Drain finished decodes into their (still-visible) cells; drop the overlay once"
+        " every visible cell is resolved; keep polling while work remains."
+        self._poll_job = None
+        if self._decode_pool is None:
+            return
+        for i in [k for k, f in self._decode_futures.items() if f.done()]:
+            fut = self._decode_futures.pop(i)
+            try:
+                pil = fut.result()
+            except Exception:
+                pil = None
+            if i not in self._cells:     # scrolled away before it landed → discard
+                continue
+            if pil is None:
+                self._cell_failed.add(i)
+                continue
+            try:
+                photo = ImageTk.PhotoImage(pil)
+            except Exception:
+                self._cell_failed.add(i)
+                continue
+            self._cell_imgs[i] = photo
+            try:
+                self._cells[i]._img_lbl.configure(image=photo)
+            except tk.TclError:
+                pass
+        if self._overlay_active:
+            vis = list(self._cells)
+            done = sum(1 for i in vis if self._resolved(i))
+            self._update_loading_overlay(done, len(vis))
+            if vis and done >= len(vis):
+                self._overlay_active = False
+                self._hide_loading_overlay()
+        self._ensure_poll()
 
     def _shutdown_decode_pool(self):
-        "Cancel pending decodes and drop the pool (safe when there is none)."
+        "Cancel the poll, abandon in-flight decodes, and drop the pool (safe if none)."
+        if getattr(self, "_poll_job", None) is not None:
+            try:
+                self.root.after_cancel(self._poll_job)
+            except tk.TclError:
+                pass
+            self._poll_job = None
         pool = getattr(self, "_decode_pool", None)
         if pool is None:
             return
@@ -356,90 +511,54 @@ class BrowserMixin:
         keep = max(1, max_chars - len(ext) - 1)
         return stem[:keep] + "…" + ext
 
-    def _add_thumb(self):
-        "Drain freshly-decoded thumbnails (in file order) into grid cells, for up to"
-        " THUMB_BUDGET seconds, then yield so the progress bar repaints; repeat."
-        try:
-            if not self.thumb_holder.winfo_exists():
-                return
-        except tk.TclError:
-            return
-
-        deadline = time.perf_counter() + self.THUMB_BUDGET
-        while self._thumb_idx < len(self.files):
-            self._top_up_decodes()       # keep the workers fed as we consume
-            fut = self._decode_futures.get(self._thumb_idx)
-            if fut is None or not fut.done():
-                break                    # next-in-order not decoded yet → yield, retry
-            pil = fut.result()           # None if the file couldn't be read
-            del self._decode_futures[self._thumb_idx]
-            i = self._thumb_idx
-            file = self.files[i]
-            try:
-                if pil is None:
-                    raise ValueError("decode failed")
-                photo = ImageTk.PhotoImage(pil)
-                self.thumb_images.append(photo)
-                if self.view_mode == "list":
-                    cell = self._add_list_row(i, file, photo)
-                else:
-                    cell = self._add_grid_cell(i, file, photo)
-                self.thumb_widgets.append(cell)
-                self._thumb_pos += 1
-            except Exception:
-                self.thumb_widgets.append(None)
-            self._thumb_idx += 1
-            if time.perf_counter() >= deadline:
-                break
-
-        self._update_loading_overlay(self._thumb_idx, len(self.files))
-        if self._thumb_idx >= len(self.files):
-            self._thumb_job = None
-            self._shutdown_decode_pool()
-            self._highlight_thumb()      # re-mark the current image once loaded
-            self._hide_loading_overlay()  # grid is built → drop the "please wait" screen
-            return
-        self._thumb_job = self.root.after(1, self._add_thumb)
-
-    def _add_grid_cell(self, i, file, photo):
-        "Build one grid cell: a bordered image (for selection) + its name below."
+    def _make_grid_cell(self, i, file):
+        "A placeholder grid cell: a fixed square image box (bordered for selection)"
+        " + its one-line name. The image lands later, filled in by the decode poll."
+        sel = (i == self.index)
         cell = tk.Frame(self.thumb_holder, bg=SIDEBAR)
-        holder = tk.Frame(cell, bg=SIDEBAR,
-                          highlightthickness=2, highlightbackground=SIDEBAR)
-        holder.pack()
-        lbl = tk.Label(holder, image=photo, bg=SIDEBAR, cursor="hand2")
-        lbl.pack()
+        box = max(1, self.thumb_size)
+        holder = tk.Frame(cell, bg=SIDEBAR, highlightthickness=2,
+                          highlightbackground=ACCENT if sel else SIDEBAR,
+                          width=box, height=box)
+        holder.pack_propagate(False)     # fixed square box → uniform rows for windowing
+        holder.pack(pady=(2, 0))
+        lbl = tk.Label(holder, bg=SIDEBAR, cursor="hand2")
+        lbl.place(relx=0.5, rely=0.5, anchor="center")   # center the image in the box
         name = tk.Label(cell, text=self._short_name(file), bg=SIDEBAR,
-                        fg=FG_DIM, font=("Segoe UI", 7),
-                        wraplength=self.thumb_size)
+                        fg=FG_DIM, font=("Segoe UI", 7))
         name.pack()
         cell._holder = holder            # the bordered frame we recolor to select
-        pos, cols = self._thumb_pos, self._thumb_cols
-        cell.grid(row=pos // cols, column=pos % cols, padx=4, pady=4, sticky="n")
+        cell._img_lbl = lbl              # the label the decode poll fills with the thumb
         for w in (lbl, holder, name, cell):
             w.bind("<MouseWheel>", self._on_wheel)
             w.bind("<Button-1>", lambda e, idx=i: self.go_to(idx))
         return cell
 
-    def _add_list_row(self, i, file, photo):
-        "Build one list row: a tiny preview + the filename, truncated to fit the width."
+    def _make_list_cell(self, i, file):
+        "A placeholder list row: a fixed tiny preview box + the (ellipsized) filename."
+        sel = (i == self.index)
         cell = tk.Frame(self.thumb_holder, bg=SIDEBAR)
         holder = tk.Frame(cell, bg=SIDEBAR,
-                          highlightthickness=2, highlightbackground=SIDEBAR)
-        holder.pack(fill="x")
-        thumb = tk.Label(holder, image=photo, bg=SIDEBAR, cursor="hand2")
-        thumb.pack(side="left", padx=(4, 8), pady=2)
-        # The name is ellipsized to the current sidebar width so a long filename
-        # fits the row instead of spilling past the right edge (and is re-fitted on
-        # resize by _reflow_list_names). anchor="w" keeps it left-aligned.
+                          highlightthickness=2,
+                          highlightbackground=ACCENT if sel else SIDEBAR)
+        holder.pack(fill="both", expand=True)
+        box = tk.Frame(holder, bg=SIDEBAR, width=self.LIST_THUMB,
+                       height=self.LIST_THUMB)
+        box.pack_propagate(False)
+        box.pack(side="left", padx=(4, 8), pady=2)
+        lbl = tk.Label(box, bg=SIDEBAR, cursor="hand2")
+        lbl.place(relx=0.5, rely=0.5, anchor="center")
+        # The name is ellipsized to the current column width so a long filename fits
+        # the row instead of spilling past the right edge (re-fitted by
+        # _reflow_list_names on resize). anchor="w" keeps it left-aligned.
         name = tk.Label(holder, text=self._fit_name(file), bg=SIDEBAR, fg=FG,
                         anchor="w", cursor="hand2", font=("Segoe UI", 9))
         name.pack(side="left", fill="x", expand=True)
-        self._list_name_labels.append((name, file))
         cell._holder = holder            # the bordered frame we recolor to select
-        pos, cols = self._thumb_pos, self._thumb_cols
-        cell.grid(row=pos // cols, column=pos % cols, padx=2, pady=1, sticky="ew")
-        for w in (cell, holder, thumb, name):
+        cell._img_lbl = lbl
+        cell._name_lbl = name            # re-ellipsized on resize
+        cell._file = file
+        for w in (cell, holder, box, lbl, name):
             w.bind("<MouseWheel>", self._on_wheel)
             w.bind("<Button-1>", lambda e, idx=i: self.go_to(idx))
         return cell
@@ -476,14 +595,17 @@ class BrowserMixin:
         return text[:lo] + ell
 
     def _reflow_list_names(self):
-        "Re-fit every list filename to the current sidebar width (after a resize)."
-        if self.view_mode != "list" or not getattr(self, "_list_name_labels", None):
+        "Re-fit every visible list filename to the current column width (after resize)."
+        if self.view_mode != "list":
             return
         avail = self._list_name_avail()
         font = self._list_font()
-        for lbl, full in self._list_name_labels:
+        for cell in self._cells.values():
+            lbl = getattr(cell, "_name_lbl", None)
+            if lbl is None:
+                continue
             try:
-                lbl.configure(text=self._ellipsize(full, font, avail))
+                lbl.configure(text=self._ellipsize(cell._file, font, avail))
             except tk.TclError:
                 pass
 
@@ -511,9 +633,8 @@ class BrowserMixin:
                 pass
 
     def _highlight_thumb(self):
-        for i, cell in enumerate(self.thumb_widgets):
-            if cell is None:
-                continue
+        "Accent-border the current photo's cell; clear the rest (only visible cells exist)."
+        for i, cell in self._cells.items():
             try:
                 cell._holder.configure(
                     highlightbackground=ACCENT if i == self.index else SIDEBAR)
@@ -521,23 +642,25 @@ class BrowserMixin:
                 pass
 
     def _scroll_to_thumb(self):
-        "Scroll the grid so the selected thumbnail is visible (no-op if not loaded yet)."
-        if not (0 <= self.index < len(self.thumb_widgets)):
+        "Scroll so the current photo's row is visible, then realize the new window."
+        n = len(self.files)
+        if not (0 <= self.index < n):
+            self._render_window()
             return
-        cell = self.thumb_widgets[self.index]
-        if cell is None:
-            return
+        cell_w, cell_h, cols = self._cell_metrics()
+        rows = (n + cols - 1) // cols if cols else 0
+        total = max(1, rows * cell_h)
+        y = (self.index // max(1, cols)) * cell_h
         try:
             self.canvas.update_idletasks()
-            total = self.thumb_holder.winfo_height()
             view_h = self.canvas.winfo_height()
-            if total <= 1 or view_h <= 1:
-                return
-            y, h = cell.winfo_y(), cell.winfo_height()
+            if view_h <= 1:
+                view_h = 600
             top = self.canvas.canvasy(0)
-            if y < top:                              # above the viewport → scroll up
+            if y < top:                              # row above the viewport → scroll up
                 self.canvas.yview_moveto(max(0.0, y / total))
-            elif y + h > top + view_h:               # below → scroll down
-                self.canvas.yview_moveto(max(0.0, (y + h - view_h) / total))
+            elif y + cell_h > top + view_h:          # below → scroll down
+                self.canvas.yview_moveto(max(0.0, (y + cell_h - view_h) / total))
         except tk.TclError:
             pass
+        self._render_window()
