@@ -334,8 +334,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._grid_job = None          # pending incremental-build after-job
         self._grid_pool = None         # worker pool decoding grid tiles
         self._grid_futures = {}        # file index -> pending tile decode Future
-        self._grid_cache = {}          # filename -> decoded PIL tile (current folder)
-        self._grid_cache_folder = None
+        # Grid tiles are served from the shared thumbnail cache (thumbcache.py), the
+        # same source the sidebar strip reads — no separate per-grid cache anymore.
         # Grid multi-select + drag-to-sort: a set of selected file indices, and the
         # transient drag state used to drop them onto the კარგი / ცუდი zones.
         self._grid_sel = set()         # selected file indices in the grid

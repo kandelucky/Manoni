@@ -146,10 +146,8 @@ class GridViewMixin:
         if new == self.grid_tile:
             return
         self.grid_tile = new
-        # Cached tiles are size-specific → drop them so they re-decode at the new
-        # size. (Cull rebuilds still reuse the cache; only a zoom invalidates it.)
-        self._grid_cache = {}
-        self._grid_cache_folder = None
+        # The shared thumbnail cache is keyed by size, so a new tile size just
+        # builds at the new size; old-size entries age out of the cache on their own.
         self._save_state()
         # Coalesce a fast wheel spin into a single rebuild.
         if getattr(self, "_grid_zoom_job", None) is not None:
@@ -289,10 +287,6 @@ class GridViewMixin:
         " and drain them into cells on the main thread in time-budgeted slices."
         if not hasattr(self, "grid_holder"):
             return
-        # A new folder invalidates the per-filename tile cache.
-        if getattr(self, "_grid_cache_folder", None) != self.folder:
-            self._grid_cache = {}
-            self._grid_cache_folder = self.folder
         self._stop_grid_build()
         for w in self.grid_holder.winfo_children():
             w.destroy()
@@ -312,19 +306,17 @@ class GridViewMixin:
             self._grid_job = self.root.after(1, self._grid_drain)
 
     def _top_up_grid(self):
-        "Keep the decode pool a bounded distance ahead of the cells being built;"
-        " files already in the tile cache need no decode."
+        "Keep the decode pool a bounded distance ahead of the cells being built."
+        " The shared cache (memory + disk) makes already-seen files near-instant."
         pool = getattr(self, "_grid_pool", None)
         if pool is None:
             return
         target = min(len(self.files), self._grid_idx + 64)
         while self._grid_submit < target:
             i = self._grid_submit
-            file = self.files[i]
-            if file not in self._grid_cache:
-                path = os.path.join(self.folder, file)
-                self._grid_futures[i] = pool.submit(
-                    _decode_thumb, path, self._grid_tsize)
+            path = os.path.join(self.folder, self.files[i])
+            self._grid_futures[i] = pool.submit(
+                _decode_thumb, path, self._grid_tsize)
             self._grid_submit += 1
 
     def _grid_drain(self):
@@ -341,16 +333,11 @@ class GridViewMixin:
             self._top_up_grid()
             i = self._grid_idx
             file = self.files[i]
-            if file in self._grid_cache:
-                pil = self._grid_cache[file]
-            else:
-                fut = self._grid_futures.get(i)
-                if fut is None or not fut.done():
-                    break                    # next-in-order not ready → yield, retry
-                pil = fut.result()           # None if the file couldn't be read
-                del self._grid_futures[i]
-                if pil is not None:
-                    self._grid_cache[file] = pil
+            fut = self._grid_futures.get(i)
+            if fut is None or not fut.done():
+                break                        # next-in-order not ready → yield, retry
+            pil = fut.result()               # None if the file couldn't be read
+            del self._grid_futures[i]
             try:
                 if pil is None:
                     raise ValueError("decode failed")

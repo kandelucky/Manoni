@@ -16,26 +16,16 @@ from PIL import Image, ImageTk
 
 from ..config import BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM, SUPPORTED, ICON_DIR
 from ..i18n import t
+# The thumbnail workers call _decode_thumb; it is the disk-cached version, so the
+# first decode of a file is stored and every later load / resize / cull / relaunch
+# is a cheap blob read (see thumbcache.py — it falls back to a direct decode if the
+# cache is unavailable). Re-exported here so gridview, which does
+# `from .browser import _decode_thumb`, shares the same cached path.
+from ..thumbcache import cached_thumb as _decode_thumb  # noqa: F401
 
 # Near-black backdrop for the "please wait" loading screen (darker than the app
 # background so it clearly reads as a blocking overlay, not just the sidebar).
 LOADING_BG = "#0d0d0d"
-
-
-def _decode_thumb(path, tsize):
-    "Open + downscale one image to a <=tsize RGB thumbnail. Runs in a worker"
-    " thread (PIL releases the GIL while decoding, so many run in parallel);"
-    " returns a PIL image, or None if the file can't be read. NO Tk here — the"
-    " main thread turns this into a PhotoImage + widget."
-    try:
-        with Image.open(path) as im:
-            # draft() lets the JPEG decoder load at a reduced scale (no-op for
-            # other formats) — far faster, especially feeding the parallel decode.
-            im.draft("RGB", (tsize, tsize))
-            im.thumbnail((tsize, tsize))
-            return im.convert("RGB")
-    except Exception:
-        return None
 
 
 class BrowserMixin:
