@@ -838,6 +838,7 @@ class CropMixin:
         self._reset_straighten()           # the tilt is now baked in
         self._cropped = True
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a crop
+        self._clear_text_for_geometry()   # …and the source-px text position no longer maps
         self._edits_saved = False
         nw, nh = self.current_pil.size
         # Reset the box to the new full image; ready for a second crop.

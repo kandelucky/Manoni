@@ -10,7 +10,8 @@ from the live sliders and call in here.
 import math
 from dataclasses import dataclass
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageDraw, ImageStat, ImageChops
+from PIL import (Image, ImageEnhance, ImageFilter, ImageDraw, ImageStat,
+                 ImageChops, ImageFont)
 
 
 # --- Tuning constants (were class attributes on Manoni) ----------------------
@@ -170,6 +171,11 @@ class Edits:
     # while everything outside it is Gaussian-blurred. None = off, else a dict
     # {cx, cy, r (source px), blur 0..1, feather 0..1}. See apply_focus_blur.
     focus:       object = None
+    # Text / watermark overlay. None = off, else a dict with the string, its
+    # centre + size in SOURCE px (so it stays glued to the photo through zoom /
+    # pan and the preview matches the full-res save), colour, opacity, font key,
+    # alignment and an optional drop shadow. See apply_text_overlay.
+    text:        object = None
 
 
 # --- Auto levels / auto contrast --------------------------------------------
@@ -478,6 +484,114 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
     blurred = img.filter(ImageFilter.GaussianBlur(radius))
     # Inside the shape (mask=255) keep the sharp img; outside, the blurred copy.
     return Image.composite(img, blurred, mask)
+
+
+# --- Text / watermark overlay ------------------------------------------------
+# A string laid over the photo, used for captions or a "© name" watermark. The
+# centre and font height are kept in FULL-RES SOURCE px (like the focus shape),
+# so the text stays glued to the photo through zoom/pan and the small preview
+# composites identically to the full-res save: the only difference is `scale`,
+# which multiplies the position AND the font size together.
+
+# Friendly font name -> candidate Windows font files (first that loads wins).
+# The default "Sans" (Arial) and "Georgian" (Sylfaen) both carry Georgian +
+# Latin glyphs, so a Georgian watermark renders without picking a special font.
+TEXT_FONT_FILES = {
+    "Sans":       ["arial.ttf"],
+    "Sans Bold":  ["arialbd.ttf"],
+    "Serif":      ["times.ttf"],
+    "Mono":       ["consola.ttf", "cour.ttf"],
+    "Script":     ["segoesc.ttf", "BRADHITC.TTF", "comic.ttf"],
+    "Georgian":   ["sylfaen.ttf"],
+}
+TEXT_FONTS = list(TEXT_FONT_FILES.keys())   # the order shown in the panel
+
+_font_cache = {}   # (family, px) -> ImageFont; bounded so a size drag can't grow it
+
+
+def _load_font(family, px):
+    "An ImageFont for `family` at `px` height; falls back to Arial / the default."
+    px = max(1, int(round(px)))
+    key = (family, px)
+    font = _font_cache.get(key)
+    if font is None:
+        for cand in TEXT_FONT_FILES.get(family, []) + ["arial.ttf"]:
+            try:
+                font = ImageFont.truetype(cand, px)
+                break
+            except OSError:
+                continue
+        if font is None:
+            font = ImageFont.load_default()
+        if len(_font_cache) > 64:     # a size drag spawns one entry per px — cap it
+            _font_cache.clear()
+        _font_cache[key] = font
+    return font
+
+
+def _hex_to_rgb(value, default=(255, 255, 255)):
+    "Parse '#rrggbb' (or '#rgb') to an (r, g, b) tuple; default on garbage."
+    try:
+        s = value.lstrip("#")
+        if len(s) == 3:
+            s = "".join(c * 2 for c in s)
+        return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+    except (ValueError, AttributeError, TypeError, IndexError):
+        return default
+
+
+def text_extent(overlay):
+    "Width/height of the overlay text in SOURCE px (0,0 when empty). For the UI"
+    " hit-box and corner snapping — measured at the un-scaled source font size."
+    text = (overlay or {}).get("text") or ""
+    if not text.strip():
+        return (0.0, 0.0)
+    font = _load_font(overlay.get("font", "Sans"),
+                      max(1.0, overlay.get("size", 48.0)))
+    d = ImageDraw.Draw(Image.new("L", (1, 1)))
+    bbox = d.multiline_textbbox((0, 0), text, font=font,
+                                align=overlay.get("align", "center"))
+    return (bbox[2] - bbox[0], bbox[3] - bbox[1])
+
+
+def apply_text_overlay(img, overlay, scale, src_box):
+    "Draw the overlay's text centred on its source-px point, scaled to display px."
+    text = (overlay.get("text") or "")
+    if not text.strip():
+        return img
+    opacity = max(0.0, min(1.0, float(overlay.get("opacity", 1.0))))
+    if opacity <= 0.0:
+        return img
+    px = max(1.0, overlay.get("size", 48.0) * scale)
+    font = _load_font(overlay.get("font", "Sans"), px)
+    sx0, sy0, _sx1, _sy1 = src_box
+    cx = (overlay["cx"] - sx0) * scale
+    cy = (overlay["cy"] - sy0) * scale
+    align = overlay.get("align", "center")
+    rgb = _hex_to_rgb(overlay.get("color", "#ffffff"))
+    a = int(round(opacity * 255))
+
+    # Paint onto a transparent layer the size of `img`, then alpha-composite —
+    # so partial opacity blends with the photo instead of overwriting it.
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    # Centre the text's INK box on (cx, cy) by drawing at the matching top-left.
+    # (Manual centering, not anchor="mm" — multiline anchors vary across Pillow.)
+    bbox = d.multiline_textbbox((0, 0), text, font=font, align=align)
+    tlx = cx - (bbox[2] - bbox[0]) / 2 - bbox[0]
+    tly = cy - (bbox[3] - bbox[1]) / 2 - bbox[1]
+    if overlay.get("shadow"):
+        # A soft dark drop-shadow lifts light text off a bright photo. Offset
+        # scales with the font so it looks the same on preview and full-res.
+        off = max(1, int(round(px * 0.07)))
+        d.multiline_text((tlx + off, tly + off), text, font=font,
+                         fill=(0, 0, 0, int(a * 0.6)), align=align)
+    d.multiline_text((tlx, tly), text, font=font,
+                     fill=(rgb[0], rgb[1], rgb[2], a), align=align)
+
+    base = img.convert("RGBA")
+    out = Image.alpha_composite(base, layer)
+    return out.convert("RGB") if img.mode == "RGB" else out
 
 
 # --- Transparency backdrop ---------------------------------------------------
@@ -854,9 +968,13 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
         img = apply_vignette(img, e.vignette - 1.0, scale, src_box, full_size,
                              vig_cache)
     if e.grain > 0.0:
-        # Grain goes LAST — on top of the whole look (after focus blur and
-        # vignette), the way real film grain sits over the final image.
+        # Grain goes LAST of the looks — on top of the whole image (after focus
+        # blur and vignette), the way real film grain sits over the photo.
         img = apply_grain(img, e.grain, scale)
+    if e.text:
+        # The text / watermark caps everything: an annotation laid crisply over
+        # the finished photo (even on top of the grain), not part of the look.
+        img = apply_text_overlay(img, e.text, scale, src_box)
     return img
 
 

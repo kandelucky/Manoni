@@ -175,6 +175,7 @@ class PerspectiveMixin:
             self._before_base_key = None
         self._perspd = True
         self._clear_focus_for_geometry()    # source-px focus shape no longer maps
+        self._clear_text_for_geometry()     # …and the source-px text position no longer maps
         self.clone_src = self.clone_offset = None   # clone anchor moved
         # The crop box referenced the old pixel positions — reset it to full.
         iw, ih = self.current_pil.size

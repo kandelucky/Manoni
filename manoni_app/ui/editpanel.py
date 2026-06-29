@@ -26,7 +26,8 @@ class EditPanelMixin:
                       "perspective": "Perspective",
                       "heal": "Heal & Clone", "focus": "Focus blur",
                       "color": "Color mixer",
-                      "effects": "Effects", "filters": "Filters",
+                      "effects": "Effects", "text": "Text & Watermark",
+                      "filters": "Filters",
                       "actions": "Actions"}
 
     def _edit_dpi_w(self, logical):
@@ -72,6 +73,7 @@ class EditPanelMixin:
             "focus":   self._build_focus_section(self.section_content),
             "color":   self._build_color_section(self.section_content),
             "effects": self._build_effects_section(self.section_content),
+            "text":    self._build_text_section(self.section_content),
             "filters": self._build_filters_section(self.section_content),
             "actions": self._build_actions_section(self.section_content),
         }
@@ -296,6 +298,7 @@ class EditPanelMixin:
             ("focus",   "aperture",           "Blur"),
             ("color",   "droplets",           "Colors"),
             ("effects", "wand-sparkles",      "Effects"),
+            ("text",    "type",               "Text"),
             ("filters", "palette",            "Filters"),
             ("actions", "clapperboard",       "Actions"),
         ]:
@@ -408,7 +411,7 @@ class EditPanelMixin:
         if key not in self.sections:
             return
         self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
-        if key in ("crop", "heal", "focus", "perspective"):
+        if key in ("crop", "heal", "focus", "perspective", "text"):
             self._set_compare(False)  # these warp/drag the canvas — compare can't intercept it
         self.active_section = key
         for k, frame in self.sections.items():
@@ -428,6 +431,8 @@ class EditPanelMixin:
             self._enter_heal()       # show the brush cursor + ring
         elif key == "focus":
             self._enter_focus()      # place the focus circle + fit to see it all
+        elif key == "text":
+            self._enter_text()       # place a default overlay + fit, focus the entry
         elif key == "actions":
             self._enter_actions()    # refresh the recorder + saved-action list
         else:
@@ -531,7 +536,10 @@ class EditPanelMixin:
             s.set(round(n * 100))
         self.auto_mode = None        # auto correction is part of the edit too
         self.focus = None            # the selective focus blur resets too
+        self.text_overlay = None     # …and the text / watermark overlay
+        self._text_drag = None
         self._sync_focus_controls()
+        self._sync_text_controls()
         self._recompute_auto()
         self._refresh_auto_buttons()
 
@@ -588,6 +596,7 @@ class EditPanelMixin:
                 "grain": self.grain,
                 "split_hi": self.split_hi, "split_sh": self.split_sh,
                 "focus": dict(self.focus) if self.focus else None,
+                "text_overlay": dict(self.text_overlay) if self.text_overlay else None,
                 "auto_mode": self.auto_mode}
 
     def _edit_gesture_start(self):

@@ -636,6 +636,7 @@ class NavMixin:
             if attr in self.sliders:          # auto_mode / focus have no factor slider
                 self.sliders[attr].set(round(val * 100))
         self._sync_focus_controls()           # focus has its own (non-factor) sliders
+        self._sync_text_controls()            # text overlay has its own (non-factor) controls
         self._recompute_auto()
         self._refresh_auto_buttons()
         self._render_preview()

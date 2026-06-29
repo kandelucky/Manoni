@@ -149,6 +149,8 @@ class ViewerMixin:
             return self._compare_drag(event)
         if self._focus_active():
             return self._focus_press(event)
+        if self._text_active():
+            return self._text_press(event)
         if self._heal_active():
             return self._heal_press(event)
         return self._crop_press(event)
@@ -167,6 +169,8 @@ class ViewerMixin:
             return self._compare_drag(event)
         if self._focus_active():
             return self._focus_move(event)
+        if self._text_active():
+            return self._text_move(event)
         if self._heal_active():
             return self._heal_move(event)
         return self._crop_move(event)
@@ -178,6 +182,8 @@ class ViewerMixin:
             return
         if self._focus_active():
             return self._focus_release(event)
+        if self._text_active():
+            return self._text_release(event)
         if self._heal_active():
             return self._heal_release(event)
         return self._crop_release(event)
@@ -189,6 +195,8 @@ class ViewerMixin:
             return
         if self._focus_active():
             return self._focus_hover(event)
+        if self._text_active():
+            return self._text_hover(event)
         if self._heal_active():
             return self._heal_hover(event)
         return self._crop_hover(event)
@@ -268,6 +276,7 @@ class ViewerMixin:
         self._reset_straighten()        # a 90° turn invalidates any pending tilt
         self._rotated = True            # rotation is an edit worth offering to save
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a rotate
+        self._clear_text_for_geometry()   # …and the source-px text position no longer maps
         self._edits_saved = False
         self.fit_mode = True            # aspect ratio swapped → refit to window
         self.pan_x = self.pan_y = 0.0
@@ -306,7 +315,8 @@ class ViewerMixin:
             bw=self.bw, sepia=self.sepia, grain=self.grain,
             denoise=self.denoise,
             split_hi=self.split_hi, split_sh=self.split_sh,
-            sharpen=self.sharpen, vignette=self.vignette, focus=self.focus)
+            sharpen=self.sharpen, vignette=self.vignette, focus=self.focus,
+            text=self.text_overlay)
 
     def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None):
         "Apply the live edit factors via the pure imaging module."
@@ -408,6 +418,8 @@ class ViewerMixin:
             self._draw_heal_cursor()
         elif self._focus_active():
             self._draw_focus_overlay()
+        elif self._text_active():
+            self._draw_text_overlay()
         if getattr(self, "show_rulers", True):
             self._draw_rulers(vw, vh, scale, off_x, off_y)
         if self.compare_mode and not self._compare_peek:

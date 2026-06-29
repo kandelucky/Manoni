@@ -32,6 +32,7 @@ from manoni_app.ui.resize import ResizeMixin
 from manoni_app.ui.perspective import PerspectiveMixin
 from manoni_app.ui.heal import HealMixin
 from manoni_app.ui.focus import FocusMixin
+from manoni_app.ui.text import TextMixin
 from manoni_app.ui.filters import FiltersMixin
 from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
@@ -42,8 +43,8 @@ from manoni_app.ui.gridview import GridViewMixin
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, ResizeMixin, PerspectiveMixin,
-             HealMixin, FocusMixin, FiltersMixin, ActionsMixin, AboutMixin,
-             MetadataMixin, SettingsMixin, GridViewMixin):
+             HealMixin, FocusMixin, TextMixin, FiltersMixin, ActionsMixin,
+             AboutMixin, MetadataMixin, SettingsMixin, GridViewMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -198,6 +199,11 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.focus = None
         self._focus_cache = {}   # geometry key -> mask; reused across blur drags
         self._focus_drag = None  # in-progress circle drag state, or None
+        # Text / watermark overlay: a LIVE non-destructive effect like the focus
+        # blur. None = off, else a dict {text, cx, cy, size (all source px),
+        # color, opacity, font, align, shadow}. Drawn last in apply_edits.
+        self.text_overlay = None
+        self._text_drag = None   # in-progress move/resize drag state, or None
         # Auto tone (Photoshop "Auto Levels" / "Auto Contrast"). One mode at a
         # time: "levels" stretches each RGB channel (fixes a colour cast),
         # "contrast" stretches luminance only (keeps colour balance). The per-band

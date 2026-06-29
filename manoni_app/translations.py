@@ -90,6 +90,37 @@ CATALOG_KA = {
     "Transition softness": "გადასვლის სიფაფუკე",
     "Remove blur": "ბლურის მოშორება",
     "Turn the focus blur off": "ფოკუსის ბლურის გამორთვა",
+
+    # --- Text / watermark tool (text.py) ----------------------------------
+    "Text": "ტექსტი",
+    "Text & Watermark": "ტექსტი და წყლის ნიშანი",
+    "Type a caption or a watermark, then drag it on the photo to place it. The corner handle resizes it.":
+        "აკრიფე წარწერა ან წყლის ნიშანი, შემდეგ გადაათრიე ფოტოზე განსათავსებლად. კუთხის სახელური ზომას ცვლის.",
+    "Font": "შრიფტი",
+    "Size": "ზომა",
+    "Opacity": "გამჭვირვალობა",
+    "Colour": "ფერი",
+    "Text colour": "ტექსტის ფერი",
+    "Pick the text colour": "აირჩიე ტექსტის ფერი",
+    "Shadow": "ჩრდილი",
+    "A soft drop shadow, for light text on a bright photo":
+        "რბილი ჩრდილი — ღია ტექსტისთვის კაშკაშა ფოტოზე",
+    "Alignment": "სწორება",
+    "Left": "მარცხნივ",
+    "Centre": "ცენტრში",
+    "Right": "მარჯვნივ",
+    "Position": "მდებარეობა",
+    "Remove text": "ტექსტის წაშლა",
+    "Turn the text overlay off": "ტექსტის გადაფარვის გამორთვა",
+    "Type your text": "აკრიფე ტექსტი",
+    # Font family names (shown as chips)
+    "Sans": "უსერიფო",
+    "Sans Bold": "მუქი უსერიფო",
+    "Serif": "სერიფიანი",
+    "Mono": "მონოსიგანის",
+    "Script": "ხელნაწერი",
+    "Georgian": "ქართული",
+
     "Auto level": "ავტო ლეველი",
     "Auto-correct color balance (each channel stretched separately)":
         "ფერის ბალანსის ავტო-სწორება (თითო არხი ცალკე იჭიმება)",
