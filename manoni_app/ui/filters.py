@@ -278,6 +278,10 @@ class FiltersMixin:
                             self._filter_export,
                             t("Save filters to a .json file to share"))
 
+        tk.Frame(f, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
+                                                 pady=(8, 6))
+        self._build_filter_list(f)
+
         self._refresh_filter_count()
         return f
 
@@ -312,6 +316,113 @@ class FiltersMixin:
         n = len(getattr(self, "user_filters", []))
         self.lbl_filter_count.configure(
             text=t("Saved filters: {n}").format(n=n))
+
+    # --- The grouped filter list (vertical, inside the manager panel) -------
+    # A scrollable, name-only list of EVERY filter, split into foldable groups
+    # ('Standard' built-ins + the user's groups) — the same groups as the
+    # horizontal preview strip, but browsable without the canvas filmstrip.
+    # Clicking a name applies that look; clicking a caption folds the group
+    # (the fold state is the SAME as the strip's, so they stay in sync).
+
+    def _build_filter_list(self, parent):
+        "Scaffold the scrollable grouped list; rows are filled by _refresh_filter_list."
+        tk.Label(parent, text=t("All filters"), bg=BAR, fg=FG_DIM, anchor="w",
+                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
+                                                     pady=(0, 4))
+        wrap = tk.Frame(parent, bg=BAR)
+        wrap.pack(fill="both", expand=True, padx=(EDIT_PAD, 0), pady=(0, 8))
+
+        canvas = tk.Canvas(wrap, bg=BAR, highlightthickness=0)
+        sb = self._make_scrollbar(wrap, canvas)
+        holder = tk.Frame(canvas, bg=BAR)
+        win = canvas.create_window((0, 0), window=holder, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        def on_body(_e=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.itemconfigure(win, width=canvas.winfo_width())
+        holder.bind("<Configure>", on_body)
+        canvas.bind("<Configure>", on_body)
+        canvas.bind("<MouseWheel>", self._flist_wheel)
+
+        self.filter_list_canvas = canvas
+        self.filter_list_holder = holder
+        self._filter_list_rows = []     # [{frame,label,vals,active}] for the repaint
+        self._refresh_filter_list()
+
+    def _flist_wheel(self, e):
+        "Vertical wheel scroll for the grouped filter list."
+        self.filter_list_canvas.yview_scroll(int(-e.delta / 120), "units")
+
+    def _refresh_filter_list(self):
+        "Rebuild the grouped list: 'Standard' built-ins first, then each non-empty"
+        " user group, every group under a foldable caption."
+        if not hasattr(self, "filter_list_holder"):
+            return
+        holder = self.filter_list_holder
+        for w in holder.winfo_children():
+            w.destroy()
+        self._filter_list_rows = []
+        for grp in self._strip_groups():
+            self._add_flist_group(holder, grp)
+        self.filter_list_canvas.yview_moveto(0.0)
+        self.filter_list_canvas.configure(
+            scrollregion=self.filter_list_canvas.bbox("all"))
+
+    def _add_flist_group(self, parent, grp):
+        "A foldable caption (chevron + name + count); when open, its filter rows."
+        header = tk.Frame(parent, bg=BAR, cursor="hand2")
+        header.pack(fill="x", pady=(6, 0))
+        parts = [header]
+        chev = self.icon("chevron-right" if grp["collapsed"] else "chevron-down",
+                         size=12)
+        if chev is not None:
+            ic = tk.Label(header, image=chev, bg=BAR)
+            ic.pack(side="left", padx=(2, 4))
+            parts.append(ic)
+        tx = tk.Label(header, text=f"{grp['label']}  ({len(grp['items'])})",
+                      bg=BAR, fg=FG_DIM, anchor="w", font=("Segoe UI", 8, "bold"))
+        tx.pack(side="left", fill="x", expand=True, pady=4)
+        parts.append(tx)
+        for w in parts:
+            w.bind("<Button-1>", lambda e, gid=grp["id"]: self._toggle_group(gid))
+            w.bind("<Enter>", lambda e: tx.configure(fg=FG))
+            w.bind("<Leave>", lambda e: tx.configure(fg=FG_DIM))
+            w.bind("<MouseWheel>", self._flist_wheel)
+        if not grp["collapsed"]:
+            for label, vals in grp["items"]:
+                self._add_flist_row(parent, label, vals)
+
+    def _add_flist_row(self, parent, label, vals):
+        "One filter row: an indented name; click applies the look onto the photo."
+        active = self._filter_active(vals)
+        row = tk.Frame(parent, bg=BAR, cursor="hand2")
+        row.pack(fill="x")
+        tx = tk.Label(row, text=label, bg=BAR, fg=ACCENT if active else FG,
+                      anchor="w", font=("Segoe UI", 9))
+        tx.pack(side="left", fill="x", expand=True, padx=(26, 6), pady=4)
+
+        cell = {"frame": row, "label": tx, "vals": vals, "active": active}
+        self._filter_list_rows.append(cell)
+        parts = (row, tx)
+
+        def enter(_e=None):
+            if not cell["active"]:
+                for w in parts:
+                    w.configure(bg=HOVER)
+
+        def leave(_e=None):
+            if not cell["active"]:
+                for w in parts:
+                    w.configure(bg=BAR)
+        for w in parts:
+            w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
+            w.bind("<Enter>", enter)
+            w.bind("<Leave>", leave)
+            w.bind("<MouseWheel>", self._flist_wheel)
+        return row
 
     # --- The filter preview strip (horizontal, below the editor) ------------
     # A live filmstrip under the preview: each saved filter is rendered onto a
@@ -358,6 +469,9 @@ class FiltersMixin:
     def _refresh_filter_strip(self):
         "Rebuild the strip for the current photo: 'Original', then each non-empty"
         " group ('Standard' built-ins + the user's groups) under a foldable caption."
+        # The vertical panel list shares the store + fold state, so keep it in
+        # sync from the same call (it needs no photo, so refresh it first).
+        self._refresh_filter_list()
         if not hasattr(self, "filter_strip"):
             return
         # Turned off in Settings → keep the filmstrip hidden regardless of photo.
@@ -529,6 +643,13 @@ class FiltersMixin:
             cell["active"] = active
             cell["frame"].configure(bg=ACCENT if active else self.FSTRIP_BORDER)
             cell["name"].configure(fg=ACCENT if active else FG_DIM)
+        # Mirror the active look onto the vertical panel list (name in accent).
+        for cell in getattr(self, "_filter_list_rows", []):
+            active = self._filter_active(cell["vals"])
+            cell["active"] = active
+            bg = BAR
+            cell["frame"].configure(bg=bg)
+            cell["label"].configure(bg=bg, fg=ACCENT if active else FG)
 
     def _apply_filter_values(self, vals):
         "Play a filter's factors (FILTER_KEYS + auto mode) onto the photo, undoably."

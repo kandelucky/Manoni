@@ -148,6 +148,7 @@ CATALOG_KA = {
     "Save the current edit as a filter, or add ready-made filters from a file.":
         "შენ შეგიძლია მიმდინარე ედიტი ფილტრად შეინახო, ან მზა ფილტრები ფაილიდან ჩამოამატო.",
     "Saved filters: {n}": "შენახული ფილტრები: {n}",
+    "All filters": "ყველა ფილტრი",
     "Create filter": "ფილტრის შექმნა",
     "Saves the current slider values as a filter":
         "მიმდინარე სლაიდერების მნიშვნელობებს ფილტრად შეინახავს",
