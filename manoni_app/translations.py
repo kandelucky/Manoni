@@ -20,6 +20,7 @@ CATALOG_KA = {
     "Settings": "პარამეტრები",
 
     # --- Sidebar view modes (manoni.py VIEW_MENU) -------------------------
+    "Extra large icons": "ძალიან დიდი ხატულები",
     "Large icons": "დიდი ხატულები",
     "Medium icons": "საშუალო ხატულები",
     "Small icons": "პატარა ხატულები",
@@ -94,8 +95,8 @@ CATALOG_KA = {
     # --- Text / watermark tool (text.py) ----------------------------------
     "Text": "ტექსტი",
     "Text & Watermark": "ტექსტი და წყლის ნიშანი",
-    "Type a caption or a watermark, then drag it on the photo to place it. The corner handle resizes it.":
-        "აკრიფე წარწერა ან წყლის ნიშანი, შემდეგ გადაათრიე ფოტოზე განსათავსებლად. კუთხის სახელური ზომას ცვლის.",
+    "Add a text, then drag it on the photo to place it. The corner handle resizes it. Add as many as you like.":
+        "დაამატე ტექსტი, შემდეგ გადაათრიე ფოტოზე განსათავსებლად. კუთხის სახელური ზომას ცვლის. დაამატე რამდენიც გინდა.",
     "Font": "შრიფტი",
     "Size": "ზომა",
     "Opacity": "გამჭვირვალობა",
@@ -110,16 +111,20 @@ CATALOG_KA = {
     "Centre": "ცენტრში",
     "Right": "მარჯვნივ",
     "Position": "მდებარეობა",
-    "Remove text": "ტექსტის წაშლა",
-    "Turn the text overlay off": "ტექსტის გადაფარვის გამორთვა",
+    "Add text": "დაამატე ტექსტი",
+    "Drop a new text element on the photo": "ფოტოზე ახალი ტექსტის დამატება",
+    "Delete text": "წაშალე ტექსტი",
+    "Remove the selected text from the photo": "მონიშნული ტექსტის წაშლა ფოტოდან",
+    "Delete all": "წაშალე ყველა",
+    "Remove every text from the photo": "ყველა ტექსტის წაშლა ფოტოდან",
     "Type your text": "აკრიფე ტექსტი",
-    # Font family names (shown as chips)
+    # Font family names (shown as chips) — every face carries Georgian + Latin
     "Sans": "უსერიფო",
     "Sans Bold": "მუქი უსერიფო",
+    "Light": "თხელი",
     "Serif": "სერიფიანი",
-    "Mono": "მონოსიგანის",
+    "Rounded": "მრგვალი",
     "Script": "ხელნაწერი",
-    "Georgian": "ქართული",
 
     "Auto level": "ავტო ლეველი",
     "Auto-correct color balance (each channel stretched separately)":

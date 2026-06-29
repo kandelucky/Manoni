@@ -54,20 +54,26 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     ZOOM_STEP = 1.25    # multiply/divide per wheel notch or −/+ click
     ZOOM_PRESETS = [("Fit", None), ("50%", 0.5), ("100%", 1.0), ("200%", 2.0)]
 
+    # Every thumbnail zoom — the sidebar strip, the culling grid, their −/+ buttons,
+    # Ctrl+wheel — snaps to one of these four sizes. They are exactly the sizes the
+    # thumbnail cache decodes at (thumbcache._BUCKETS), so a zoom shows each thumb at
+    # its native decoded resolution: instant and crisp, never an in-between downscale.
+    THUMB_LEVELS = (128, 256, 448, 640)
+
     # Sidebar thumbnail grid (file-manager style: drag-resizable + zoomable).
-    THUMB_MIN   = 72    # smallest thumbnail (px)
-    THUMB_MAX   = 240   # largest thumbnail (px)
-    THUMB_STEP  = 24    # +/- per zoom click
+    THUMB_MIN   = THUMB_LEVELS[0]   # smallest thumbnail (px)
+    THUMB_MAX   = THUMB_LEVELS[-1]  # largest thumbnail (px)
     THUMB_PAD   = 16    # a cell's footprint beyond the image (padding + border)
     SIDEBAR_MIN = 110   # narrowest the sidebar can be dragged
     SIDEBAR_MAX = 720   # widest the sidebar can be dragged
 
-    # Sidebar view modes (the footer dropdown). Grid modes set the icon size;
-    # "list" switches to compact rows. (key, label, thumbnail px | None for list.)
+    # Sidebar view modes (the footer dropdown). Grid modes set the icon size to one
+    # of THUMB_LEVELS; "list" switches to compact rows. (key, label, px | None.)
     VIEW_MENU = [
-        ("large",  "Large icons",    216),
-        ("medium", "Medium icons",  144),
-        ("small",  "Small icons",   96),
+        ("xlarge", "Extra large icons", THUMB_LEVELS[3]),
+        ("large",  "Large icons",       THUMB_LEVELS[2]),
+        ("medium", "Medium icons",      THUMB_LEVELS[1]),
+        ("small",  "Small icons",       THUMB_LEVELS[0]),
         ("list",   "List",              None),
     ]
     LIST_THUMB = 36     # tiny preview beside the filename in list view
@@ -105,7 +111,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # the 0-neutral ones here so reset / "is edited" use the right rest point.
     # auto_mode is not a slider; its rest is None (no auto correction active).
     SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "grain": 0.0, "denoise": 0.0,
-                      "focus": None, "auto_mode": None}
+                      "focus": None, "auto_mode": None, "texts": []}
 
     def __init__(self, folder=None):
         # Declare DPI awareness BEFORE the first window so Windows draws the
@@ -126,6 +132,15 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                 pass
 
         self.root = tk.Tk()
+        # Make Tcl/Tk talk Unicode. Tk 8.6 defaults its string bridge to the
+        # Windows ANSI code page ("language for non-Unicode programs") — e.g.
+        # cp1250 here — which has no Georgian, so a Georgian keystroke arrives
+        # in the text box as "?" and typed captions are lost. Forcing UTF-8
+        # fixes input AND display for every script (Tk 9 already defaults to it).
+        try:
+            self.root.tk.call("encoding", "system", "utf-8")
+        except tk.TclError:
+            pass
         # Tell Tk the real DPI so point-sized fonts render crisp; keep the
         # factor so icons can be loaded at a matching pixel size.
         self.dpi = apply_tk_scaling(self.root)
@@ -199,10 +214,14 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.focus = None
         self._focus_cache = {}   # geometry key -> mask; reused across blur drags
         self._focus_drag = None  # in-progress circle drag state, or None
-        # Text / watermark overlay: a LIVE non-destructive effect like the focus
-        # blur. None = off, else a dict {text, cx, cy, size (all source px),
-        # color, opacity, font, align, shadow}. Drawn last in apply_edits.
-        self.text_overlay = None
+        # Text / watermark overlays: LIVE non-destructive effects like the focus
+        # blur. `texts` is a LIST of dicts {text, cx, cy, size (all source px),
+        # color, opacity, font, align, shadow}; `text_sel` is the index of the
+        # selected element (or None). The `text_overlay` PROPERTY (see TextMixin)
+        # exposes the selected element so the per-control edit code stays simple.
+        # Added only via the "Add text" button — never auto-inserted.
+        self.texts = []
+        self.text_sel = None
         self._text_drag = None   # in-progress move/resize drag state, or None
         # Auto tone (Photoshop "Auto Levels" / "Auto Contrast"). One mode at a
         # time: "levels" stretches each RGB channel (fixes a colour cast),
@@ -304,6 +323,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._view_key = None    # identity of _view_base (None forces a re-render)
         self._view_alpha = None  # matching alpha mask when the photo is transparent
         self._has_alpha = False  # does the current photo carry transparency?
+        self._interacting = False    # a slider drag is live → draft render, no histogram
+        self._preview_scheduled = False  # a coalesced render is queued for the next idle
         self._checker_img = None    # cached transparency checkerboard (grows with view)
         self._checker_size = (0, 0)
         self.show_rulers = True  # top + left pixel rulers (Ctrl+R); persisted
@@ -318,7 +339,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._loading_overlay = None    # the "please wait" screen while a folder loads
         self._decode_pool = None        # worker pool decoding thumbnails in parallel
         self._decode_futures = {}       # file index -> pending decode Future
-        self.thumb_size = THUMB_W       # current thumbnail size (px), zoomable
+        self.thumb_size = self.THUMB_LEVELS[0]  # current thumbnail size (px), zoomable
         self.view_mode = "grid"         # sidebar layout: "grid" icons | "list" rows
         self.sidebar_width = THUMB_W + 30  # current sidebar width (px), drag-resizable
         self.folder_list_height = None  # user-dragged sub-folder list height (px); None = auto
@@ -497,6 +518,16 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         except Exception:
             pass
 
+    def _snap_thumb_level(self, size, direction=0):
+        "Snap a thumbnail size onto THUMB_LEVELS. direction 0 → the nearest level;"
+        " +1 → the next larger level; −1 → the next smaller (clamped at the ends)."
+        levels = self.THUMB_LEVELS
+        if direction > 0:
+            return next((s for s in levels if s > size), levels[-1])
+        if direction < 0:
+            return next((s for s in reversed(levels) if s < size), levels[0])
+        return min(levels, key=lambda s: abs(s - size))
+
     def _load_prefs(self):
         "Read sidebar width + thumbnail size from the state file (before the UI builds)."
         try:
@@ -506,13 +537,13 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             return
         ts = state.get("thumb_size")
         if isinstance(ts, int):
-            self.thumb_size = max(self.THUMB_MIN, min(self.THUMB_MAX, ts))
+            self.thumb_size = self._snap_thumb_level(ts)   # old sizes snap to a level
         sw = state.get("sidebar_width")
         if isinstance(sw, int):
             self.sidebar_width = max(self.SIDEBAR_MIN, min(self.SIDEBAR_MAX, sw))
         gt = state.get("grid_tile")
         if isinstance(gt, int):
-            self.grid_tile = max(self.GRID_TILE_MIN, min(self.GRID_TILE_MAX, gt))
+            self.grid_tile = self._snap_thumb_level(gt)    # old sizes snap to a level
         flh = state.get("folder_list_height")
         if isinstance(flh, int):       # clamped to the live sidebar at apply time
             self.folder_list_height = max(self.FOLDER_LIST_MIN, flh)

@@ -37,11 +37,9 @@ DRAG_THRESHOLD = 6     # px the pointer must move before a click becomes a drag
 
 class GridViewMixin:
     # Tile geometry (logical px; scaled by DPI when decoding/measuring). The tile
-    # box is user-zoomable (Ctrl+wheel or the −/+ buttons) between MIN and MAX.
-    GRID_TILE_DEFAULT = 190  # default tile box size (px)
-    GRID_TILE_MIN = 110
-    GRID_TILE_MAX = 360
-    GRID_TILE_STEP = 30      # +/- per zoom notch / button click
+    # box is user-zoomable (Ctrl+wheel or the −/+ buttons), snapping to one of the
+    # four THUMB_LEVELS — the sizes the thumbnail cache decodes at (see manoni.py).
+    GRID_TILE_DEFAULT = 256  # default tile box size (px) — a THUMB_LEVELS entry
     GRID_TILE_PAD = 26     # a cell's footprint beyond the image (padding + name)
     GRID_BUDGET = 0.03     # seconds of cell-building per main-thread slice
     DROP_ZONE_H = 72       # height of the კარგი / ცუდი drop bar (logical px)
@@ -140,9 +138,9 @@ class GridViewMixin:
     # --- Tile zoom (Ctrl+wheel or the −/+ buttons) --------------------------
 
     def _grid_zoom(self, direction):
-        "Grow (+1) / shrink (−1) the tile size; rebuild at the new size (debounced)."
-        new = self.grid_tile + direction * self.GRID_TILE_STEP
-        new = max(self.GRID_TILE_MIN, min(self.GRID_TILE_MAX, new))
+        "Step the tile size to the next (+1) / previous (−1) THUMB_LEVELS size;"
+        " rebuild at the new size (debounced)."
+        new = self._snap_thumb_level(self.grid_tile, direction)
         if new == self.grid_tile:
             return
         self.grid_tile = new
@@ -279,6 +277,7 @@ class GridViewMixin:
             self._grid_sel = set()
             self.grid_frame.grid_remove()
             self._render_preview()           # the big view is in sync with the selection
+            self._refresh_filter_strip()     # …and rebuild the strip we skipped while culling
 
     # --- Tile loading (parallel decode, cached per filename) ----------------
 

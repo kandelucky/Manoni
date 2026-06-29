@@ -167,7 +167,7 @@ class FocusMixin:
             return
         self.focus = {**self.focus, "blur": max(0.0, min(1.0, int(v) / 100.0))}
         self._edits_saved = False
-        self._render_preview()
+        self._schedule_preview()
 
     def _set_focus_feather(self, v):
         "Slider: how soft the sharp→blurred transition is (0 = crisp edge)."
@@ -175,7 +175,7 @@ class FocusMixin:
             return
         self.focus = {**self.focus, "feather": max(0.0, min(1.0, int(v) / 100.0))}
         self._edits_saved = False
-        self._render_preview()
+        self._schedule_preview()
 
     def _clear_focus_for_geometry(self):
         "Drop the focus shape when the image geometry changes (rotate / crop):"

@@ -512,7 +512,7 @@ class EditPanelMixin:
     def _on_slider(self, attr, val):
         setattr(self, attr, val / 100.0)
         self._edits_saved = False   # a fresh edit → the saved copy (if any) is stale
-        self._render_preview()
+        self._schedule_preview()    # coalesce the drag's renders into one per idle (see viewer)
 
     def _reset_slider(self, attr):
         "Return one slider to its neutral value as a single undoable step."
@@ -536,7 +536,8 @@ class EditPanelMixin:
             s.set(round(n * 100))
         self.auto_mode = None        # auto correction is part of the edit too
         self.focus = None            # the selective focus blur resets too
-        self.text_overlay = None     # …and the text / watermark overlay
+        self.texts = []              # …and every text / watermark overlay
+        self.text_sel = None
         self._text_drag = None
         self._sync_focus_controls()
         self._sync_text_controls()
@@ -596,19 +597,37 @@ class EditPanelMixin:
                 "grain": self.grain,
                 "split_hi": self.split_hi, "split_sh": self.split_sh,
                 "focus": dict(self.focus) if self.focus else None,
-                "text_overlay": dict(self.text_overlay) if self.text_overlay else None,
+                # A blank text box is NOT an edit: keep only the elements that
+                # actually carry text, so adding an empty box (or clearing one)
+                # never marks the photo changed or pushes an undo step. Selection
+                # (text_sel) is transient UI state and is deliberately excluded.
+                "texts": [dict(ov) for ov in self.texts
+                          if (ov.get("text") or "").strip()],
                 "auto_mode": self.auto_mode}
 
-    def _edit_gesture_start(self):
-        "A slider drag begins: remember the state so we can undo the whole drag."
+    def _edit_snapshot(self):
+        "Remember the edit state so a whole gesture (drag or typing session) folds"
+        " into one undo step. No draft mode — used by the text entry while typing,"
+        " where keystroke renders are infrequent and want full quality."
         self._edit_before = self._edit_state()
 
-    def _edit_gesture_end(self):
-        "A slider drag ends: record one undo entry if anything actually changed."
+    def _edit_commit(self):
+        "Record one undo entry if the gesture changed anything."
         if self._edit_before is not None:
             self._record_edit(self._edit_before)
             self._edit_before = None
             self._repaint_filter_strip()
+
+    def _edit_gesture_start(self):
+        "A slider / canvas drag begins: draft-quality renders + one undo step."
+        self._interacting = True     # drag → draft renders (low-res, no histogram)
+        self._edit_snapshot()
+
+    def _edit_gesture_end(self):
+        "A slider / canvas drag ends: back to full quality, record the undo step."
+        self._interacting = False    # back to full quality...
+        self._render_preview()       # ...and snap the photo + histogram to it now
+        self._edit_commit()
 
     def _record_edit(self, before):
         "Push an 'edit' undo entry for the current image if state changed."

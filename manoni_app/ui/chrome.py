@@ -49,9 +49,9 @@ class ChromeMixin:
         self.icons[key] = img
         return img
 
-    def _tool_button(self, parent, icon_name, command, tooltip=""):
+    def _tool_button(self, parent, icon_name, command, tooltip="", size=None):
         "A flat icon button with hover effect (falls back to text if no icon)."
-        img = self.icon(icon_name)
+        img = self.icon(icon_name, size)
         if img is not None:
             btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
         else:
@@ -257,17 +257,36 @@ class ChromeMixin:
     # --- Top info bar -------------------------------------------------------
 
     def _build_infobar(self):
+        # Status bar pinned to the very bottom of the window (root row 3, below
+        # the editor body). A 1px hairline along its top edge separates it from
+        # the body and spans the full window width.
         self.infobar = tk.Frame(self.root, bg=BAR, height=30)
-        self.infobar.grid(row=0, column=0, sticky="ew")
+        self.infobar.grid(row=3, column=0, sticky="ew")
         self.infobar.grid_propagate(False)
 
+        tk.Frame(self.infobar, bg=BORDER, height=1).pack(side="top", fill="x")
+
+        # Photo info button: pops a window with the current photo's metadata
+        # (colour profile, camera, capture settings, GPS) — the same data the
+        # Save dialog can keep or strip. Sits on the right, opposite the info
+        # text it explains. (Moved here from the toolbar; icon shrunk ~30%.)
+        self._tool_button(self.infobar, "info", self._metadata_dialog,
+                          t("Photo info (metadata)"), size=15).pack(
+                              side="right", padx=10, pady=4)
+
+        # Labels ~30% smaller than the old 9pt, and clickable: clicking either
+        # opens the same metadata window as the info button.
         self.lbl_name = tk.Label(self.infobar, text="Manoni", bg=BAR, fg=FG,
-                                 font=("Segoe UI", 9, "bold"))
+                                 font=("Segoe UI", 8), cursor="hand2")
         self.lbl_name.pack(side="left", padx=12)
 
         self.lbl_info = tk.Label(self.infobar, text="", bg=BAR, fg=FG_DIM,
-                                 font=("Segoe UI", 9))
+                                 font=("Segoe UI", 7), cursor="hand2")
         self.lbl_info.pack(side="left", padx=8)
+
+        for _lbl in (self.lbl_name, self.lbl_info):
+            _lbl.bind("<Button-1>", lambda e: self._metadata_dialog())
+            _lbl._tip = Tooltip(_lbl, t("Photo info (metadata)"))
 
     # --- Toolbar ------------------------------------------------------------
 
@@ -287,12 +306,8 @@ class ChromeMixin:
         # from the ☰ menu so saving is one click away.)
         self._tool_button(left, "save", self._save_as_dialog,
                           t("Save as…")).pack(side="left", padx=4, pady=8)
-        # Photo info: pops a window with the current photo's metadata (colour
-        # profile, camera, capture settings, GPS) — the same data the Save
-        # dialog can keep or strip.
-        self._tool_button(left, "info", self._metadata_dialog,
-                          t("Photo info (metadata)")).pack(side="left",
-                                                           padx=4, pady=8)
+        # Photo info now lives on the bottom status bar (next to the photo info
+        # text it relates to) — see _build_infobar.
         # Hand (pan) tool: a toggle — while on, dragging with the left button
         # moves the photo on the canvas (like Photoshop's hand). Separated from
         # the open button so it reads as its own viewport control.
@@ -1120,14 +1135,14 @@ class ChromeMixin:
             self.sidebar.configure(width=new_w)
 
     def thumbs_smaller(self):
-        self._set_thumb_size(self.thumb_size - self.THUMB_STEP)
+        self._set_thumb_size(self._snap_thumb_level(self.thumb_size, -1))
 
     def thumbs_larger(self):
-        self._set_thumb_size(self.thumb_size + self.THUMB_STEP)
+        self._set_thumb_size(self._snap_thumb_level(self.thumb_size, +1))
 
     def _set_thumb_size(self, size):
-        "Change the thumbnail size (clamped) and rebuild the grid at the new size."
-        size = max(self.THUMB_MIN, min(self.THUMB_MAX, int(size)))
+        "Snap to a THUMB_LEVELS size and rebuild the grid at it (icon view)."
+        size = self._snap_thumb_level(int(size))
         # Zooming the thumbnails implies the icon grid — leave list view if active.
         if size == self.thumb_size and self.view_mode == "grid":
             return

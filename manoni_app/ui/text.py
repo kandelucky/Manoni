@@ -1,18 +1,23 @@
-"""Text / watermark overlay for Manoni.
+"""Text / watermark overlays for Manoni.
 
-A single string laid over the photo — a caption or a "© name" watermark. Like
-the focus blur (and unlike crop / heal, which bake into current_pil), this is a
-LIVE, non-destructive effect: the string, its centre and its font height live in
-SOURCE-image pixels inside `self.text_overlay`, so the text stays glued to the
-photo through zoom + pan and the small preview composites exactly like the
-full-res save (the imaging module multiplies position AND size by the same
-`scale`). The whole overlay rides one undo entry per gesture, shared with the
-slider-edit machinery.
+Strings laid over the photo — captions or a "© name" watermark. Like the focus
+blur (and unlike crop / heal, which bake into current_pil), these are LIVE,
+non-destructive effects: each string, its centre and its font height live in
+SOURCE-image pixels, so the text stays glued to the photo through zoom + pan and
+the small preview composites exactly like the full-res save (the imaging module
+multiplies position AND size by the same `scale`).
 
-Drag the text on the canvas to move it; the bottom-right handle resizes it. The
-panel also offers a font, colour, opacity, a drop shadow and one-click corner
-placement (the watermark staple). Mixin on the Manoni window — every method uses
-the shared `self`.
+The photo can hold MANY texts: `self.texts` is the list, `self.text_sel` the
+selected index, and the `text_overlay` property exposes the selected element so
+every per-control method stays single-overlay-simple. Text appears ONLY via the
+"Add text" button (nothing is auto-inserted); "Delete text" drops the selected
+one and "Delete all" wipes them. Each gesture rides one undo entry, shared with
+the slider-edit machinery.
+
+Click a text to select it, drag to move it, drag its bottom-right handle to
+resize. The panel also offers a font, colour, opacity, a drop shadow and
+one-click corner placement (the watermark staple). Mixin on the Manoni window —
+every method uses the shared `self`.
 """
 
 import math
@@ -31,6 +36,7 @@ class TextMixin:
     # --- Text overlay (col 3 panel + interactive box on the preview) ---------
 
     TEXT_HANDLE   = 5      # half-size of the resize handle square, screen px
+    TEXT_HIT_PAD  = 4      # click slack around a text box for selection, screen px
     TEXT_MIN_SIZE = 6.0    # smallest font height, source px
     TEXT_MARGIN   = 0.04   # corner-placement inset, as a fraction of the short side
     TEXT_EMPTY_HW = 46     # placeholder half-width while no text is typed, screen px
@@ -42,11 +48,21 @@ class TextMixin:
         "Text panel: the string, font, size + opacity, colour, shadow, placement."
         f = tk.Frame(parent, bg=BAR)
 
-        tk.Label(f, text=t("Type a caption or a watermark, then drag it on the "
-                           "photo to place it. The corner handle resizes it."),
+        tk.Label(f, text=t("Add a text, then drag it on the photo to place it. "
+                           "The corner handle resizes it. Add as many as you like."),
                  bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), justify="left",
                  anchor="w", wraplength=self._edit_dpi_w(190)).pack(
             fill="x", padx=EDIT_PAD, pady=(10, 6))
+
+        # ‘Add text’: the only thing that puts a text on the photo. Accent-filled
+        # so it reads as the primary action of the panel.
+        add = tk.Label(f, text=t("Add text"), bg=ACCENT, fg=ON_ACCENT,
+                       cursor="hand2", font=("Segoe UI", 9, "bold"), pady=7)
+        add.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        add.bind("<Button-1>", lambda e: self._add_text())
+        add.bind("<Enter>", lambda e: add.configure(bg=HOVER))
+        add.bind("<Leave>", lambda e: add.configure(bg=ACCENT))
+        add._tip = Tooltip(add, t("Drop a new text element on the photo"))
 
         # The string itself: a small multi-line box. A whole typing session is
         # one undo step (snapshot on focus-in, recorded on focus-out).
@@ -57,8 +73,8 @@ class TextMixin:
                                    highlightcolor=ACCENT)
         self._text_entry.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
         self._text_entry.bind("<KeyRelease>", self._on_text_typed)
-        self._text_entry.bind("<FocusIn>", lambda e: self._edit_gesture_start())
-        self._text_entry.bind("<FocusOut>", lambda e: self._edit_gesture_end())
+        self._text_entry.bind("<FocusIn>", lambda e: self._edit_snapshot())
+        self._text_entry.bind("<FocusOut>", lambda e: self._edit_commit())
 
         # Font: two chips per row (accent-filled while active).
         self._group_header(f, t("Font"))
@@ -134,13 +150,22 @@ class TextMixin:
         self._group_header(f, t("Position"))
         self._build_text_position_grid(f)
 
-        remove = tk.Label(f, text=t("Remove text"), bg=BAR, fg=FG_DIM,
-                          cursor="hand2", anchor="w", font=("Segoe UI", 9))
-        remove.bind("<Enter>", lambda e: remove.configure(fg=FG))
-        remove.bind("<Leave>", lambda e: remove.configure(fg=FG_DIM))
-        remove.bind("<Button-1>", lambda e: self._remove_text())
-        remove.pack(fill="x", padx=EDIT_PAD, pady=(14, 8))
-        remove._tip = Tooltip(remove, t("Turn the text overlay off"))
+        # Bottom row: delete the selected element, or wipe them all. Their fg is
+        # dimmed by _refresh_text_buttons when there's nothing to act on.
+        row = tk.Frame(f, bg=BAR)
+        row.pack(fill="x", padx=EDIT_PAD, pady=(14, 8))
+        self._text_del_btn = tk.Label(row, text=t("Delete text"), bg=BAR, fg=FG_DIM,
+                                      cursor="hand2", anchor="w", font=("Segoe UI", 9))
+        self._text_del_btn.pack(side="left")
+        self._text_del_btn.bind("<Button-1>", lambda e: self._delete_text())
+        self._text_del_btn._tip = Tooltip(self._text_del_btn,
+                                          t("Remove the selected text from the photo"))
+        self._text_delall_btn = tk.Label(row, text=t("Delete all"), bg=BAR, fg=FG_DIM,
+                                         cursor="hand2", anchor="e", font=("Segoe UI", 9))
+        self._text_delall_btn.pack(side="right")
+        self._text_delall_btn.bind("<Button-1>", lambda e: self._delete_all_text())
+        self._text_delall_btn._tip = Tooltip(self._text_delall_btn,
+                                             t("Remove every text from the photo"))
         return f
 
     def _build_text_position_grid(self, parent):
@@ -168,69 +193,173 @@ class TextMixin:
 
     # --- State + entry ------------------------------------------------------
 
+    @property
+    def text_overlay(self):
+        "The selected text element (or None). Every per-element control reads and"
+        " writes THIS, so the editing code stays single-overlay-simple while the"
+        " photo can hold many texts in `self.texts`."
+        ts = getattr(self, "texts", None)
+        i = getattr(self, "text_sel", None)
+        if ts and i is not None and 0 <= i < len(ts):
+            return ts[i]
+        return None
+
+    @text_overlay.setter
+    def text_overlay(self, value):
+        "A dict replaces the selected element (or becomes the first one); None is"
+        " the legacy 'clear everything' used by reset / geometry changes. Always"
+        " rebinds `self.texts` to a NEW list so undo snapshots are never aliased."
+        if value is None:
+            self.texts = []
+            self.text_sel = None
+            return
+        if self.text_sel is not None and 0 <= self.text_sel < len(self.texts):
+            new = list(self.texts)
+            new[self.text_sel] = value
+            self.texts = new
+        else:
+            self.texts = self.texts + [value]
+            self.text_sel = len(self.texts) - 1
+
     def _default_text_overlay(self):
-        "A centred, empty overlay sized to the photo, so the tool opens ready."
+        "A centred overlay sized to the photo (the caller sets its text)."
         iw, ih = self.current_pil.size
         return {"text": "", "cx": iw / 2.0, "cy": ih / 2.0,
                 "size": max(12.0, min(iw, ih) * 0.08),
                 "color": "#ffffff", "opacity": 1.0, "font": "Sans",
                 "align": "center", "shadow": True}
 
+    def _add_text(self):
+        "‘Add text’: drop ONE new, real, editable text element on the photo and"
+        " select it. This is the ONLY way text appears — nothing is auto-inserted."
+        if self.current_pil is None:
+            return
+        before = self._edit_state()
+        ov = self._default_text_overlay()
+        ov["text"] = t("Text")               # a real default you can edit / delete
+        # Cascade each new text down-right of the centre so several don't pile up
+        # exactly on top of each other (which leaves only the topmost clickable).
+        n = len(self.texts)
+        if n:
+            iw, ih = self.current_pil.size
+            step = min(iw, ih) * 0.05
+            k = n % 10                        # wrap so it never marches off-frame
+            ov["cx"] = min(max(0.0, ov["cx"] + step * k), float(iw))
+            ov["cy"] = min(max(0.0, ov["cy"] + step * k), float(ih))
+        self.texts = self.texts + [ov]       # rebind (never alias an undo snapshot)
+        self.text_sel = len(self.texts) - 1
+        self._edits_saved = False
+        self._sync_text_controls()
+        self._render_preview()
+        self._record_edit(before)
+        # Focus the box and pre-select the default word so typing replaces it.
+        self._text_entry.focus_set()
+        self._text_entry.tag_add("sel", "1.0", "end-1c")
+
+    def _delete_text(self):
+        "‘Delete text’: remove the SELECTED element from the photo (undoable)."
+        if self.text_sel is None or not (0 <= self.text_sel < len(self.texts)):
+            return
+        before = self._edit_state()
+        self.texts = [o for j, o in enumerate(self.texts) if j != self.text_sel]
+        self.text_sel = (len(self.texts) - 1) if self.texts else None
+        self._text_drag = None
+        self._edits_saved = False
+        self._sync_text_controls()
+        self._render_preview()
+        self._record_edit(before)
+
+    def _delete_all_text(self):
+        "‘Delete all’: remove every text element from the photo (undoable)."
+        if not self.texts:
+            return
+        before = self._edit_state()
+        self.texts = []
+        self.text_sel = None
+        self._text_drag = None
+        self._edits_saved = False
+        self._sync_text_controls()
+        self._render_preview()
+        self._record_edit(before)
+
     def _enter_text(self):
-        "Open the text tool: place a default overlay, fit the photo, show controls."
+        "Open the text tool: fit the photo and show controls. Adds NO text on its"
+        " own — the user clicks ‘Add text’ for that."
         if self.current_pil is None:
             self._render_preview()
             return
-        if self.text_overlay is None:
-            self.text_overlay = self._default_text_overlay()
-            self._edits_saved = False
         self._sync_text_controls()
         self.preview.configure(cursor="")
         self.fit_view()                      # fit so the whole photo is visible
-        self._text_entry.focus_set()         # ready to type immediately
+        if self.text_overlay is not None:    # something already selected → type away
+            self._text_entry.focus_set()
 
     def _text_active(self):
-        "True when the text tool is open with a live overlay (drives clicks + overlay)."
+        "True whenever the text tool is open (so clicks can select / add text)."
         return (self.panel_open and self.active_section == "text"
-                and self.current_pil is not None and self.text_overlay is not None)
+                and self.current_pil is not None)
 
     def _sync_text_controls(self):
-        "Push the overlay values into the entry, sliders, chips + swatch (safe early)."
+        "Push the selected element's values into the entry, sliders, chips + swatch."
+        " With no selection the entry is disabled and controls show neutral."
         if not hasattr(self, "_text_entry"):
             return
-        ov = self.text_overlay or {}
+        # Keep the selection index valid after deletes / undo.
+        if self.text_sel is not None and not (0 <= self.text_sel < len(self.texts)):
+            self.text_sel = (len(self.texts) - 1) if self.texts else None
+        ov = self.text_overlay
+        has = ov is not None
+        # The entry edits the SELECTED element; disable it when nothing is selected.
+        self._text_entry.configure(state="normal")
         cur = self._text_entry.get("1.0", "end-1c")
-        if cur != ov.get("text", ""):
+        want = ov.get("text", "") if has else ""
+        if cur != want:
             self._text_entry.delete("1.0", "end")
-            self._text_entry.insert("1.0", ov.get("text", ""))
-        if self.current_pil is not None and ov:
+            if want:
+                self._text_entry.insert("1.0", want)
+        if not has:
+            self._text_entry.configure(state="disabled")
+        if self.current_pil is not None and has:
             short = max(1, min(self.current_pil.size))
             self.s_text_size.set(round(ov.get("size", 0.0) / short * 100))
-        self.s_text_opacity.set(round(ov.get("opacity", 1.0) * 100))
-        self._text_swatch.configure(bg=ov.get("color", "#ffffff"))
-        active_font = ov.get("font", "Sans")
+        self.s_text_opacity.set(round((ov.get("opacity", 1.0) if has else 1.0) * 100))
+        self._text_swatch.configure(bg=ov.get("color", "#ffffff") if has else "#ffffff")
+        active_font = imaging.resolve_font_family(ov.get("font", "Sans") if has else "Sans")
         for fam, chip in getattr(self, "_text_font_chips", {}).items():
             set_chip_active(chip, fam == active_font, CHIP_BG)
-        active_align = ov.get("align", "center")
+        active_align = ov.get("align", "center") if has else "center"
         for key, chip in getattr(self, "_text_align_chips", {}).items():
             set_chip_active(chip, key == active_align, CHIP_BG)
-        set_chip_active(self._text_shadow_chip, bool(ov.get("shadow")), CHIP_BG)
+        set_chip_active(self._text_shadow_chip, bool(has and ov.get("shadow")), CHIP_BG)
+        self._refresh_text_buttons()
+
+    def _refresh_text_buttons(self):
+        "Dim ‘Delete text’ when nothing is selected and ‘Delete all’ when empty."
+        sel = self.text_overlay is not None
+        if hasattr(self, "_text_del_btn"):
+            self._text_del_btn.configure(fg=FG if sel else FG_DIM,
+                                         cursor="hand2" if sel else "arrow")
+        if hasattr(self, "_text_delall_btn"):
+            on = bool(self.texts)
+            self._text_delall_btn.configure(fg=FG if on else FG_DIM,
+                                            cursor="hand2" if on else "arrow")
 
     def _clear_text_for_geometry(self):
-        "Drop the text when the image geometry changes (rotate / crop / resize /"
-        " perspective): its source-px position no longer maps to the new pixels."
+        "Drop ALL text when the image geometry changes (rotate / crop / resize /"
+        " perspective): the source-px positions no longer map to the new pixels."
         " No undo entry — it rides along with the geometry action that called it."
-        if self.text_overlay is None:
+        if not self.texts:
             return
-        self.text_overlay = None
+        self.texts = []
+        self.text_sel = None
         self._text_drag = None
         self._sync_text_controls()
 
     # --- Panel controls -----------------------------------------------------
 
     def _on_text_typed(self, _event=None):
-        "Live: copy the entry's content into the overlay and repaint (no undo step)."
-        if self.text_overlay is None:
+        "Live: copy the entry's content into the selected element (no undo step)."
+        if self.text_overlay is None:           # nothing selected → entry is inert
             return
         self.text_overlay = {**self.text_overlay,
                              "text": self._text_entry.get("1.0", "end-1c")}
@@ -245,7 +374,7 @@ class TextMixin:
         self.text_overlay = {**self.text_overlay,
                              "size": max(self.TEXT_MIN_SIZE, int(v) / 100.0 * short)}
         self._edits_saved = False
-        self._render_preview()
+        self._schedule_preview()
 
     def _set_text_opacity(self, v):
         "Slider: text opacity 0..100 → 0..1 (live, no undo step)."
@@ -254,7 +383,7 @@ class TextMixin:
         self.text_overlay = {**self.text_overlay,
                              "opacity": max(0.0, min(1.0, int(v) / 100.0))}
         self._edits_saved = False
-        self._render_preview()
+        self._schedule_preview()
 
     def _set_text_font(self, family):
         "Switch the font (undoable)."
@@ -321,57 +450,54 @@ class TextMixin:
         self._render_preview()
         self._record_edit(before)
 
-    def _remove_text(self):
-        "Turn the text overlay off entirely, as one undoable step."
-        if self.text_overlay is None:
-            return
-        before = self._edit_state()
-        self.text_overlay = None
-        self._text_drag = None
-        self._sync_text_controls()
-        self._edits_saved = False
-        self._render_preview()
-        self._record_edit(before)
-
     # --- Canvas geometry + hit testing --------------------------------------
 
-    def _text_box_screen(self):
-        "The overlay box on screen: centre (cxs, cys) and half-extent (hw, hh)."
+    def _text_box_screen(self, ov):
+        "Screen box for ONE overlay: centre (cxs, cys) and half-extent (hw, hh)."
         scale = self._disp[0] or 1.0
-        cxs, cys = self._src_to_scr(self.text_overlay["cx"], self.text_overlay["cy"])
-        tw, th = imaging.text_extent(self.text_overlay)
+        cxs, cys = self._src_to_scr(ov["cx"], ov["cy"])
+        tw, th = imaging.text_extent(ov)
         if tw <= 0 or th <= 0:               # nothing typed yet → a placeholder box
             return cxs, cys, self.TEXT_EMPTY_HW, self.TEXT_EMPTY_HH
         return cxs, cys, tw * scale / 2.0, th * scale / 2.0
 
-    def _text_hit(self, x, y):
-        "What is under screen (x, y): 'resize' (corner handle), 'move', or None."
-        cxs, cys, hw, hh = self._text_box_screen()
-        hx, hy = cxs + hw, cys + hh
-        if math.hypot(x - hx, y - hy) <= self.TEXT_HANDLE + 5:
-            return "resize"
-        if abs(x - cxs) <= hw and abs(y - cys) <= hh:
-            return "move"
-        return None
+    def _text_at(self, x, y):
+        "Topmost text under screen (x, y): (index, 'resize'|'move') or (None, None)."
+        # The resize handle belongs to the selected element only.
+        if self.text_sel is not None and 0 <= self.text_sel < len(self.texts):
+            cxs, cys, hw, hh = self._text_box_screen(self.texts[self.text_sel])
+            if math.hypot(x - (cxs + hw), y - (cys + hh)) <= self.TEXT_HANDLE + 5:
+                return self.text_sel, "resize"
+        # Otherwise the front-most box (last drawn) that contains the point. A
+        # few px of slack makes selecting a glyph-tight box forgiving — it no
+        # longer needs a pixel-perfect click right on the letters.
+        pad = self.TEXT_HIT_PAD
+        for i in range(len(self.texts) - 1, -1, -1):
+            cxs, cys, hw, hh = self._text_box_screen(self.texts[i])
+            if abs(x - cxs) <= hw + pad and abs(y - cys) <= hh + pad:
+                return i, "move"
+        return None, None
 
     # --- Mouse interaction --------------------------------------------------
 
     def _text_press(self, event):
-        "Begin a drag: grab the corner handle (resize) or the box (move)."
+        "Click a text to select it, then drag to move it / its corner to resize."
         if not self._text_active():
             return
-        hit = self._text_hit(event.x, event.y)
+        i, hit = self._text_at(event.x, event.y)
         if hit is None:
-            return "break"
+            return "break"                   # empty click: keep the selection
+        if i != self.text_sel:
+            self.text_sel = i                # clicking a box selects it
+            self._sync_text_controls()
         self._edit_gesture_start()           # snapshot so the whole drag is one undo
         sx, sy = self._scr_to_src(event.x, event.y)
+        ov = self.text_overlay
         if hit == "move":
-            self._text_drag = ("move", sx, sy,
-                               self.text_overlay["cx"], self.text_overlay["cy"])
+            self._text_drag = ("move", sx, sy, ov["cx"], ov["cy"])
         else:
-            d0 = max(1.0, math.hypot(sx - self.text_overlay["cx"],
-                                     sy - self.text_overlay["cy"]))
-            self._text_drag = ("resize", d0, self.text_overlay["size"], None, None)
+            d0 = max(1.0, math.hypot(sx - ov["cx"], sy - ov["cy"]))
+            self._text_drag = ("resize", d0, ov["size"], None, None)
         return "break"
 
     def _text_move(self, event):
@@ -407,24 +533,31 @@ class TextMixin:
         return "break"
 
     def _text_hover(self, event):
-        "Show a move / resize cursor over the box while idle."
+        "Show a move / resize cursor over a box while idle."
         if not self._text_active() or self._text_drag is not None:
             return
-        hit = self._text_hit(event.x, event.y)
+        _, hit = self._text_at(event.x, event.y)
         cur = {"resize": "bottom_right_corner", "move": "fleur"}.get(hit, "")
         self.preview.configure(cursor=cur)
 
     # --- Overlay ------------------------------------------------------------
 
     def _draw_text_overlay(self):
-        "Draw the dashed bounding box, the resize handle and (if empty) a hint."
+        "Chrome for the SELECTED text only (a bright box + resize handle); the"
+        " other texts show as their plain composited glyphs, with no outline."
         c = self.preview
-        cxs, cys, hw, hh = self._text_box_screen()
-        x0, y0, x1, y1 = cxs - hw, cys - hh, cxs + hw, cys + hh
-        c.create_rectangle(x0, y0, x1, y1, outline=ACCENT, dash=(4, 3), width=1)
-        r = self.TEXT_HANDLE
-        c.create_rectangle(x1 - r, y1 - r, x1 + r, y1 + r,
-                           fill=ACCENT, outline=ON_ACCENT)
-        if not (self.text_overlay.get("text") or "").strip():
-            c.create_text(cxs, cys, text=t("Type your text"), fill=FG_DIM,
-                          font=("Segoe UI", 9))
+        for i, ov in enumerate(self.texts):
+            cxs, cys, hw, hh = self._text_box_screen(ov)
+            sel = (i == self.text_sel)
+            if sel:
+                x0, y0, x1, y1 = cxs - hw, cys - hh, cxs + hw, cys + hh
+                c.create_rectangle(x0, y0, x1, y1,
+                                   outline=ACCENT, dash=(4, 3), width=1)
+                r = self.TEXT_HANDLE
+                c.create_rectangle(x1 - r, y1 - r, x1 + r, y1 + r,
+                                   fill=ACCENT, outline=ON_ACCENT)
+            if not (ov.get("text") or "").strip():
+                # An empty text has no glyphs — keep a faint hint so it stays
+                # findable / clickable even when it isn't the selected one.
+                c.create_text(cxs, cys, text=t("Type your text"), fill=FG_DIM,
+                              font=("Segoe UI", 9))

@@ -51,8 +51,17 @@ class ViewerMixin:
         self._reset_straighten()  # fresh photo → no pending horizon tilt
         self._reset_perspective()  # fresh photo → no pending keystone correction
         self._edits_saved = False
-        self._render_preview()
-        self._refresh_filter_strip()   # rebuild the filter previews for this photo
+        if getattr(self, "grid_view", False):
+            # Sorting (grid) mode: the big preview, the live histogram and the
+            # filter strip (an apply_edits per filter — the heaviest part) are all
+            # hidden behind the culling grid. Skip every effect render so paging
+            # through photos stays instant; they refresh the moment the grid closes
+            # (see _set_grid_view). _view_key is already None here, so the big view
+            # rebuilds cleanly on exit.
+            pass
+        else:
+            self._render_preview()
+            self._refresh_filter_strip()   # rebuild the filter previews for this photo
         self._update_info(path)
         self._highlight_thumb()
         self._scroll_to_thumb()
@@ -316,7 +325,7 @@ class ViewerMixin:
             denoise=self.denoise,
             split_hi=self.split_hi, split_sh=self.split_sh,
             sharpen=self.sharpen, vignette=self.vignette, focus=self.focus,
-            text=self.text_overlay)
+            texts=list(self.texts))
 
     def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None):
         "Apply the live edit factors via the pure imaging module."
@@ -325,6 +334,48 @@ class ViewerMixin:
             src_box=src_box, full_size=full_size, vig_cache=self._vig_cache,
             focus_cache=self._focus_cache)
 
+    # Long side (display px) below which a draft render is pointless: the viewport
+    # is already small enough that the full edit pass is cheap.
+    DRAFT_MIN_SIDE = 1000
+    DRAFT_FACTOR   = 2     # draft = 1/2 the linear size → 1/4 the pixels to edit
+
+    def _render_edited(self, scale, src_box, full_size):
+        """Apply the live edits to the cached viewport base.
+
+        While a slider drag is live (`_interacting`) a large viewport is edited at
+        half resolution then scaled back up: the heavy filters (blur, clarity,
+        denoise, grain, text) then cost a quarter as much, so the photo still
+        tracks the slider live, just a touch softer until the drag settles. On
+        release a full render (this path with `_interacting` False) replaces it.
+        Small viewports skip the draft — they are already fast at full size."""
+        base = self._view_base
+        if self._interacting and max(base.size) > self.DRAFT_MIN_SIDE:
+            dw, dh = base.size
+            q = self.DRAFT_FACTOR
+            small = base.resize((max(1, dw // q), max(1, dh // q)), Image.BILINEAR)
+            edited = self._apply_edits(small, scale / q, src_box, full_size)
+            if edited.size != (dw, dh):
+                edited = edited.resize((dw, dh), Image.BILINEAR)
+            return edited
+        return self._apply_edits(base, scale, src_box, full_size)
+
+    def _schedule_preview(self):
+        """Coalesce a burst of slider-drag renders into one.
+
+        A drag fires many <B1-Motion> events; rendering synchronously on each let
+        them queue up, so the photo trailed behind the slider (the 'jam'). Marking
+        'a render is due' and doing it once on the next idle pass collapses the
+        burst to a single render of the LATEST values — the photo keeps up instead
+        of replaying every stale intermediate frame."""
+        if self._preview_scheduled:
+            return
+        self._preview_scheduled = True
+        self.root.after_idle(self._run_scheduled_preview)
+
+    def _run_scheduled_preview(self):
+        "Idle callback for _schedule_preview: render once with the latest values."
+        self._preview_scheduled = False
+        self._render_preview()
 
     def _render_preview(self):
         """Render only the visible part of the photo at the current zoom + pan.
@@ -380,7 +431,7 @@ class ViewerMixin:
                 self._view_alpha = None
             self._view_key = key
 
-        img = self._apply_edits(self._view_base, scale, (sx0, sy0, sx1, sy1), (iw, ih))
+        img = self._render_edited(scale, (sx0, sy0, sx1, sy1), (iw, ih))
         self._hist_pil = img    # edited photo pixels (pre-checker) → live histogram
         if self._view_alpha is not None:
             bg = self._checker_bg(img.width, img.height)
@@ -425,7 +476,8 @@ class ViewerMixin:
         if self.compare_mode and not self._compare_peek:
             self._draw_compare_divider(vw, vh)
         self._update_zoom_readout(scale)
-        self._update_histogram()
+        if not self._interacting:
+            self._update_histogram()   # heavy; frozen mid-drag, refreshed on release
 
     def _render_histogram(self, w, h):
         "Build the panel's live-histogram image from the edited viewport (None if"
@@ -643,10 +695,11 @@ class ViewerMixin:
             size_txt = f"{size_kb/1024:.1f} MB" if size_kb > 1024 else f"{size_kb:.0f} KB"
             mtime = datetime.datetime.fromtimestamp(os.path.getmtime(path))
             date_txt = mtime.strftime("%Y/%m/%d %H:%M")
+            folder = os.path.dirname(path)
             self.lbl_name.configure(text=file)
             self.lbl_info.configure(
                 text=f"{self.index+1}/{len(self.files)}   ·   {w}×{h}   ·   "
-                     f"{size_txt}   ·   {date_txt}")
+                     f"{size_txt}   ·   {date_txt}   ·   {folder}")
         except Exception:
             self.lbl_name.configure(text=file)
             self.lbl_info.configure(text="")

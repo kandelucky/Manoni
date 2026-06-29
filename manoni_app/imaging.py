@@ -171,11 +171,12 @@ class Edits:
     # while everything outside it is Gaussian-blurred. None = off, else a dict
     # {cx, cy, r (source px), blur 0..1, feather 0..1}. See apply_focus_blur.
     focus:       object = None
-    # Text / watermark overlay. None = off, else a dict with the string, its
-    # centre + size in SOURCE px (so it stays glued to the photo through zoom /
-    # pan and the preview matches the full-res save), colour, opacity, font key,
-    # alignment and an optional drop shadow. See apply_text_overlay.
-    text:        object = None
+    # Text / watermark overlays. None or [] = off, else a LIST of dicts, each a
+    # string with its centre + size in SOURCE px (so it stays glued to the photo
+    # through zoom / pan and the preview matches the full-res save), colour,
+    # opacity, font key, alignment and an optional drop shadow. Drawn in list
+    # order (later = on top). See apply_text_overlay.
+    texts:       object = None
 
 
 # --- Auto levels / auto contrast --------------------------------------------
@@ -475,7 +476,13 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
             bbox = [(cx - rx) * f, (cy - rx) * f, (cx + rx) * f, (cy + rx) * f]
             draw.ellipse(bbox, fill=255)                     # 255 inside = sharp
             soft = max(0.5, feather * rx * f)
-        mask = mask.filter(ImageFilter.GaussianBlur(soft))
+        # Feather only OUTWARD: a plain Gaussian on the hard shape spreads the
+        # 255->0 edge both ways, so its inward half would soften the area just
+        # inside the shape (blur leaking into the sharp region). Keep the hard
+        # interior fully sharp by taking the per-pixel max of the hard mask and
+        # the blurred one — inside stays 255, only the outside gets the falloff.
+        hard = mask
+        mask = ImageChops.lighter(hard, hard.filter(ImageFilter.GaussianBlur(soft)))
         if (mw, mh) != (w, h):
             mask = mask.resize((w, h), Image.BILINEAR)
         if cache is not None:
@@ -494,28 +501,44 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
 # which multiplies the position AND the font size together.
 
 # Friendly font name -> candidate Windows font files (first that loads wins).
-# The default "Sans" (Arial) and "Georgian" (Sylfaen) both carry Georgian +
-# Latin glyphs, so a Georgian watermark renders without picking a special font.
+# EVERY file here carries BOTH Latin AND Georgian glyphs (verified on Win 10/11),
+# so a Georgian caption renders in any chosen style instead of falling to empty
+# ".notdef" boxes. The old Arial/Times/Consolas set looked fine in Latin but had
+# no Georgian coverage, so Georgian text came out as boxes whatever you picked.
 TEXT_FONT_FILES = {
-    "Sans":       ["arial.ttf"],
-    "Sans Bold":  ["arialbd.ttf"],
-    "Serif":      ["times.ttf"],
-    "Mono":       ["consola.ttf", "cour.ttf"],
-    "Script":     ["segoesc.ttf", "BRADHITC.TTF", "comic.ttf"],
-    "Georgian":   ["sylfaen.ttf"],
+    "Sans":       ["segoeui.ttf", "calibri.ttf", "micross.ttf"],   # Segoe UI
+    "Sans Bold":  ["segoeuib.ttf", "calibrib.ttf", "micross.ttf"], # Segoe UI Bold
+    "Light":      ["segoeuil.ttf", "calibril.ttf", "segoeui.ttf"], # Segoe UI Light
+    "Serif":      ["sylfaen.ttf", "micross.ttf"],                  # Sylfaen
+    "Rounded":    ["calibri.ttf", "segoeui.ttf"],                  # Calibri
+    "Script":     ["Gabriola.ttf", "sylfaen.ttf"],                 # Gabriola
 }
 TEXT_FONTS = list(TEXT_FONT_FILES.keys())   # the order shown in the panel
+
+# Overlays saved before this set existed may name a dropped family; map those to
+# the nearest survivor so old captions still render (and highlight a chip).
+_FONT_ALIASES = {"Mono": "Sans", "Georgian": "Serif", "Sans Light": "Light"}
+
+
+def resolve_font_family(family):
+    "Normalise a stored font name to a current TEXT_FONTS key (handles old saves)."
+    if family in TEXT_FONT_FILES:
+        return family
+    return _FONT_ALIASES.get(family, TEXT_FONTS[0])
 
 _font_cache = {}   # (family, px) -> ImageFont; bounded so a size drag can't grow it
 
 
 def _load_font(family, px):
-    "An ImageFont for `family` at `px` height; falls back to Arial / the default."
+    "An ImageFont for `family` at `px`; falls back to a Georgian-capable face."
     px = max(1, int(round(px)))
+    family = resolve_font_family(family)
     key = (family, px)
     font = _font_cache.get(key)
     if font is None:
-        for cand in TEXT_FONT_FILES.get(family, []) + ["arial.ttf"]:
+        # Final fallbacks are Georgian-capable too, so a missing primary never
+        # drops a Georgian caption back to boxes.
+        for cand in TEXT_FONT_FILES.get(family, []) + ["segoeui.ttf", "micross.ttf"]:
             try:
                 font = ImageFont.truetype(cand, px)
                 break
@@ -971,10 +994,12 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
         # Grain goes LAST of the looks — on top of the whole image (after focus
         # blur and vignette), the way real film grain sits over the photo.
         img = apply_grain(img, e.grain, scale)
-    if e.text:
-        # The text / watermark caps everything: an annotation laid crisply over
+    if e.texts:
+        # The text / watermark caps everything: annotations laid crisply over
         # the finished photo (even on top of the grain), not part of the look.
-        img = apply_text_overlay(img, e.text, scale, src_box)
+        # Each element is drawn in turn, later ones over earlier ones.
+        for ov in e.texts:
+            img = apply_text_overlay(img, ov, scale, src_box)
     return img
 
 
