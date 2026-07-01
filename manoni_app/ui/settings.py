@@ -20,232 +20,22 @@ module level so the window code below stays declarative; each is DPI-aware.
 import os
 import webbrowser
 import tkinter as tk
-import tkinter.font as tkfont
 import tkinter.filedialog as tkfd
 
-from ..config import (BG, BAR, SIDEBAR, HOVER, ACCENT, ON_ACCENT, FG, FG_DIM,
+import tintkit
+
+from ..config import (BG, BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM,
                       CHIP_BG, BORDER, DIVIDER)
 from .. import i18n
 from ..i18n import t
-from .dialogs import make_dialog_button
 from .about import (APP_VERSION, AUTHOR_NAME, AUTHOR_HANDLE, BUILT_WITH,
                     PROJECT_LINKS, BMC_URL, BMC_BG, BMC_BG_HOVER, BMC_FG)
 
 SEL_BG = "#2a2f37"          # selected tab-rail row (a faint blue-grey tint)
 
-
-# --- rounded-rectangle drawing (shared by the canvas controls) --------------
-def _round_pts(x0, y0, x1, y1, r):
-    return [x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r, x1, y1 - r, x1, y1,
-            x1 - r, y1, x0 + r, y1, x0, y1, x0, y1 - r, x0, y0 + r, x0, y0]
-
-
-def _draw_round(c, x0, y0, x1, y1, r, **kw):
-    r = max(0, min(r, (x1 - x0) / 2, (y1 - y0) / 2))
-    if r <= 0:
-        return c.create_rectangle(x0, y0, x1, y1, **kw)
-    return c.create_polygon(_round_pts(x0, y0, x1, y1, r), smooth=True, **kw)
-
-
-# --- DPI-aware canvas controls ----------------------------------------------
-class _Toggle:
-    "A rounded on/off switch — click flips it (accent when on)."
-
-    def __init__(self, parent, dpi, on=False, command=None):
-        self.on, self.command = on, command
-        self.S = S = lambda v: round(v * dpi)
-        self.c = tk.Canvas(parent, width=S(46), height=S(26), bg=BG,
-                           highlightthickness=0, cursor="hand2")
-        self.c.bind("<Button-1>", self._toggle)
-        self._draw()
-
-    def _toggle(self, _e=None):
-        self.on = not self.on
-        self._draw()
-        if self.command:
-            self.command(self.on)
-
-    def _draw(self):
-        c, S = self.c, self.S
-        c.delete("all")
-        _draw_round(c, S(2), S(4), S(44), S(22), S(9),
-                    fill=ACCENT if self.on else CHIP_BG)
-        kx = S(34) if self.on else S(12)
-        c.create_oval(kx - S(8), S(5), kx + S(8), S(21),
-                      fill=ON_ACCENT if self.on else FG_DIM, outline="")
-
-    def pack(self, **kw):
-        self.c.pack(**kw)
-        return self
-
-
-class _Segmented:
-    "A row of pill chips; exactly one is active (accent)."
-
-    def __init__(self, parent, dpi, options, active=0, command=None):
-        self.options, self.active, self.command = options, active, command
-        self.S = S = lambda v: round(v * dpi)
-        self.fnt = tkfont.Font(family="Segoe UI", size=9, weight="bold")
-        widths = [self.fnt.measure(o) + S(26) for o in options]
-        self.bounds, x = [], S(3)
-        for w in widths:
-            self.bounds.append((x, x + w))
-            x += w
-        self.c = tk.Canvas(parent, width=x + S(3), height=S(32), bg=BG,
-                           highlightthickness=0, cursor="hand2")
-        self.c.bind("<Button-1>", self._click)
-        self._draw()
-
-    def _click(self, e):
-        for i, (a, b) in enumerate(self.bounds):
-            if a <= e.x <= b:
-                if i != self.active:
-                    self.active = i
-                    self._draw()
-                    if self.command:
-                        self.command(i)
-                return
-
-    def _draw(self):
-        c, S = self.c, self.S
-        c.delete("all")
-        _draw_round(c, self.bounds[0][0] - S(2), S(3),
-                    self.bounds[-1][1] + S(2), S(29), S(13), fill=CHIP_BG)
-        for i, (a, b) in enumerate(self.bounds):
-            act = (i == self.active)
-            if act:
-                _draw_round(c, a, S(5), b, S(27), S(11), fill=ACCENT)
-            c.create_text((a + b) / 2, S(16), text=self.options[i],
-                          fill=ON_ACCENT if act else FG, font=self.fnt)
-
-    def pack(self, **kw):
-        self.c.pack(**kw)
-        return self
-
-
-class _Slider:
-    "A thick-track / pill-knob slider with a live read-out; commits on release."
-
-    def __init__(self, parent, dpi, value, lo, hi, unit="", width=240,
-                 on_release=None):
-        self.value, self.lo, self.hi, self.unit = value, lo, hi, unit
-        self.on_release = on_release
-        self.S = S = lambda v: round(v * dpi)
-        self.W, self.x0, self.x1 = S(width), S(8), S(width) - S(52)
-        self.c = tk.Canvas(parent, width=self.W, height=S(30), bg=BG,
-                           highlightthickness=0, cursor="hand2")
-        self.c.bind("<Button-1>", self._drag)
-        self.c.bind("<B1-Motion>", self._drag)
-        self.c.bind("<ButtonRelease-1>", self._release)
-        self._draw()
-
-    def _v2x(self, v):
-        return self.x0 + (v - self.lo) / (self.hi - self.lo) * (self.x1 - self.x0)
-
-    def _drag(self, e):
-        f = min(1.0, max(0.0, (e.x - self.x0) / (self.x1 - self.x0)))
-        self.value = round(self.lo + f * (self.hi - self.lo))
-        self._draw()
-
-    def _release(self, _e):
-        if self.on_release:
-            self.on_release(self.value)
-
-    def _draw(self):
-        c, S = self.c, self.S
-        c.delete("all")
-        y = S(15)
-        c.create_line(self.x0, y, self.x1, y, fill=DIVIDER, width=S(6),
-                      capstyle="round")
-        kx = self._v2x(self.value)
-        c.create_line(self.x0, y, kx, y, fill=ACCENT, width=S(6),
-                      capstyle="round")
-        _draw_round(c, kx - S(6), y - S(9), kx + S(6), y + S(9), S(5),
-                    fill=ACCENT)
-        c.create_text(self.x1 + S(44), y, text=f"{self.value}{self.unit}",
-                      anchor="e", fill=FG, font=("Segoe UI", 9, "bold"))
-
-    def pack(self, **kw):
-        self.c.pack(**kw)
-        return self
-
-
-class _Dropdown:
-    "A flat value button (label + ▾) that opens a small dark popup of options."
-
-    def __init__(self, parent, dpi, options, active=0, command=None, icon=None):
-        self.options, self.active, self.command = options, active, command
-        self.box = tk.Frame(parent, bg=CHIP_BG, cursor="hand2")
-        self.lbl = tk.Label(self.box, text=options[active], bg=CHIP_BG, fg=FG,
-                            anchor="w", font=("Segoe UI", 9))
-        self.lbl.pack(side="left", padx=(10, 8), pady=6)
-        chev = icon("chevron-down", 14) if icon else None
-        self.chev = (tk.Label(self.box, image=chev, bg=CHIP_BG) if chev
-                     else tk.Label(self.box, text="▾", bg=CHIP_BG, fg=FG_DIM))
-        self.chev.pack(side="right", padx=(0, 8))
-        for w in (self.box, self.lbl, self.chev):
-            w.bind("<Enter>", lambda e: self._paint(HOVER))
-            w.bind("<Leave>", lambda e: self._paint(CHIP_BG))
-            w.bind("<Button-1>", lambda e: self._open())
-        self._pop = None
-
-    def _paint(self, bg):
-        for w in (self.box, self.lbl, self.chev):
-            w.configure(bg=bg)
-
-    def _open(self):
-        if self._pop is not None:
-            self._close()
-            return
-        pop = tk.Toplevel(self.box)
-        pop.overrideredirect(True)
-        pop.configure(bg=BORDER)
-        self._pop = pop
-        inner = tk.Frame(pop, bg=BAR)
-        inner.pack(padx=1, pady=1)
-        for i, opt in enumerate(self.options):
-            self._row(inner, i, opt)
-        pop.update_idletasks()
-        bx, by = self.box.winfo_rootx(), self.box.winfo_rooty()
-        pop.geometry(f"+{bx}+{by + self.box.winfo_height() + 2}")
-        pop.bind("<Escape>", lambda e: self._close())
-        pop.bind("<FocusOut>", lambda e: self._close())
-        pop.focus_force()
-
-    def _row(self, parent, i, opt):
-        act = (i == self.active)
-        r = tk.Frame(parent, bg=BAR, cursor="hand2")
-        r.pack(fill="x")
-        mark = tk.Label(r, text="✓" if act else "", bg=BAR, fg=ACCENT, width=2,
-                        font=("Segoe UI", 9))
-        mark.pack(side="left", padx=(6, 0), pady=5)
-        lab = tk.Label(r, text=opt, bg=BAR, fg=ACCENT if act else FG, anchor="w",
-                       font=("Segoe UI", 9))
-        lab.pack(side="left", padx=(0, 20), pady=5)
-        cells = (r, mark, lab)
-        for w in cells:
-            w.bind("<Enter>", lambda e: [x.configure(bg=HOVER) for x in cells])
-            w.bind("<Leave>", lambda e: [x.configure(bg=BAR) for x in cells])
-            w.bind("<Button-1>", lambda e, idx=i: self._pick(idx))
-
-    def _pick(self, i):
-        self.active = i
-        self.lbl.configure(text=self.options[i])
-        self._close()
-        if self.command:
-            self.command(i)
-
-    def _close(self):
-        if self._pop is not None:
-            try:
-                self._pop.destroy()
-            except tk.TclError:
-                pass
-            self._pop = None
-
-    def pack(self, **kw):
-        self.box.pack(**kw)
-        return self
+# The window's controls (toggle / segmented / slider / dropdown / buttons) are
+# stock TintKit widgets reading self.theme; only the window chrome (tab rail,
+# scroll pane, About links, Buy-me-a-coffee) stays hand-built below.
 
 
 # --- tab spec: (key, label-source, icon, builder-method-name) ----------------
@@ -406,8 +196,9 @@ class SettingsMixin:
         foot.grid_propagate(False)
         inner = tk.Frame(foot, bg=BAR)
         inner.pack(fill="x", padx=16, pady=11)
-        make_dialog_button(inner, t("Restore defaults"),
-                           self._set_restore_defaults).pack(side="left")
+        tintkit.Button(inner, self.theme, t("Restore defaults"), role="neutral",
+                       variant="outline", bg="bar",
+                       command=self._set_restore_defaults).pack(side="left")
 
         def close():
             self._settings_win = None
@@ -415,7 +206,8 @@ class SettingsMixin:
                 dlg.destroy()
             except tk.TclError:
                 pass
-        make_dialog_button(inner, t("Done"), close, primary=True).pack(
+        tintkit.Button(inner, self.theme, t("Done"), role="primary",
+                       variant="filled", bg="bar", command=close).pack(
             side="right")
 
     # --- shared content blocks ---------------------------------------------
@@ -464,8 +256,8 @@ class SettingsMixin:
         def pick_lang(i):
             if codes[i] != i18n.get_language():
                 self.switch_language(codes[i])   # prompts save + relaunches
-        _Dropdown(r, self.dpi, names, active=active, command=pick_lang,
-                  icon=self.icon).pack()
+        tintkit.Dropdown(r, self.theme, names, selected=active,
+                         command=lambda i, _l: pick_lang(i)).pack()
 
         self._set_group(p, t("Sidebar"))
         r = self._set_row(p, t("Default view"))
@@ -475,8 +267,9 @@ class SettingsMixin:
         def pick_view(i):
             self.set_view(keys[i])
             self._save_state()
-        _Segmented(r, self.dpi, labels, active=self._set_view_index(keys),
-                   command=pick_view).pack()
+        tintkit.SegmentedTabs(r, self.theme, labels,
+                              selected=self._set_view_index(keys),
+                              command=lambda i, _l: pick_view(i)).pack()
 
         self._set_group(p, t("Interface"))
         r = self._set_row(p, t("Show filter strip"),
@@ -486,7 +279,7 @@ class SettingsMixin:
             self.show_filter_strip = on
             self._save_state()
             self._refresh_filter_strip()         # show / hide the strip live
-        _Toggle(r, self.dpi, on=getattr(self, "show_filter_strip", True),
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_filter_strip", True),
                 command=pick_filters).pack()
 
         r = self._set_row(p, t("Show histogram"),
@@ -496,7 +289,7 @@ class SettingsMixin:
             self.show_histogram = on
             self._save_state()
             self._refresh_histogram()            # show / hide the graph live
-        _Toggle(r, self.dpi, on=getattr(self, "show_histogram", True),
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_histogram", True),
                 command=pick_histogram).pack()
 
         r = self._set_row(p, t("Show pixel rulers"),
@@ -505,7 +298,7 @@ class SettingsMixin:
         def pick_rulers(on):
             if on != getattr(self, "show_rulers", True):
                 self.toggle_rulers()             # re-renders + persists itself
-        _Toggle(r, self.dpi, on=getattr(self, "show_rulers", True),
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_rulers", True),
                 command=pick_rulers).pack()
 
         self._set_group(p, t("Performance"))
@@ -513,7 +306,7 @@ class SettingsMixin:
                           t("Skip the heavy filters (clarity, sharpen, denoise, "
                             "dehaze, focus, grain) while a slider is dragged; "
                             "full quality returns the moment you let go."))
-        _Toggle(r, self.dpi, on=getattr(self, "fast_preview", True),
+        tintkit.Toggle(r, self.theme, value=getattr(self, "fast_preview", True),
                 command=lambda on: self._set_pref("fast_preview", on)).pack()
 
         r = self._set_row(p, t("Render off the main thread"),
@@ -521,24 +314,24 @@ class SettingsMixin:
                             "window never freezes while a costly effect renders; "
                             "the photo catches up a moment behind the slider. Turn "
                             "off to render on the main thread (the older behaviour)."))
-        _Toggle(r, self.dpi, on=getattr(self, "async_render", True),
+        tintkit.Toggle(r, self.theme, value=getattr(self, "async_render", True),
                 command=lambda on: self._set_pref("async_render", on)).pack()
 
         self._set_group(p, t("On launch"))
         r = self._set_row(p, t("Reopen the last folder"))
-        _Toggle(r, self.dpi, on=self.restore_session,
+        tintkit.Toggle(r, self.theme, value=self.restore_session,
                 command=lambda on: self._set_pref("restore_session", on)).pack()
         r = self._set_row(p, t("Jump back to the last photo"))
-        _Toggle(r, self.dpi, on=self.restore_photo,
+        tintkit.Toggle(r, self.theme, value=self.restore_photo,
                 command=lambda on: self._set_pref("restore_photo", on)).pack()
 
         self._set_group(p, t("Confirmations"))
         r = self._set_row(p, t("Ask before rejecting a photo"),
                           t("A quick confirm before a photo moves to the Reject folder."))
-        _Toggle(r, self.dpi, on=self.confirm_reject,
+        tintkit.Toggle(r, self.theme, value=self.confirm_reject,
                 command=lambda on: self._set_pref("confirm_reject", on)).pack()
         r = self._set_row(p, t("Warn about unsaved edits when leaving a photo"))
-        _Toggle(r, self.dpi, on=self.warn_unsaved,
+        tintkit.Toggle(r, self.theme, value=self.warn_unsaved,
                 command=lambda on: self._set_pref("warn_unsaved", on)).pack()
 
     def _set_pref(self, key, val):
@@ -579,24 +372,30 @@ class SettingsMixin:
         fmts = ["JPEG", "PNG", "WEBP"]
         cur_fmt = self._set_export_get("fmt", "JPEG")
         active = fmts.index(cur_fmt) if cur_fmt in fmts else 0
-        _Segmented(r, self.dpi, fmts, active=active,
-                   command=lambda i: self._set_export_set("fmt", fmts[i])).pack()
+        tintkit.SegmentedTabs(
+            r, self.theme, fmts, selected=active,
+            command=lambda i, _l: self._set_export_set("fmt", fmts[i])).pack()
 
         r = self._set_row(p, t("Quality"),
                           t("Used for JPEG and WEBP (PNG is always lossless)."))
-        _Slider(r, self.dpi, value=int(self._set_export_get("quality", 95)),
-                lo=50, hi=100,
-                on_release=lambda v: self._set_export_set("quality", int(v))).pack()
+        # Gauge slider: raw read-out (no signed delta), persist on release only.
+        def commit_quality():
+            self._set_export_set("quality", int(qsl.get()))
+        qsl = tintkit.TitledSlider(
+            r, self.theme, "", value=int(self._set_export_get("quality", 95)),
+            lo=50, hi=100, neutral=50, value_fmt=lambda v, _n: str(v),
+            on_release=commit_quality, bg="bg")
+        qsl.pack()
 
         self._set_group(p, t("Metadata"))
         r = self._set_row(p, t("Keep metadata"),
                           t("Camera info, date, GPS and the colour profile."))
-        _Toggle(r, self.dpi, on=bool(self._set_export_get("keep_meta", True)),
+        tintkit.Toggle(r, self.theme, value=bool(self._set_export_get("keep_meta", True)),
                 command=lambda on: self._set_export_set("keep_meta", on)).pack()
 
         r = self._set_row(p, t("Convert to sRGB"),
                           t("Best for the web — keeps colours consistent across browsers."))
-        _Toggle(r, self.dpi, on=bool(self._set_export_get("to_srgb", False)),
+        tintkit.Toggle(r, self.theme, value=bool(self._set_export_get("to_srgb", False)),
                 command=lambda on: self._set_export_set("to_srgb", on)).pack()
 
         self._set_group(p, t("Output"))
@@ -612,7 +411,8 @@ class SettingsMixin:
             self.export_dir_mode = modes[i]
             self._save_state()
             self._set_show_tab("export")     # re-render to show the matching control
-        _Segmented(r, self.dpi, labels, active=active, command=pick_mode).pack()
+        tintkit.SegmentedTabs(r, self.theme, labels, selected=active,
+                              command=lambda i, _l: pick_mode(i)).pack()
         if self.export_dir_mode == "fixed":
             self._set_export_fixed_row(p)
         else:
@@ -659,7 +459,8 @@ class SettingsMixin:
             self.export_fixed_dir = d
             self._save_state()
             lbl.configure(text=self._set_short_path(d), fg=FG)
-        make_dialog_button(right, t("Change…"), change).pack(side="left")
+        tintkit.Button(right, self.theme, t("Change…"), role="neutral",
+                       variant="outline", bg="bg", command=change).pack(side="left")
 
     # --- Culling tab --------------------------------------------------------
 
@@ -681,7 +482,8 @@ class SettingsMixin:
         def pick_edge(i):
             self.edge_action = keys[i]
             self._save_state()
-        _Segmented(r, self.dpi, labels, active=active, command=pick_edge).pack()
+        tintkit.SegmentedTabs(r, self.theme, labels, selected=active,
+                              command=lambda i, _l: pick_edge(i)).pack()
         self._set_note(p, t("“Ask” pops a small chooser each time you reach the "
                             "edge. “First photo” loops back; “Next folder” opens "
                             "the next folder that has photos."))
@@ -706,7 +508,8 @@ class SettingsMixin:
                 self.cull_reject = d
             self._save_state()
             lbl.configure(text=self._set_short_path(d), fg=FG)
-        make_dialog_button(right, t("Change…"), change).pack(side="left")
+        tintkit.Button(right, self.theme, t("Change…"), role="neutral",
+                       variant="outline", bg="bg", command=change).pack(side="left")
 
     @staticmethod
     def _set_short_path(path):
