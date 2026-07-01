@@ -304,13 +304,15 @@ class ChromeMixin:
     # --- Toolbar ------------------------------------------------------------
 
     def _build_toolbar(self):
-        "Three-zone bar: open (left) · undo/redo (center) · cull/view/menu (right)."
+        "Three-zone bar: file + history (left) · viewport tools (center) · menu (right)."
         bar = tk.Frame(self.root, bg=BAR, height=46)
         bar.grid(row=1, column=0, sticky="ew")
         bar.grid_propagate(False)
 
-        # LEFT zone: open. Photo navigation (prev/next/first/last) lives on the
-        # bottom strip, next to the position counter — not repeated here.
+        # LEFT zone: file operations (open / save) then edit history (undo / redo),
+        # read left-to-right as one "file & history" cluster. Photo navigation
+        # (prev/next/first/last) lives on the bottom strip, next to the position
+        # counter — not repeated here.
         left = tk.Frame(bar, bg=BAR)
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
@@ -319,46 +321,36 @@ class ChromeMixin:
         # from the ☰ menu so saving is one click away.)
         self._tool_button(left, "save", self._save_as_dialog,
                           t("Save as…")).pack(side="left", padx=4, pady=8)
-        # Photo info now lives on the bottom status bar (next to the photo info
-        # text it relates to) — see _build_infobar.
-        # Hand (pan) tool: a toggle — while on, dragging with the left button
-        # moves the photo on the canvas (like Photoshop's hand). Separated from
-        # the open button so it reads as its own viewport control.
+        # Undo / redo follow the file buttons, split off by a separator: the eye
+        # reads open → save → undo → redo as one file-and-history run instead of
+        # hunting for undo out in the centre of the bar.
         self._sep(left).pack(side="left", fill="y", padx=6, pady=10)
-        self._build_hand_button(left).pack(side="left", padx=4, pady=8)
-        # Before/after compare: a split line you drag, or hold to peek the original.
-        self._build_compare_button(left).pack(side="left", padx=4, pady=8)
-
-        # CENTER zone: undo/redo, truly centered over the bar (placed, so the
-        # left/right zones don't shift it off-center).
-        center = tk.Frame(bar, bg=BAR)
-        center.place(relx=0.5, rely=0.5, anchor="center")
         for spec in [
             ("undo", self.undo, t("Undo (Ctrl+Z)")),
             ("redo", self.redo, t("Redo (Ctrl+Y)")),
         ]:
-            self._tool_button(center, *spec).pack(side="left", padx=4, pady=8)
+            self._tool_button(left, *spec).pack(side="left", padx=4, pady=8)
 
-        # RIGHT zone: the ☰ menu at the far right, then the cull group.
+        # CENTER zone: viewport tools. The hand (pan) and before/after compare
+        # both act on the preview, so they sit centred over it. Placed (not
+        # packed) so the left/right zones don't shift them off-centre.
+        center = tk.Frame(bar, bg=BAR)
+        center.place(relx=0.5, rely=0.5, anchor="center")
+        # Hand (pan) tool: a toggle — while on, dragging with the left button
+        # moves the photo on the canvas (like Photoshop's hand).
+        self._build_hand_button(center).pack(side="left", padx=4, pady=8)
+        # Before/after compare: a split line you drag, or hold to peek the original.
+        self._build_compare_button(center).pack(side="left", padx=4, pady=8)
+
+        # RIGHT zone: a single ☰ menu holding the rarely-used app-level actions
+        # (Settings · Language · Culling help · About). The old standalone ⚙ gear
+        # duplicated ☰ → Settings, and the culling "?" was stranded up here while
+        # culling itself moved to the bottom nav strip — both are now folded into
+        # the ☰ menu, leaving the right side to one clean control.
         right = tk.Frame(bar, bg=BAR)
         right.pack(side="right", padx=8)
-
         self.btn_menu = self._tool_button(right, "menu", self.open_menu, t("Menu"))
         self.btn_menu.pack(side="right", padx=4, pady=8)   # anchor for the dropdown
-        self._sep(right).pack(side="right", fill="y", padx=6, pady=10)
-
-        # The ⚙ gear is the application Settings shortcut (same tabbed window as
-        # ☰ → Settings — its Culling tab configures the two sort folders). Next
-        # to it, a "?" opens the culling help. The keep / reject ACTIONS now live
-        # on the bottom nav strip, between the arrows, where culling actually
-        # happens (see browser._build_bottombar); they're gated until the folders
-        # are configured (see nav).
-        cull = tk.Frame(right, bg=BAR)
-        cull.pack(side="right")
-        self._tool_button(cull, "settings", self._settings_dialog,
-                          t("Settings")).pack(side="left", padx=4, pady=8)
-        self._glyph_button(cull, "?", self._cull_help_dialog,
-                           t("Culling — Help")).pack(side="left", padx=4, pady=8)
 
         # The edit panel's open/close lives on the always-visible icon rail
         # (a collapse chevron), not here — see _build_tool_rail / toggle_panel.
@@ -371,10 +363,11 @@ class ChromeMixin:
             self._close_menu()
             return
         self._open_dropdown([
-            ("settings",    t("Settings"),     self._settings_dialog),
-            ("languages",   t("Language"),     self._open_language_menu),
+            ("settings",    t("Settings"),        self._settings_dialog),
+            ("languages",   t("Language"),        self._open_language_menu),
+            ("circle-help", t("Culling — Help"),  self._cull_help_dialog),
             ("sep",),
-            ("info",        t("About Manoni"), self._about_dialog),
+            ("info",        t("About Manoni"),    self._about_dialog),
         ])
 
     def _open_language_menu(self):
