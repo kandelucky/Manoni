@@ -10,9 +10,11 @@ import tkinter.ttk as ttk
 
 from PIL import Image
 
+import tintkit
+
 from ..config import (ACCENT, BAR, BG, FG, FG_DIM, HOVER,
-                      EDIT_PANEL_W, EDIT_PAD, ON_ACCENT, ACCENT_HOVER, CHIP_BG)
-from ..widgets import Tooltip, Slider
+                      EDIT_PANEL_W, EDIT_PAD, ON_ACCENT, CHIP_BG)
+from ..widgets import Tooltip
 from ..i18n import t
 from .dialogs import make_dialog_button, center_over
 
@@ -21,7 +23,6 @@ from .dialogs import make_dialog_button, center_over
 # CHIP_BG (neutral preset / row background) is the shared one from config.
 SEG_TRACK = "#202020"   # segmented-control trough
 SEL_BG    = "#26415c"   # accent-tinted fill for a selected row
-DARK_BTN  = "#141414"   # the black "Cancel" button
 GLYPH     = "#cfcfcf"   # ratio-shape stroke on a neutral chip
 GLYPH_DIM = "#bdbdbd"   # ratio-shape stroke on the small ratio cards
 
@@ -236,29 +237,16 @@ class CropMixin:
         "A horizon-straighten slider (−45…+45°, 0 = level). It tilts the photo"
         " live; the crop box auto-fits so a straighten never keeps empty corners."
         self._crop_group_header(parent, "scan-line", t("Straighten"))
-        row = tk.Frame(parent, bg=BAR)
-        row.pack(fill="x", padx=EDIT_PAD, pady=2)
-        self.s_straighten = Slider(row, t("Angle"), self._on_straighten,
-                                   lo=-45, hi=45, neutral=0)
-        self.s_straighten.pack(side="left", fill="x", expand=True)
-        self.s_straighten._tip = Tooltip(
-            self.s_straighten.canvas,
+        # A bidirectional TitledSlider (title strip: label · signed angle · reset)
+        # over a full-width track, matching every other migrated slider.
+        self.s_straighten = tintkit.TitledSlider(
+            parent, self.theme, t("Angle"), value=0, lo=-45, hi=45, neutral=0,
+            bg="bar", command=self._on_straighten, reset_tip=t("Reset this slider"),
+            on_reset=lambda: self._reset_straighten(render=True))
+        self.s_straighten.pack(fill="x", padx=EDIT_PAD, pady=2)
+        tintkit.HoverTip(
+            self.s_straighten.canvas, self.theme,
             t("Tilt to level the horizon (the crop trims the corners)"))
-        self._straighten_reset_btn(row).pack(side="right", padx=(6, 0))
-
-    def _straighten_reset_btn(self, parent):
-        "A small reset icon that returns the straighten slider to 0 (level)."
-        img = self.icon("rotate-ccw", size=14)
-        if img is not None:
-            b = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
-        else:
-            b = tk.Label(parent, text="↺", bg=BAR, fg=FG_DIM, cursor="hand2",
-                         font=("Segoe UI", 11))
-        b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
-        b.bind("<Leave>", lambda e: b.configure(bg=BAR))
-        b.bind("<Button-1>", lambda e: self._reset_straighten(render=True))
-        b._tip = Tooltip(b, t("Reset this slider"))
-        return b
 
     def _on_straighten(self, deg):
         "Live tilt: set the angle, fit the auto crop box, re-render the preview."
@@ -586,52 +574,26 @@ class CropMixin:
     # --- Bottom actions: flip + apply + cancel ------------------------------
 
     def _build_crop_actions(self, parent):
-        "Flip (icon) + Crop (accent) on one row, then the black Cancel button."
+        "Flip (icon) + Crop (primary) on one row, then the outline Cancel button."
         bar = tk.Frame(parent, bg=BAR)
         bar.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
 
-        flip = tk.Frame(bar, bg=CHIP_BG, cursor="hand2")
-        flip.pack(side="left", fill="y")
-        fimg = self.icon("arrow-left-right", size=17)
-        fic = (tk.Label(flip, image=fimg, bg=CHIP_BG) if fimg is not None
-               else tk.Label(flip, text="⇄", bg=CHIP_BG, fg=FG,
-                             font=("Segoe UI", 13)))
-        fic.pack(padx=13, pady=10)
-        for w in (flip, fic):
-            w.bind("<Button-1>", lambda e: self._flip_crop_ratio())
-            w.bind("<Enter>", lambda e: [x.configure(bg=HOVER) for x in (flip, fic)])
-            w.bind("<Leave>", lambda e: [x.configure(bg=CHIP_BG) for x in (flip, fic)])
-        flip._tip = Tooltip(flip, t("Rotate the selection by 90°"))
+        flip = tintkit.IconButton(bar, self.theme, "arrow-left-right", w=44, h=36,
+                                  icon_px=17, bg="bar", command=self._flip_crop_ratio)
+        flip.pack(side="left")
+        tintkit.HoverTip(flip.canvas, self.theme, t("Rotate the selection by 90°"))
 
-        apply_btn = tk.Frame(bar, bg=ACCENT, cursor="hand2")
-        apply_btn.pack(side="left", fill="both", expand=True, padx=(8, 0))
-        atx = tk.Label(apply_btn, text=t("Crop"), bg=ACCENT, fg=ON_ACCENT,
-                       font=("Segoe UI", 10, "bold"))
-        atx.pack(expand=True, pady=10)
-        for w in (apply_btn, atx):
-            w.bind("<Button-1>", lambda e: self.apply_crop())
-            w.bind("<Enter>", lambda e: [x.configure(bg=ACCENT_HOVER)
-                                         for x in (apply_btn, atx)])
-            w.bind("<Leave>", lambda e: [x.configure(bg=ACCENT)
-                                         for x in (apply_btn, atx)])
+        apply_btn = tintkit.Button(
+            bar, self.theme, t("Crop"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=self.apply_crop)
+        apply_btn.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
-        cancel = tk.Frame(parent, bg=DARK_BTN, cursor="hand2",
-                          highlightbackground="#2e2e2e", highlightthickness=1)
+        cancel = tintkit.Button(
+            parent, self.theme, t("Cancel"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._reset_crop)
         cancel.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
-        cinner = tk.Frame(cancel, bg=DARK_BTN)
-        cinner.pack(pady=8)
-        ximg = self.icon("x", size=13)
-        if ximg is not None:
-            tk.Label(cinner, image=ximg, bg=DARK_BTN).pack(side="left", padx=(0, 6))
-        ctx = tk.Label(cinner, text=t("Cancel"), bg=DARK_BTN, fg=FG_DIM,
-                       font=("Segoe UI", 9))
-        ctx.pack(side="left")
-        cparts = [cancel, cinner] + list(cinner.winfo_children())
-        for w in cparts:
-            w.bind("<Button-1>", lambda e: self._reset_crop())
-            w.bind("<Enter>", lambda e: [p.configure(bg="#0d0d0d") for p in cparts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=DARK_BTN) for p in cparts])
-        cancel._tip = Tooltip(cancel, t("Reset the selection to the whole image"))
+        tintkit.HoverTip(cancel.canvas, self.theme,
+                         t("Reset the selection to the whole image"))
 
     # --- Create / edit "Your size" dialog (same window for both) ------------
 
