@@ -38,7 +38,9 @@ SIDEBAR   = "#1e1e1e"   # sidebar background
 HOVER     = "#3a3a3a"   # button hover
 ACCENT    = "#4aa3ff"   # selection / highlight
 ACCENT_HOVER = "#5ab0ff"  # brighter accent for a primary button's hover
-ON_ACCENT = "#0b0b0b"   # near-black text / icon drawn on an accent fill
+ON_ACCENT = "#f4f9ff"   # light text / icon on an accent fill — matches TintKit's
+                        # derived on-accent, so migrated and not-yet-migrated
+                        # accent controls read identically (light, never black)
 FG        = "#e6e6e6"   # primary text
 FG_DIM    = "#9a9a9a"   # secondary text
 CHIP_BG   = "#2f2f2f"   # neutral (inactive) chip / toggle background

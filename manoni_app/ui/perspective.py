@@ -59,12 +59,15 @@ class PerspectiveMixin:
         "A −100…+100 keystone slider (0 = none) with its own reset button."
         row = tk.Frame(parent, bg=BAR)
         row.pack(fill="x", padx=EDIT_PAD, pady=2)
+        # Pack the reset button first so it keeps its slot; the slider then
+        # stretches into the rest. Packed the other way, the slider's requested
+        # width eats the whole row and clips the button off.
+        self._persp_reset_btn(row, attr).pack(side="right", padx=(6, 0))
         s = tintkit.Slider(row, self.theme, label,
                            command=lambda v, a=attr: self._on_persp(a, v),
                            value=0, lo=-100, hi=100, neutral=0, bg="bar")
         s.pack(side="left", fill="x", expand=True)
         tintkit.HoverTip(s.canvas, self.theme, tip)
-        self._persp_reset_btn(row, attr).pack(side="right", padx=(6, 0))
         return s
 
     def _persp_reset_btn(self, parent, attr):
@@ -85,7 +88,7 @@ class PerspectiveMixin:
 
         reset = tintkit.Button(
             parent, self.theme, t("Reset"), role="neutral", variant="outline",
-            icon="rotate-ccw", stretch=True, bg="bar",
+            icon="x", stretch=True, bg="bar",
             command=lambda: self._reset_perspective(render=True))
         reset.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
         tintkit.HoverTip(reset.canvas, self.theme, t("Reset both sliders to zero"))
