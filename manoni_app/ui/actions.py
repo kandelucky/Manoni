@@ -26,18 +26,17 @@ import tkinter as tk
 import tkinter.filedialog as tkfd
 
 from PIL import Image
+import tintkit
 
 from ..config import (BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD,
                       CHIP_BG, DIVIDER)
 from .. import imaging
-from ..widgets import Tooltip
 from ..i18n import t
 from .dialogs import make_chip, set_chip_active
 
 
-# Row / button shades local to this panel (match the filters manager look).
-ROW_BG  = CHIP_BG
-REC_ON  = "#5a2b2b"   # dark red while recording is armed
+# Saved-action rows share the filters-manager row shade.
+ROW_BG = CHIP_BG
 
 
 class ActionsMixin:
@@ -496,20 +495,13 @@ class ActionsMixin:
                  font=("Segoe UI", 8), wraplength=self._edit_dpi_w(210)) \
             .pack(fill="x", padx=EDIT_PAD, pady=(12, 6))
 
-        # Record / Stop toggle (icon + label; turns dark-red while recording).
-        self._rec_btn = tk.Frame(f, bg=ROW_BG, cursor="hand2")
+        # Record / Stop toggle: a real Button that flips to danger-red (Stop)
+        # while the recorder is armed (see _refresh_action_recorder).
+        self._rec_btn = tintkit.Button(
+            f, self.theme, t("Record action"), role="neutral", variant="filled",
+            icon="circle-dot", stretch=True, bg="bar",
+            command=self._toggle_recording)
         self._rec_btn.pack(fill="x", padx=EDIT_PAD, pady=(2, 2))
-        inner = tk.Frame(self._rec_btn, bg=ROW_BG)
-        inner.pack(pady=8)
-        self._rec_icon = tk.Label(inner, bg=ROW_BG, fg=FG)
-        self._rec_icon.pack(side="left", padx=(0, 8))
-        self._rec_text = tk.Label(inner, bg=ROW_BG, fg=FG, font=("Segoe UI", 9, "bold"))
-        self._rec_text.pack(side="left")
-        self._rec_parts = (self._rec_btn, inner, self._rec_icon, self._rec_text)
-        for w in self._rec_parts:
-            w.bind("<Button-1>", lambda e: self._toggle_recording())
-            w.bind("<Enter>", lambda e: self._rec_hover(True))
-            w.bind("<Leave>", lambda e: self._rec_hover(False))
 
         self._rec_status = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
                                     font=("Segoe UI", 8))
@@ -525,18 +517,16 @@ class ActionsMixin:
         self._actions_list = tk.Frame(f, bg=BAR)
         self._actions_list.pack(fill="x", padx=EDIT_PAD)
 
+        # Footer: Done just closes the tool. Actions are a manager — nothing to
+        # apply or reset at the panel level; saved actions persist on their own.
+        done = tintkit.Button(
+            f, self.theme, t("Done"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
+        done.pack(fill="x", padx=EDIT_PAD, pady=(14, 8))
+
         self._refresh_action_recorder()
         self._refresh_action_list()
         return f
-
-    def _rec_hover(self, entering):
-        "Brighten the Record button on hover (a touch lighter while recording)."
-        if self._recording:
-            bg = "#6a3333" if entering else REC_ON
-        else:
-            bg = HOVER if entering else ROW_BG
-        for w in self._rec_parts:
-            w.configure(bg=bg)
 
     def _enter_actions(self):
         "Open the actions tool: refresh the button/list, repaint without overlay."
@@ -549,24 +539,15 @@ class ActionsMixin:
         "Repaint the Record/Stop button + step counter for the current state."
         if not hasattr(self, "_rec_btn"):
             return
+        b = self._rec_btn
         if self._recording:
-            bg = REC_ON
-            img = self.icon("circle-stop", size=16)
-            self._rec_text.configure(text=t("Stop recording"))
+            b.role, b.label, b.icon_name = "danger", t("Stop recording"), "circle-stop"
             self._rec_status.configure(
                 text=t("Recording… {n} step(s)").format(n=len(self._record_steps)))
         else:
-            bg = ROW_BG
-            img = self.icon("circle-dot", size=16)
-            self._rec_text.configure(text=t("Record action"))
+            b.role, b.label, b.icon_name = "neutral", t("Record action"), "circle-dot"
             self._rec_status.configure(text="")
-        for w in self._rec_parts:
-            w.configure(bg=bg)
-        if img is not None:
-            self._rec_icon.configure(image=img, text="")
-            self._rec_icon.image = img
-        else:
-            self._rec_icon.configure(image="", text="■" if self._recording else "●")
+        b.repaint()
 
     def _refresh_action_list(self):
         "Rebuild the saved-actions rows from self.user_actions."
@@ -608,19 +589,14 @@ class ActionsMixin:
             w.bind("<Button-1>", lambda e, a=act: self._play_action(a))
             w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in play_parts])
             w.bind("<Leave>", lambda e: [p.configure(bg=ROW_BG) for p in play_parts])
-        pic._tip = Tooltip(pic, t("Play this action"))
+        pic._tip = tintkit.HoverTip(pic, self.theme, t("Play this action"))
 
     def _action_icon(self, parent, icon_name, command, tip):
-        "A small hover-highlighted icon button on a saved-action row."
-        img = self.icon(icon_name, size=15)
-        b = (tk.Label(parent, image=img, bg=ROW_BG, cursor="hand2") if img
-             is not None else tk.Label(parent, text="·", bg=ROW_BG, fg=FG_DIM,
-                                       cursor="hand2"))
+        "A small tintkit icon button on a saved-action row (bg matches the row)."
+        b = tintkit.IconButton(parent, self.theme, icon_name, w=26, h=26,
+                               icon_px=15, bg="chip", command=command)
         b.pack(side="right", padx=(0, 8))
-        b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
-        b.bind("<Leave>", lambda e: b.configure(bg=ROW_BG))
-        b.bind("<Button-1>", lambda e: command())
-        b._tip = Tooltip(b, tip)
+        b._tip = tintkit.HoverTip(b.canvas, self.theme, tip)
         return b
 
     def _rename_action(self, act):
