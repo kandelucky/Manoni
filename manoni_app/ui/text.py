@@ -71,15 +71,13 @@ class TextMixin:
         tintkit.HoverTip(self._text_del_btn.canvas, self.theme,
                          t("Remove the selected text from the photo"))
 
-        # The string itself: a small multi-line box. A whole typing session is
-        # one undo step (snapshot on focus-in, recorded on focus-out). Kept a
-        # tk.Text — TintKit's TextField is single-line only (multi-line pending).
-        self._text_entry = tk.Text(f, height=2, bg=CHIP_BG, fg=FG,
-                                   insertbackground=FG, relief="flat", wrap="word",
-                                   font=("Segoe UI", 10), padx=6, pady=4,
-                                   highlightthickness=1, highlightbackground=BORDER,
-                                   highlightcolor=ACCENT)
-        self._text_entry.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        # The string itself: a small multi-line box (tintkit.TextArea — a themed,
+        # focus-accented frame around a real tk.Text). A whole typing session is
+        # one undo step (snapshot on focus-in, recorded on focus-out). `_text_entry`
+        # stays the tk.Text so every get / insert / state= call is unchanged.
+        self._text_area = tintkit.TextArea(f, self.theme, height=2, bg="bar")
+        self._text_area.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        self._text_entry = self._text_area.text
         self._text_entry.bind("<KeyRelease>", self._on_text_typed)
         self._text_entry.bind("<FocusIn>", lambda e: self._edit_snapshot())
         self._text_entry.bind("<FocusOut>", lambda e: self._edit_commit())
