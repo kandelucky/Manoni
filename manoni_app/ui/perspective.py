@@ -56,27 +56,17 @@ class PerspectiveMixin:
                  font=("Segoe UI", 8, "bold")).pack(side="left")
 
     def _persp_slider(self, parent, label, attr, tip):
-        "A −100…+100 keystone slider (0 = none) with its own reset button."
-        row = tk.Frame(parent, bg=BAR)
-        row.pack(fill="x", padx=EDIT_PAD, pady=2)
-        # Pack the reset button first so it keeps its slot; the slider then
-        # stretches into the rest. Packed the other way, the slider's requested
-        # width eats the whole row and clips the button off.
-        self._persp_reset_btn(row, attr).pack(side="right", padx=(6, 0))
-        s = tintkit.Slider(row, self.theme, label,
-                           command=lambda v, a=attr: self._on_persp(a, v),
-                           value=0, lo=-100, hi=100, neutral=0, bg="bar")
-        s.pack(side="left", fill="x", expand=True)
+        "A −100…+100 keystone TitledSlider (0 = none); reset icon sits in its strip."
+        # Bidirectional, so the signed delta readout (+35 / −20) shows which way
+        # it leans — TitledSlider's default. Reset zeroes just this slider.
+        s = tintkit.TitledSlider(
+            parent, self.theme, label, value=0, lo=-100, hi=100, neutral=0,
+            command=lambda v, a=attr: self._on_persp(a, v), bg="bar",
+            reset_tip=t("Reset this slider"),
+            on_reset=lambda a=attr: self._reset_persp_one(a))
+        s.pack(fill="x", padx=EDIT_PAD, pady=2)
         tintkit.HoverTip(s.canvas, self.theme, tip)
         return s
-
-    def _persp_reset_btn(self, parent, attr):
-        "A small reset icon that returns one keystone slider to 0."
-        b = tintkit.IconButton(parent, self.theme, "rotate-ccw",
-                               w=26, h=26, icon_px=15, bg="bar",
-                               command=lambda a=attr: self._reset_persp_one(a))
-        tintkit.HoverTip(b.canvas, self.theme, t("Reset this slider"))
-        return b
 
     def _build_perspective_actions(self, parent):
         "Apply (accent) + a subtle Reset button, matching the crop panel."

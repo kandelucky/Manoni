@@ -73,23 +73,16 @@ class FocusMixin:
         return f
 
     def _focus_slider(self, parent, label, setter, which):
-        "A focus slider (blur/feather) with its own reset button beside it."
-        row = tk.Frame(parent, bg=BAR)
-        row.pack(fill="x", padx=EDIT_PAD, pady=2)
-        # Pack the fixed reset button first so it always keeps its slot; the
-        # slider then stretches into the width that's left. If the slider is
-        # packed first its requested width eats the whole row and clips the
-        # button to nothing.
-        b = tintkit.IconButton(row, self.theme, "rotate-ccw", w=26, h=26,
-                               icon_px=15, bg="bar",
-                               command=lambda: self._reset_focus_slider(which))
-        b.pack(side="right", padx=(6, 0))
-        tintkit.HoverTip(b.canvas, self.theme, t("Reset this slider"))
-        s = tintkit.Slider(row, self.theme, label, command=setter,
-                           value=0, lo=0, hi=100, neutral=0, bg="bar",
-                           on_press=self._edit_gesture_start,
-                           on_release=self._edit_gesture_end)
-        s.pack(side="left", fill="x", expand=True)
+        "A focus TitledSlider (blur/feather): title strip + reset over a bare track."
+        # Gauge sliders (0→100), so show the raw value. The press/release hooks
+        # batch a whole drag into one undo step; reset zeroes just this slider.
+        s = tintkit.TitledSlider(
+            parent, self.theme, label, value=0, lo=0, hi=100, neutral=0,
+            command=setter, bg="bar", value_fmt=lambda v, n: str(v),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"),
+            on_reset=lambda: self._reset_focus_slider(which))
+        s.pack(fill="x", padx=EDIT_PAD, pady=2)
         return s
 
     def _reset_focus_slider(self, which):
