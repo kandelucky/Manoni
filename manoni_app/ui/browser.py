@@ -6,6 +6,8 @@ behaviour is identical to when it lived directly on the class.
 """
 
 import os
+import shutil
+import subprocess
 import tkinter as tk
 import tkinter.filedialog as tkfd
 import tkinter.font as tkfont
@@ -13,8 +15,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image, ImageTk
 
-from ..config import BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM, SUPPORTED, ICON_DIR
+from ..config import (BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM, SUPPORTED,
+                      ICON_DIR, CULL_KEEP_TINT, CULL_REJECT_TINT)
 from ..i18n import t
+from ..storage import unique_path
 # The thumbnail workers call _decode_thumb; it is the disk-cached version, so the
 # first decode of a file is stored and every later load / resize / cull / relaunch
 # is a cheap blob read (see thumbcache.py — it falls back to a direct decode if the
@@ -38,16 +42,23 @@ class BrowserMixin:
         bar.grid(row=2, column=2, sticky="ew")
         bar.grid_propagate(False)
 
-        # RIGHT: navigation arrows, then the position counter.
+        # RIGHT: navigation arrows, then the position counter. The keep / reject
+        # cull buttons sit in the MIDDLE of the arrows (between prev and next) —
+        # tinted green (keep, folder-up) and red (reject, folder-down) so they
+        # read at a glance. Each tuple is (icon, command, tip, color); color None
+        # leaves the arrow white.
         nav = tk.Frame(bar, bg=BAR)
         nav.pack(side="right", padx=8)
-        for icon_name, command, tip in [
-            ("chevrons-left", self.first, t("First")),
-            ("chevron-left", self.prev, t("Previous")),
-            ("chevron-right", self.next, t("Next")),
-            ("chevrons-right", self.last, t("Last")),
+        for icon_name, command, tip, color in [
+            ("chevrons-left", self.first, t("First"), None),
+            ("chevron-left", self.prev, t("Previous"), None),
+            ("folder-up", self.move_to_folder, t("Keep (keeper)"), CULL_KEEP_TINT),
+            ("folder-down", self.delete, t("Reject"), CULL_REJECT_TINT),
+            ("chevron-right", self.next, t("Next"), None),
+            ("chevrons-right", self.last, t("Last"), None),
         ]:
-            self._tool_button(nav, icon_name, command, tip).pack(side="left", padx=4, pady=4)
+            self._tool_button(nav, icon_name, command, tip, color=color).pack(
+                side="left", padx=4, pady=4)
         self.lbl_pos = tk.Label(nav, text="0 / 0", bg=BAR, fg=FG_DIM,
                                 font=("Segoe UI", 9))
         self.lbl_pos.pack(side="left", padx=10)
@@ -532,6 +543,7 @@ class BrowserMixin:
         for w in (lbl, holder, name, cell):
             w.bind("<MouseWheel>", self._on_wheel)
             w.bind("<Button-1>", lambda e, idx=i: self.go_to(idx))
+            w.bind("<Button-3>", lambda e, idx=i: self._thumb_menu(e, idx))
         return cell
 
     def _make_list_cell(self, i, file):
@@ -561,7 +573,102 @@ class BrowserMixin:
         for w in (cell, holder, box, lbl, name):
             w.bind("<MouseWheel>", self._on_wheel)
             w.bind("<Button-1>", lambda e, idx=i: self.go_to(idx))
+            w.bind("<Button-3>", lambda e, idx=i: self._thumb_menu(e, idx))
         return cell
+
+    # --- Thumbnail right-click menu (open in folder · duplicate · delete) -----
+
+    def _thumb_menu(self, event, idx):
+        "Right-click a thumbnail: reveal it in Explorer, duplicate it, or delete it."
+        if not (0 <= idx < len(self.files)):
+            return
+        menu = tk.Menu(self.root, tearoff=0, bg=BAR, fg=FG, bd=0,
+                       activebackground=ACCENT, activeforeground=FG,
+                       font=("Segoe UI", 9))
+        menu.add_command(label=t("Open in folder"),
+                         command=lambda: self._reveal_in_explorer(idx))
+        menu.add_command(label=t("Make a duplicate"),
+                         command=lambda: self._duplicate_photo(idx))
+        menu.add_separator()
+        menu.add_command(label=t("Delete permanently"), foreground="#ff8a8a",
+                         command=lambda: self._delete_permanently(idx))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _thumb_target(self, idx):
+        "The (file, absolute path) a thumbnail action acts on, or (None, None)."
+        if not self.folder or not (0 <= idx < len(self.files)):
+            return None, None
+        file = self.files[idx]
+        return file, os.path.join(self.folder, file)
+
+    def _reveal_in_explorer(self, idx):
+        "Open the file's folder in Explorer with the file itself selected."
+        file, path = self._thumb_target(idx)
+        if path is None:
+            return
+        if not os.path.exists(path):
+            self.toast(t("File not found"))
+            return
+        try:
+            subprocess.Popen(f'explorer /select,"{os.path.normpath(path)}"')
+        except Exception as e:
+            self.toast(t("Error: {e}").format(e=e))
+
+    def _duplicate_photo(self, idx):
+        "Copy the file next to itself ('name (1).jpg') without leaving the open photo."
+        file, path = self._thumb_target(idx)
+        if path is None or not os.path.isfile(path):
+            self.toast(t("File not found"))
+            return
+        dest = unique_path(path)
+        try:
+            shutil.copy2(path, dest)
+        except Exception as e:
+            self.toast(t("Error: {e}").format(e=e))
+            return
+        newname = os.path.basename(dest)
+        # Slot the copy into the list but keep the currently-shown photo selected, so
+        # an unsaved edit in the preview is never silently discarded.
+        cur = self.files[self.index] if self.files else newname
+        self.files.append(newname)
+        self.files.sort(key=str.lower)       # match load_folder's ordering
+        self.index = self.files.index(cur)
+        self._build_thumbs()                 # strip only; the editor preview is untouched
+        self.toast(t("Duplicated → {name}").format(name=newname))
+
+    def _delete_permanently(self, idx):
+        "Delete the file from disk for good (no undo) after a confirm."
+        file, path = self._thumb_target(idx)
+        if path is None:
+            return
+        if not self._confirm(
+                t("Permanently delete “{name}”? This cannot be undone.").format(
+                    name=file),
+                ok_label=t("Delete")):
+            return
+        try:
+            os.remove(path)
+        except Exception as e:
+            self.toast(t("Error: {e}").format(e=e))
+            return
+        cur = self.files[self.index] if self.files else None
+        del self.files[idx]
+        if cur is not None and cur in self.files:
+            # Deleted some OTHER photo → keep the open one shown (preview untouched).
+            self.index = self.files.index(cur)
+            self._build_thumbs()
+        else:
+            # Deleted the open photo → fall to a neighbour and reload the preview.
+            self.index = max(0, min(idx, len(self.files) - 1))
+            self._build_thumbs()
+            if self.files:
+                self.show_current()
+            else:
+                self.load_folder(self.folder)
+        self.toast(t("Deleted: {name}").format(name=file))
 
     # --- List-view name fitting (truncate filenames to the sidebar width) -----
 

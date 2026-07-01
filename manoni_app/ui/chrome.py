@@ -25,12 +25,17 @@ from ..i18n import t
 class ChromeMixin:
     # --- Icons --------------------------------------------------------------
 
-    def icon(self, name, size=None):
-        "Load a Lucide icon (white) scaled to `size` logical px (default"
-        " ICON_SIZE), cached. None if missing."
-        # Cache per (name, size): the bare name keeps the default-size key so
-        # existing callers are unaffected; a custom size gets its own entry.
-        key = name if size is None else f"{name}@{size}"
+    def icon(self, name, size=None, color=None):
+        "Load a Lucide icon scaled to `size` logical px (default ICON_SIZE),"
+        " cached. White by default; `color` (a hex string) recolors the strokes"
+        " — used for the tinted keep/reject buttons. None if missing."
+        # Cache per (name, size, color): the bare name keeps the default-size key
+        # so existing callers are unaffected; a custom size / color gets its own.
+        key = name
+        if size is not None:
+            key += f"@{size}"
+        if color is not None:
+            key += f"#{color}"
         if key in self.icons:
             return self.icons[key]
         path = os.path.join(ICON_DIR, name + ".png")
@@ -43,15 +48,23 @@ class ChromeMixin:
             try:
                 im = Image.open(path).convert("RGBA")
                 im = im.resize((px, px), Image.LANCZOS)
+                if color is not None:
+                    # Replace the white strokes with `color`, keeping the
+                    # anti-aliased alpha as a mask so edges stay smooth.
+                    rgb = tuple(int(color[i:i + 2], 16) for i in (1, 3, 5))
+                    tinted = Image.new("RGBA", im.size, rgb + (0,))
+                    tinted.putalpha(im.split()[3])
+                    im = tinted
                 img = ImageTk.PhotoImage(im)
             except Exception:
                 img = None
         self.icons[key] = img
         return img
 
-    def _tool_button(self, parent, icon_name, command, tooltip="", size=None):
+    def _tool_button(self, parent, icon_name, command, tooltip="", size=None,
+                     color=None):
         "A flat icon button with hover effect (falls back to text if no icon)."
-        img = self.icon(icon_name, size)
+        img = self.icon(icon_name, size, color)
         if img is not None:
             btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
         else:
@@ -334,17 +347,16 @@ class ChromeMixin:
         self.btn_menu.pack(side="right", padx=4, pady=8)   # anchor for the dropdown
         self._sep(right).pack(side="right", fill="y", padx=6, pady=10)
 
-        # Cull group: one block — keep · reject (matched folder icons) then the
-        # ⚙ options (set the two sort folders) and a "?" help button. The two
-        # actions are gated until the folders are configured (see nav).
+        # The ⚙ gear is the application Settings shortcut (same tabbed window as
+        # ☰ → Settings — its Culling tab configures the two sort folders). Next
+        # to it, a "?" opens the culling help. The keep / reject ACTIONS now live
+        # on the bottom nav strip, between the arrows, where culling actually
+        # happens (see browser._build_bottombar); they're gated until the folders
+        # are configured (see nav).
         cull = tk.Frame(right, bg=BAR)
         cull.pack(side="right")
-        for spec in [
-            ("folder-check", self.move_to_folder,       t("Keep (keeper)")),
-            ("folder-x",     self.delete,               t("Reject")),
-            ("settings",     self._cull_options_dialog, t("Sorting folders")),
-        ]:
-            self._tool_button(cull, *spec).pack(side="left", padx=4, pady=8)
+        self._tool_button(cull, "settings", self._settings_dialog,
+                          t("Settings")).pack(side="left", padx=4, pady=8)
         self._glyph_button(cull, "?", self._cull_help_dialog,
                            t("Culling — Help")).pack(side="left", padx=4, pady=8)
 
@@ -959,9 +971,10 @@ class ChromeMixin:
 
     def _build_sidebar_footer(self, side):
         """Bottom strip of the sidebar — a horizontal footer that is part of the
-        panel. Left: a view-mode dropdown (large / medium / small icons · list).
-        Right: the thumbnail-size zoom −/+ (moved here from the header). Packed at
-        the very bottom so the thumbnail grid fills the space above it."""
+        panel. Holds only the view-mode dropdown (large / medium / small icons ·
+        list); the dropdown's size presets are the thumbnail-size control, so the
+        separate −/+ zoom buttons are gone. Packed at the very bottom so the
+        thumbnail grid fills the space above it."""
         foot = tk.Frame(side, bg=BAR)
         foot.pack(side="bottom", fill="x")
         self.sidebar_footer = foot
@@ -972,32 +985,19 @@ class ChromeMixin:
         row = tk.Frame(foot, bg=BAR)
         row.pack(side="top", fill="x", padx=6, pady=4)
 
-        # LEFT: the view-mode dropdown (large icons / small / list …).
+        # The view-mode dropdown (large icons / small / list …) — the whole footer.
         self._build_view_button(row).pack(side="left")
 
-        # RIGHT: thumbnail-size zoom −/+.
-        fz = tk.Frame(row, bg=BAR)
-        fz.pack(side="right")
-        self._tool_button(fz, "zoom-out", self.thumbs_smaller,
-                          t("Smaller thumbnails")).pack(side="left", padx=2)
-        self._tool_button(fz, "zoom-in", self.thumbs_larger,
-                          t("Larger thumbnails")).pack(side="left", padx=2)
-
     def _build_view_button(self, parent):
-        "A flat dropdown button (icon + current view + ▾) that opens the view menu."
+        "A flat dropdown button (current view label + ▾) that opens the view menu."
         btn = tk.Frame(parent, bg=BAR, cursor="hand2")
-        img = self.icon("layout-grid")
-        icon = (tk.Label(btn, image=img, bg=BAR) if img is not None
-                else tk.Label(btn, text="▦", bg=BAR, fg=FG, font=("Segoe UI", 11)))
-        icon.pack(side="left", padx=(4, 4), pady=3)
         label = tk.Label(btn, text="", bg=BAR, fg=FG, font=("Segoe UI", 9))
-        label.pack(side="left")
+        label.pack(side="left", padx=(6, 0), pady=3)
         chev = tk.Label(btn, text="▾", bg=BAR, fg=FG_DIM, font=("Segoe UI", 8))
         chev.pack(side="left", padx=(4, 6))
         self.btn_view = btn
-        self.view_btn_icon = icon
         self.view_btn_label = label
-        cells = (btn, icon, label, chev)
+        cells = (btn, label, chev)
 
         def enter(_e):
             for w in cells:
@@ -1023,19 +1023,15 @@ class ChromeMixin:
         return None                       # a custom (zoomed) icon size
 
     def _update_view_button(self):
-        "Refresh the dropdown face so it mirrors the active view (icon + label)."
+        "Refresh the dropdown face so it mirrors the active view (label only)."
         if not hasattr(self, "view_btn_label"):
             return
         if self.view_mode == "list":
-            text, icon_name = t("List"), "menu"
+            text = t("List")
         else:
             key = self._active_view()
             text = t(next((l for k, l, _s in self.VIEW_MENU if k == key), "Icons"))
-            icon_name = "layout-grid"
         self.view_btn_label.configure(text=text)
-        img = self.icon(icon_name)
-        if img is not None:
-            self.view_btn_icon.configure(image=img)
 
     def _open_view_menu(self):
         "Open (or toggle shut) the view-mode dropdown above the footer button."

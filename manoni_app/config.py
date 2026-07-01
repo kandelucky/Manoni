@@ -45,6 +45,12 @@ CHIP_BG   = "#2f2f2f"   # neutral (inactive) chip / toggle background
 BORDER    = "#3a3a3a"   # 1px hairline borders, separators, popup edges
 DIVIDER   = "#333333"   # thin divider lines inside panels
 
+# Cull buttons (keep / reject) — near-white with just a hint of colour so they
+# read at a glance without shouting: a greenish-white keep (folder-up) and a
+# reddish-white reject (folder-down).
+CULL_KEEP_TINT   = "#cfe9cf"   # greenish white — keep / keeper
+CULL_REJECT_TINT = "#edcfcf"   # reddish white — reject / discard
+
 ICON_SIZE = 22
 THUMB_W   = 150   # default thumbnail size (px); adjustable at runtime
 

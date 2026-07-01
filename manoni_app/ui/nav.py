@@ -11,7 +11,8 @@ import shutil
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import BG, BAR, ACCENT, FG, FG_DIM, SUPPORTED
+from ..config import (BG, BAR, ACCENT, FG, FG_DIM, SUPPORTED,
+                      CULL_KEEP_TINT, CULL_REJECT_TINT)
 from ..i18n import t
 from .dialogs import make_dialog_button, center_over
 
@@ -472,17 +473,17 @@ class NavMixin:
                  wraplength=360).pack(anchor="w", pady=(0, 12))
 
         rows = [
-            ("folder-check", "Keep (keeper)",
-             "Moves the current photo to the keep folder."),
-            ("folder-x",     "Reject",
-             "Moves the current photo to the discard folder."),
-            ("settings",     "Settings",
-             "Set these two folders — until you do, the buttons don't work."),
+            ("folder-up", "Keep (keeper)",
+             "Moves the current photo to the keep folder.", CULL_KEEP_TINT),
+            ("folder-down", "Reject",
+             "Moves the current photo to the discard folder.", CULL_REJECT_TINT),
+            ("settings", "Settings",
+             "Set these two folders — until you do, the buttons don't work.", None),
         ]
-        for icon_name, title, desc in rows:
+        for icon_name, title, desc, color in rows:
             r = tk.Frame(wrap, bg=BG)
             r.pack(fill="x", pady=6)
-            img = self.icon(icon_name)
+            img = self.icon(icon_name, color=color)
             if img is not None:
                 tk.Label(r, image=img, bg=BG).pack(side="left", padx=(0, 10))
             col = tk.Frame(r, bg=BG)

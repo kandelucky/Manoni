@@ -511,6 +511,16 @@ CATALOG_KA = {
     "Error: {e}": "შეცდომა: {e}",
     "Restored: {name}": "დაბრუნდა: {name}",
     "Moved: {name}": "გადატანილია: {name}",
+    # --- Thumbnail right-click menu (open in folder · duplicate · delete) ---
+    "Open in folder": "ფოლდერში გახსნა",
+    "Make a duplicate": "დუბლიკატის გაკეთება",
+    "Delete permanently": "სამუდამოდ წაშლა",
+    "Permanently delete “{name}”? This cannot be undone.":
+        "სამუდამოდ წავშალო „{name}“? ამის დაბრუნება შეუძლებელია.",
+    "Delete": "წაშლა",
+    "File not found": "ფაილი ვერ მოიძებნა",
+    "Duplicated → {name}": "დუბლირდა → {name}",
+    "Deleted: {name}": "წაიშალა: {name}",
     "End of folder": "ფოლდერის ბოლოა",
     "Start of folder": "ფოლდერის დასაწყისია",
     "Can't undo the edit — a different folder is open":
