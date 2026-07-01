@@ -19,11 +19,10 @@ is identical to when it lived directly on the class.
 import math
 import tkinter as tk
 
-from ..config import (BAR, ACCENT, FG, FG_DIM,
-                      EDIT_PANEL_W, EDIT_PAD, CHIP_GAP, ON_ACCENT, CHIP_BG)
-from ..widgets import Slider, Tooltip
+import tintkit
+
+from ..config import BAR, ACCENT, FG_DIM, EDIT_PANEL_W, EDIT_PAD, ON_ACCENT
 from ..i18n import t
-from .dialogs import make_panel_chip, set_chip_active
 
 
 class FocusMixin:
@@ -38,14 +37,12 @@ class FocusMixin:
         "Focus-blur panel: a shape toggle, a hint, blur + feather sliders, remove."
         f = tk.Frame(parent, bg=BAR)
 
-        # Shape toggle: circle vs line (tilt-shift) — two accent-fill chips.
-        self._focus_shape_chips = {}
-        shapes = tk.Frame(f, bg=BAR)
-        shapes.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
-        shapes.columnconfigure(0, weight=1, uniform="fs")
-        shapes.columnconfigure(1, weight=1, uniform="fs")
-        self._focus_shape_chip(shapes, "Circle", "circle", 0)
-        self._focus_shape_chip(shapes, "Line", "line", 1)
+        # Shape toggle: circle vs line (tilt-shift) — a segmented control.
+        self._focus_shapes = ["circle", "line"]
+        self._focus_shape_tabs = tintkit.SegmentedTabs(
+            f, self.theme, [t("Circle"), t("Line")], selected=0, bg="bar",
+            command=lambda i, _l: self._set_focus_shape(self._focus_shapes[i]))
+        self._focus_shape_tabs.pack(padx=EDIT_PAD, pady=(10, 2))
 
         self._focus_hint = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
                                     font=("Segoe UI", 8), justify="left",
@@ -54,37 +51,60 @@ class FocusMixin:
         self._focus_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
         # Blur strength and edge softness. Absolute magnitudes (neutral = the low
-        # end), so the accent fill reads as a gauge — like the heal sliders. The
-        # press/release hooks make a whole drag one undo step.
-        self.s_focus_blur = Slider(f, t("Blur strength"), self._set_focus_blur,
-                                   lo=0, hi=100, neutral=0,
-                                   on_press=self._edit_gesture_start,
-                                   on_release=self._edit_gesture_end)
-        self.s_focus_blur.pack(fill="x", padx=EDIT_PAD, pady=2)
+        # end), so the accent fill reads as a gauge — like the heal sliders. Each
+        # slider carries its own reset button, so one part can be zeroed without
+        # dropping the whole effect. The press/release hooks make a drag one undo.
+        self.s_focus_blur = self._focus_slider(
+            f, t("Blur strength"), self._set_focus_blur, "blur")
+        self.s_focus_feather = self._focus_slider(
+            f, t("Transition softness"), self._set_focus_feather, "feather")
 
-        self.s_focus_feather = Slider(f, t("Transition softness"),
-                                      self._set_focus_feather,
-                                      lo=0, hi=100, neutral=0,
-                                      on_press=self._edit_gesture_start,
-                                      on_release=self._edit_gesture_end)
-        self.s_focus_feather.pack(fill="x", padx=EDIT_PAD, pady=2)
+        # Done (close the tool, keep the live effect) + Remove (turn it off).
+        done = tintkit.Button(
+            f, self.theme, t("Done"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
+        done.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
 
-        remove = tk.Label(f, text=t("Remove blur"), bg=BAR, fg=FG_DIM,
-                          cursor="hand2", anchor="w", font=("Segoe UI", 9))
-        remove.bind("<Enter>", lambda e: remove.configure(fg=FG))
-        remove.bind("<Leave>", lambda e: remove.configure(fg=FG_DIM))
-        remove.bind("<Button-1>", lambda e: self._remove_focus())
-        remove.pack(fill="x", padx=EDIT_PAD, pady=(14, 6))
-        remove._tip = Tooltip(remove, t("Turn the focus blur off"))
+        remove = tintkit.Button(
+            f, self.theme, t("Remove blur"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._remove_focus)
+        remove.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
+        tintkit.HoverTip(remove.canvas, self.theme, t("Turn the focus blur off"))
         return f
 
-    # --- Shape toggle -------------------------------------------------------
+    def _focus_slider(self, parent, label, setter, which):
+        "A focus slider (blur/feather) with its own reset button beside it."
+        row = tk.Frame(parent, bg=BAR)
+        row.pack(fill="x", padx=EDIT_PAD, pady=2)
+        # Pack the fixed reset button first so it always keeps its slot; the
+        # slider then stretches into the width that's left. If the slider is
+        # packed first its requested width eats the whole row and clips the
+        # button to nothing.
+        b = tintkit.IconButton(row, self.theme, "rotate-ccw", w=26, h=26,
+                               icon_px=15, bg="bar",
+                               command=lambda: self._reset_focus_slider(which))
+        b.pack(side="right", padx=(6, 0))
+        tintkit.HoverTip(b.canvas, self.theme, t("Reset this slider"))
+        s = tintkit.Slider(row, self.theme, label, command=setter,
+                           value=0, lo=0, hi=100, neutral=0, bg="bar",
+                           on_press=self._edit_gesture_start,
+                           on_release=self._edit_gesture_end)
+        s.pack(side="left", fill="x", expand=True)
+        return s
 
-    def _focus_shape_chip(self, parent, label, shape, col):
-        "One shape chip (accent-filled while its shape is active)."
-        chip = make_panel_chip(parent, t(label),
-                               lambda: self._set_focus_shape(shape), col, CHIP_GAP)
-        self._focus_shape_chips[shape] = chip
+    def _reset_focus_slider(self, which):
+        "Zero just the blur or feather slider (one undoable step), keeping the shape."
+        if self.focus is None:
+            return
+        before = self._edit_state()
+        self.focus = {**self.focus, which: 0.0}
+        s = self.s_focus_blur if which == "blur" else self.s_focus_feather
+        s.set(0)
+        self._edits_saved = False
+        self._render_preview()
+        self._record_edit(before)
+
+    # --- Shape toggle -------------------------------------------------------
 
     def _set_focus_shape(self, shape):
         "Switch the in-focus shape (circle ↔ line), keeping the blur + feather. Undoable."
@@ -106,12 +126,14 @@ class FocusMixin:
         self._record_edit(before)
 
     def _refresh_focus_mode(self):
-        "Repaint the shape chips and swap the hint to match the active shape."
-        if not hasattr(self, "_focus_shape_chips"):
+        "Sync the shape toggle and swap the hint to match the active shape."
+        if not hasattr(self, "_focus_shape_tabs"):
             return
         active = (self.focus or {}).get("shape", "circle")
-        for s, chip in self._focus_shape_chips.items():
-            set_chip_active(chip, s == active, CHIP_BG)
+        idx = self._focus_shapes.index(active) if active in self._focus_shapes else 0
+        if self._focus_shape_tabs.selected != idx:
+            self._focus_shape_tabs.selected = idx
+            self._focus_shape_tabs.repaint()
         if active == "line":
             self._focus_hint.configure(
                 text=t("Drag the band to set the focus; an edge changes its width, the end dot rotates it. Sharp in the band, blurred outside."))

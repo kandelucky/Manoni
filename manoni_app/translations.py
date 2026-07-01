@@ -91,6 +91,7 @@ CATALOG_KA = {
     "Transition softness": "გადასვლის სიფაფუკე",
     "Remove blur": "ბლურის მოშორება",
     "Turn the focus blur off": "ფოკუსის ბლურის გამორთვა",
+    "Done": "დასრულება",
 
     # --- Text / watermark tool (text.py) ----------------------------------
     "Text": "ტექსტი",
