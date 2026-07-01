@@ -516,6 +516,14 @@ class SettingsMixin:
         _Toggle(r, self.dpi, on=getattr(self, "fast_preview", True),
                 command=lambda on: self._set_pref("fast_preview", on)).pack()
 
+        r = self._set_row(p, t("Render off the main thread"),
+                          t("Do the heavy edit work on a background thread so the "
+                            "window never freezes while a costly effect renders; "
+                            "the photo catches up a moment behind the slider. Turn "
+                            "off to render on the main thread (the older behaviour)."))
+        _Toggle(r, self.dpi, on=getattr(self, "async_render", True),
+                command=lambda on: self._set_pref("async_render", on)).pack()
+
         self._set_group(p, t("On launch"))
         r = self._set_row(p, t("Reopen the last folder"))
         _Toggle(r, self.dpi, on=self.restore_session,

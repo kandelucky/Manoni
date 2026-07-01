@@ -466,6 +466,14 @@ CATALOG_KA = {
         "სლაიდერის თრევისას გამოტოვებს მძიმე ფილტრებს (სიმკვეთრე, გამახვილება, "
         "ხმაურის ჩახშობა, ნისლი, ფოკუსი, მარცვალი); სრული ხარისხი ხელის "
         "აშვებისთანავე ბრუნდება.",
+    "Render off the main thread": "რენდერი მთავარი ნაკადის გარეთ",
+    "Do the heavy edit work on a background thread so the "
+    "window never freezes while a costly effect renders; "
+    "the photo catches up a moment behind the slider. Turn "
+    "off to render on the main thread (the older behaviour).":
+        "მძიმე დამუშავებას ფონურ ნაკადზე ასრულებს, რომ ფანჯარა არ გაიყინოს "
+        "ძვირი ეფექტის რენდერისას; ფოტო ოდნავ ჩამორჩება სლაიდერს და ეწევა. "
+        "გამორთე მთავარ ნაკადზე დასარენდერებლად (ძველი ქცევა).",
     "On launch": "გაშვებისას",
     "Reopen the last folder": "ბოლო ფოლდერის ხელახლა გახსნა",
     "Jump back to the last photo": "ბოლო ფოტოზე დაბრუნება",

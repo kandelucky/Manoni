@@ -15,6 +15,7 @@ See:  spec/00-START-HERE.md
 import os
 import sys
 import json
+import threading
 import tkinter as tk
 
 from manoni_app.config import BG, THUMB_W, STATE_FILE, ROOT_DIR
@@ -322,6 +323,20 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._view_key = None    # identity of _view_base (None forces a re-render)
         self._view_alpha = None  # matching alpha mask when the photo is transparent
         self._has_alpha = False  # does the current photo carry transparency?
+        # Incremental edit cache: (base_key, stages) for the live viewport render,
+        # so a slider only recomputes the pipeline stages downstream of what
+        # changed (see imaging.apply_edits_cached). `_view_epoch` is its validity
+        # token: it bumps whenever _view_base's pixels change (rebuilt on zoom/pan,
+        # or patched in place by a heal dab), which retires the cached stages.
+        self._edit_cache = {}
+        self._view_epoch = 0
+        # Async render (see viewer): the heavy edit pass runs on a worker thread so
+        # a costly effect can't freeze the window; the finished frame is drawn back
+        # on the UI thread. `_render_gen` tags each request so a stale result is
+        # dropped once a newer one supersedes it. `_cache_lock` guards `_edit_cache`
+        # (worker-owned in async mode; the lock only matters across a toggle flip).
+        self._render_gen = 0
+        self._cache_lock = threading.Lock()
         self._interacting = False    # a slider drag is live → draft render, no histogram
         self._preview_scheduled = False  # a coalesced render is queued for the next idle
         self._checker_img = None    # cached transparency checkerboard (grows with view)
@@ -330,6 +345,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.show_filter_strip = True  # the filter-preview filmstrip; persisted
         self.show_histogram = True  # the edit panel's live histogram; persisted
         self.fast_preview = True  # drop heavy filters during a slider drag; persisted
+        self.async_render = True  # render off the UI thread so a heavy edit can't
+                                  # freeze the window; persisted (Settings → General)
         self._message = None     # placeholder text shown when no photo is loaded
         self.icons = {}          # name -> PhotoImage (kept alive)
         self._folder_imgs = {}   # cached small folder glyph for the list rows (kept alive)
@@ -475,6 +492,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "show_filter_strip": self.show_filter_strip,
                  "show_histogram": self.show_histogram,
                  "fast_preview": self.fast_preview,
+                 "async_render": self.async_render,
                  "restore_session": self.restore_session,
                  "restore_photo": self.restore_photo,
                  "confirm_reject": self.confirm_reject,
@@ -541,7 +559,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "show_filter_strip", "show_histogram",
-                    "fast_preview"):
+                    "fast_preview", "async_render"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)

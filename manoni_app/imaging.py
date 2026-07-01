@@ -869,6 +869,238 @@ def apply_color_mixer(img, e):
 
 
 # --- The full edit pass ------------------------------------------------------
+# The pass is expressed as an ordered list of STAGES (see `edit_stages`): each a
+# (signature, fn) pair, fn mapping image -> image with the exact math the flat
+# pass used. `apply_edits` just runs them all (output identical to before).
+# `apply_edits_cached` reuses a per-view cache so an edit only recomputes the
+# stages downstream of whatever actually changed — which is what stops a heavy
+# effect (denoise / clarity / focus) jamming every later slider move.
+
+# The individual passes that used to live inline in apply_edits, pulled out so a
+# stage can call one op and the caches can key on exactly its inputs. The math is
+# byte-for-byte the old code — only the packaging changed.
+
+
+def apply_auto_luts(img, luts):
+    "Auto Levels / Auto Contrast: per-channel stretch through the prebuilt LUTs."
+    r, g, b = img.convert("RGB").split()
+    return Image.merge("RGB", (r.point(luts[0]), g.point(luts[1]), b.point(luts[2])))
+
+
+def apply_clarity(img, amt, scale):
+    "Midtone local contrast: + crisp (UnsharpMask), - soft glow (blur blend)."
+    radius = CLARITY_RADIUS * scale
+    if amt > 0:
+        return img.filter(ImageFilter.UnsharpMask(
+            radius=radius, percent=int(amt * CLARITY_PCT), threshold=0))
+    soft = img.filter(ImageFilter.GaussianBlur(radius))
+    return Image.blend(img, soft, min(0.7, -amt * 0.6))
+
+
+def apply_texture(img, amt, scale):
+    "Medium-frequency detail: + sharpen surface (thresholded), - light smooth."
+    radius = TEXTURE_RADIUS * scale
+    if amt > 0:
+        return img.filter(ImageFilter.UnsharpMask(
+            radius=radius, percent=int(amt * TEXTURE_PCT), threshold=TEXTURE_THRESH))
+    soft = img.filter(ImageFilter.GaussianBlur(radius))
+    return Image.blend(img, soft, -amt * TEXTURE_SMOOTH)
+
+
+def apply_vibrance(img, amt):
+    "Saturation weighted by (1 - s/255): muted colours move most, vivid ones barely."
+    push = amt * VIBRANCE_MAX
+    h, s, v = img.convert("HSV").split()
+    s = s.point(lambda x: max(0, min(255, int(x + push * (1.0 - x / 255.0)))))
+    return Image.merge("HSV", (h, s, v)).convert("RGB")
+
+
+def apply_temperature(img, temperature):
+    "Warm (>1) boosts red / cuts blue; cool (<1) the opposite."
+    k = (temperature - 1.0) * 0.3
+    rs, bs = 1.0 + k, 1.0 - k
+    r, g, b = img.split()
+    r = r.point(lambda i: max(0, min(255, int(i * rs))))
+    b = b.point(lambda i: max(0, min(255, int(i * bs))))
+    return Image.merge("RGB", (r, g, b))
+
+
+def apply_tint(img, tint):
+    "Magenta (>1) cuts green; green (<1) boosts green."
+    gs = 1.0 - (tint - 1.0) * 0.3
+    r, g, b = img.split()
+    g = g.point(lambda i: max(0, min(255, int(i * gs))))
+    return Image.merge("RGB", (r, g, b))
+
+
+def apply_bw(img, amt):
+    "Blend toward a desaturated (still-RGB) grayscale; full strength = true B&W."
+    gray = ImageEnhance.Color(img).enhance(0.0)   # desaturated, still RGB
+    return Image.blend(img, gray, amt)
+
+
+def apply_sepia(img, amt):
+    "Desaturate to luminance, tone the grays warm (shadows brown, highlights cream)."
+    gray = img.convert("L")
+    (rs, ro), (gs, go), (bs, bo) = SEPIA_RAMP
+    toned = Image.merge("RGB", (
+        gray.point(lambda x: max(0, min(255, int(x * rs + ro)))),
+        gray.point(lambda x: max(0, min(255, int(x * gs + go)))),
+        gray.point(lambda x: max(0, min(255, int(x * bs + bo)))),
+    ))
+    return Image.blend(img, toned, amt)
+
+
+def apply_sharpen(img, sharpen, scale):
+    "Right of neutral sharpens; left blurs (radius full-res px, scaled to display)."
+    if sharpen > 1.0:
+        return ImageEnhance.Sharpness(img).enhance(1.0 + (sharpen - 1.0) * 2.0)
+    if sharpen < 1.0:
+        radius = (1.0 - sharpen) * MAX_BLUR * scale
+        if radius > 0.1:
+            return img.filter(ImageFilter.GaussianBlur(radius))
+    return img
+
+
+def _apply_texts(img, texts, scale, src_box):
+    "Draw every text / watermark overlay in list order (later over earlier)."
+    for ov in texts:
+        img = apply_text_overlay(img, ov, scale, src_box)
+    return img
+
+
+def color_mixer_active(e):
+    "True if any HSL band or the gold / skin mini-HSLs is off-neutral (else a no-op)."
+    for attr, _ in HSL_BANDS:
+        if getattr(e, attr, 1.0) != 1.0:
+            return True
+    for row in TARGETS:
+        if any(getattr(e, a) != 1.0 for a in row[6:9]):   # hue / sat / light attrs
+            return True
+    return False
+
+
+def _mixer_sig(e):
+    "Hashable snapshot of every colour-mixer field, for a stage cache signature."
+    return (tuple(getattr(e, a) for a, _ in HSL_BANDS)
+            + tuple(getattr(e, a) for row in TARGETS for a in row[6:9]))
+
+
+def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
+                vig_cache=None, focus_cache=None):
+    """The edit pass as an ordered list of (signature, fn) stages.
+
+    Same ops, same order, same guards as the flat pass — running every stage in
+    turn reproduces `apply_edits` exactly. Each `signature` captures precisely the
+    inputs that stage's `fn` reads (its slider values, plus geometry for the
+    position-dependent ones), so the live cache can tell which stages an edit left
+    untouched and reuse their cached output. `fast` simply omits the heavy stages.
+    """
+    stages = []
+    add = stages.append
+    if auto_luts is not None:
+        add((("auto", id(auto_luts)), lambda img: apply_auto_luts(img, auto_luts)))
+    if e.brightness != 1.0:
+        add((("brightness", e.brightness),
+             lambda img, f=e.brightness: ImageEnhance.Brightness(img).enhance(f)))
+    if e.contrast != 1.0:
+        add((("contrast", e.contrast),
+             lambda img, f=e.contrast: ImageEnhance.Contrast(img).enhance(f)))
+    lut = tone_lut(e)
+    if lut is not None:
+        add((("tone", e.highlights, e.shadows, e.whites, e.blacks),
+             lambda img, l=lut: img.point(l * len(img.getbands()))))
+    if e.denoise > 0.0 and not fast:
+        add((("denoise", e.denoise, scale),
+             lambda img, a=e.denoise, s=scale: apply_denoise(img, a, s)))
+    if e.dehaze != 1.0 and not fast:
+        add((("dehaze", e.dehaze),
+             lambda img, a=e.dehaze - 1.0: apply_dehaze(img, a)))
+    if e.clarity != 1.0 and not fast:
+        add((("clarity", e.clarity, scale),
+             lambda img, a=e.clarity - 1.0, s=scale: apply_clarity(img, a, s)))
+    if e.texture != 1.0 and not fast:
+        add((("texture", e.texture, scale),
+             lambda img, a=e.texture - 1.0, s=scale: apply_texture(img, a, s)))
+    if e.vibrance != 1.0:
+        add((("vibrance", e.vibrance),
+             lambda img, a=e.vibrance - 1.0: apply_vibrance(img, a)))
+    if e.color != 1.0:
+        add((("color", e.color),
+             lambda img, f=e.color: ImageEnhance.Color(img).enhance(f)))
+    if color_mixer_active(e):
+        add((("mixer",) + _mixer_sig(e), lambda img, ee=e: apply_color_mixer(img, ee)))
+    if e.temperature != 1.0:
+        add((("temperature", e.temperature),
+             lambda img, f=e.temperature: apply_temperature(img, f)))
+    if e.tint != 1.0:
+        add((("tint", e.tint), lambda img, f=e.tint: apply_tint(img, f)))
+    if e.bw > 0.0:
+        add((("bw", e.bw), lambda img, a=e.bw: apply_bw(img, a)))
+    if e.sepia > 0.0:
+        add((("sepia", e.sepia), lambda img, a=e.sepia: apply_sepia(img, a)))
+    if e.split_hi != 1.0 or e.split_sh != 1.0:
+        add((("split", e.split_hi, e.split_sh),
+             lambda img, hi=e.split_hi - 1.0, sh=e.split_sh - 1.0:
+                 apply_split_tone(img, hi, sh)))
+    if e.sharpen != 1.0 and not fast:
+        add((("sharpen", e.sharpen, scale),
+             lambda img, f=e.sharpen, s=scale: apply_sharpen(img, f, s)))
+    if e.focus and not fast:
+        add((("focus", tuple(sorted(e.focus.items())), scale, src_box),
+             lambda img, fo=e.focus, s=scale, sb=src_box:
+                 apply_focus_blur(img, fo, s, sb, focus_cache)))
+    if e.vignette != 1.0:
+        add((("vignette", e.vignette, scale, src_box, full_size),
+             lambda img, a=e.vignette - 1.0, s=scale, sb=src_box, fs=full_size:
+                 apply_vignette(img, a, s, sb, fs, vig_cache)))
+    if e.grain > 0.0 and not fast:
+        add((("grain", e.grain, scale),
+             lambda img, a=e.grain, s=scale: apply_grain(img, a, s)))
+    if e.texts:
+        sig_texts = tuple(tuple(sorted(ov.items())) for ov in e.texts)
+        add((("texts", scale, src_box, sig_texts),
+             lambda img, ts=e.texts, s=scale, sb=src_box: _apply_texts(img, ts, s, sb)))
+    return stages
+
+
+def apply_edits_cached(img, e, cache, base_key, auto_luts=None, scale=1.0,
+                       src_box=None, full_size=None, vig_cache=None,
+                       focus_cache=None, fast=False):
+    """Like `apply_edits`, but reuse `cache` to skip the stages an edit left alone.
+
+    `cache` is a plain dict the caller keeps for one view; `base_key` is a token
+    identifying the base image's PIXELS (not just its object identity), so the
+    caller can retire the cache when it patches the base in place. We compare this
+    render's stage signatures to the previous render's: the longest leading run
+    that matches produces byte-identical images, so their cached outputs are
+    reused and only the stages from the first change onward are recomputed. The
+    result equals `apply_edits`; it just does less work. When `base_key` differs
+    from the cached one the whole cache is dropped (new photo / zoom / pan / heal).
+    """
+    if full_size is None:
+        full_size = img.size
+    if src_box is None:
+        src_box = (0, 0, img.size[0], img.size[1])
+    stages = edit_stages(e, auto_luts, scale, src_box, full_size, fast,
+                         vig_cache, focus_cache)
+    prev = cache.get("stages") or []
+    if cache.get("base_key") != base_key:   # base pixels changed → nothing reusable
+        prev = []
+    out = img
+    new = []
+    i = 0
+    while i < len(stages) and i < len(prev) and stages[i][0] == prev[i][0]:
+        out = prev[i][1]                    # identical inputs+params → identical output
+        new.append(prev[i])
+        i += 1
+    for j in range(i, len(stages)):
+        out = stages[j][1](out)
+        new.append((stages[j][0], out))
+    cache["base_key"] = base_key
+    cache["stages"] = new
+    return out
+
 
 def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
                 vig_cache=None, focus_cache=None, fast=False):
@@ -884,127 +1116,9 @@ def apply_edits(img, e, auto_luts=None, scale=1.0, src_box=None, full_size=None,
         full_size = img.size
     if src_box is None:
         src_box = (0, 0, img.size[0], img.size[1])
-    if auto_luts is not None:
-        # Auto Levels / Auto Contrast first, as a tonal baseline the sliders
-        # then fine-tune. The LUTs come from the full base image, so the
-        # preview viewport and the saved full-res file map identically.
-        r, g, b = img.convert("RGB").split()
-        img = Image.merge("RGB", (r.point(auto_luts[0]),
-                                  g.point(auto_luts[1]),
-                                  b.point(auto_luts[2])))
-    if e.brightness != 1.0:
-        img = ImageEnhance.Brightness(img).enhance(e.brightness)
-    if e.contrast != 1.0:
-        img = ImageEnhance.Contrast(img).enhance(e.contrast)
-    lut = tone_lut(e)
-    if lut is not None:
-        img = img.point(lut * len(img.getbands()))   # same table for each band
-    if e.denoise > 0.0 and not fast:
-        # Clean noise BEFORE the detail pass, so clarity/texture/sharpen below
-        # crisp the cleaned pixels rather than amplifying the speckle.
-        img = apply_denoise(img, e.denoise, scale)
-    if e.dehaze != 1.0 and not fast:
-        # Atmospheric-haze clear/add: a global tone+saturation move, before the
-        # local-contrast (clarity/texture) and colour passes refine it.
-        img = apply_dehaze(img, e.dehaze - 1.0)
-    if e.clarity != 1.0 and not fast:
-        # Midtone local contrast. Like blur, the radius is in full-res pixels
-        # and scaled to the preview's display pixels so on-screen matches save.
-        amt = e.clarity - 1.0
-        radius = CLARITY_RADIUS * scale
-        if amt > 0:
-            img = img.filter(ImageFilter.UnsharpMask(
-                radius=radius, percent=int(amt * CLARITY_PCT), threshold=0))
-        else:
-            # Negative = soft glow: blend toward a large-radius blur.
-            soft = img.filter(ImageFilter.GaussianBlur(radius))
-            img = Image.blend(img, soft, min(0.7, -amt * 0.6))
-    if e.texture != 1.0 and not fast:
-        # Medium-frequency detail. Small radius (scaled to display px like
-        # clarity/blur, so preview matches save). Positive sharpens surface
-        # detail but skips diffs below the threshold (noise / flat tone);
-        # negative blends toward a light blur to soften the surface.
-        amt = e.texture - 1.0
-        radius = TEXTURE_RADIUS * scale
-        if amt > 0:
-            img = img.filter(ImageFilter.UnsharpMask(
-                radius=radius, percent=int(amt * TEXTURE_PCT),
-                threshold=TEXTURE_THRESH))
-        else:
-            soft = img.filter(ImageFilter.GaussianBlur(radius))
-            img = Image.blend(img, soft, -amt * TEXTURE_SMOOTH)
-    if e.vibrance != 1.0:
-        # Saturation that protects already-saturated pixels: boost is weighted
-        # by (1 - s/255), so muted colours move most, vivid ones barely.
-        amt = e.vibrance - 1.0
-        push = amt * VIBRANCE_MAX
-        h, s, v = img.convert("HSV").split()
-        s = s.point(lambda x: max(0, min(255, int(x + push * (1.0 - x / 255.0)))))
-        img = Image.merge("HSV", (h, s, v)).convert("RGB")
-    if e.color != 1.0:
-        img = ImageEnhance.Color(img).enhance(e.color)
-    # Per-hue saturation (HSL mixer) + gold shine. No-op when all are neutral.
-    img = apply_color_mixer(img, e)
-    if e.temperature != 1.0:
-        # warm = boost red / cut blue; cool = the opposite
-        k = (e.temperature - 1.0) * 0.3
-        rs, bs = 1.0 + k, 1.0 - k
-        r, g, b = img.split()
-        r = r.point(lambda i: max(0, min(255, int(i * rs))))
-        b = b.point(lambda i: max(0, min(255, int(i * bs))))
-        img = Image.merge("RGB", (r, g, b))
-    if e.tint != 1.0:
-        # magenta (tint>1) cuts green; green (tint<1) boosts green
-        gs = 1.0 - (e.tint - 1.0) * 0.3
-        r, g, b = img.split()
-        g = g.point(lambda i: max(0, min(255, int(i * gs))))
-        img = Image.merge("RGB", (r, g, b))
-    if e.bw > 0.0:
-        # Black-and-white effect: blend toward a luminance grayscale. At full
-        # strength any colour/temperature edit above is washed out → true B&W.
-        gray = ImageEnhance.Color(img).enhance(0.0)   # desaturated, still RGB
-        img = Image.blend(img, gray, e.bw)
-    if e.sepia > 0.0:
-        # Sepia: desaturate to luminance, then tone the grays warm via a
-        # per-channel ramp (shadows → brown, highlights → cream). Blend by
-        # strength, so the slider goes colour → fully toned.
-        gray = img.convert("L")
-        (rs, ro), (gs, go), (bs, bo) = SEPIA_RAMP
-        toned = Image.merge("RGB", (
-            gray.point(lambda x: max(0, min(255, int(x * rs + ro)))),
-            gray.point(lambda x: max(0, min(255, int(x * gs + go)))),
-            gray.point(lambda x: max(0, min(255, int(x * bs + bo)))),
-        ))
-        img = Image.blend(img, toned, e.sepia)
-    if e.split_hi != 1.0 or e.split_sh != 1.0:
-        # Colour grade: warm/cool tint the highlights and shadows separately
-        # (sits with the toning effects, after any B&W / sepia conversion).
-        img = apply_split_tone(img, e.split_hi - 1.0, e.split_sh - 1.0)
-    if e.sharpen > 1.0 and not fast:
-        # Right of neutral = sharpen (1.0→2.0 maps to Sharpness 1.0→3.0).
-        img = ImageEnhance.Sharpness(img).enhance(1.0 + (e.sharpen - 1.0) * 2.0)
-    elif e.sharpen < 1.0 and not fast:
-        # Left of neutral = Gaussian blur. The radius is in full-res pixels;
-        # scale it to the preview's display pixels so on-screen blur matches
-        # what the saved full-res file will get.
-        radius = (1.0 - e.sharpen) * MAX_BLUR * scale
-        if radius > 0.1:
-            img = img.filter(ImageFilter.GaussianBlur(radius))
-    if e.focus and not fast:
-        img = apply_focus_blur(img, e.focus, scale, src_box, focus_cache)
-    if e.vignette != 1.0:
-        img = apply_vignette(img, e.vignette - 1.0, scale, src_box, full_size,
-                             vig_cache)
-    if e.grain > 0.0 and not fast:
-        # Grain goes LAST of the looks — on top of the whole image (after focus
-        # blur and vignette), the way real film grain sits over the photo.
-        img = apply_grain(img, e.grain, scale)
-    if e.texts:
-        # The text / watermark caps everything: annotations laid crisply over
-        # the finished photo (even on top of the grain), not part of the look.
-        # Each element is drawn in turn, later ones over earlier ones.
-        for ov in e.texts:
-            img = apply_text_overlay(img, ov, scale, src_box)
+    for _sig, fn in edit_stages(e, auto_luts, scale, src_box, full_size, fast,
+                                vig_cache, focus_cache):
+        img = fn(img)
     return img
 
 

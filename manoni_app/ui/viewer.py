@@ -7,7 +7,9 @@ behaviour is identical to when it lived directly on the class.
 
 import os
 import math
+import queue
 import datetime
+import threading
 
 from PIL import Image, ImageTk
 
@@ -314,8 +316,12 @@ class ViewerMixin:
             bw=self.bw, sepia=self.sepia, grain=self.grain,
             denoise=self.denoise,
             split_hi=self.split_hi, split_sh=self.split_sh,
-            sharpen=self.sharpen, vignette=self.vignette, focus=self.focus,
-            texts=list(self.texts))
+            sharpen=self.sharpen, vignette=self.vignette,
+            # Copy the focus dict + each text overlay so the render (which may run
+            # on the worker thread) reads a stable snapshot even if the UI thread
+            # keeps dragging the shape / caption underneath it.
+            focus=dict(self.focus) if self.focus else None,
+            texts=[dict(ov) for ov in self.texts])
 
     def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None, fast=False):
         "Apply the live edit factors via the pure imaging module."
@@ -324,18 +330,25 @@ class ViewerMixin:
             src_box=src_box, full_size=full_size, vig_cache=self._vig_cache,
             focus_cache=self._focus_cache, fast=fast)
 
-    def _render_edited(self, scale, src_box, full_size):
-        """Apply the live edits to the cached viewport base — always full size.
+    def _run_edit(self, req):
+        """The heavy edit pass for one render request — the ONLY costly step, and
+        the one that runs on the worker thread in async mode.
 
-        The viewport is rendered at full resolution at every moment, so the photo
-        never softens or changes resolution while a slider is dragged. The only
-        live-drag optimisation left is Fast preview: while a drag is live
-        (`_interacting`) it drops the heavy filters (clarity, sharpen, denoise,
-        dehaze, focus, grain) so the drag stays cheap (fast=True); the release
-        render (not interacting) brings them back at full quality."""
-        base = self._view_base
-        fast = self._interacting and getattr(self, "fast_preview", True)
-        return self._apply_edits(base, scale, src_box, full_size, fast=fast)
+        Fast preview: while a drag is live the request carries fast=True, dropping
+        the heavy filters (clarity, sharpen, denoise, dehaze, focus, grain) so the
+        drag stays cheap; the release request brings them back at full quality.
+        The edit runs through the incremental cache (apply_edits_cached), so it
+        only recomputes the pipeline stages downstream of whatever changed — an
+        already-applied heavy effect is reused, not recomputed every slider move.
+        The cache lock only matters across an async on/off toggle; uncontended
+        otherwise (one worker, or the UI thread alone)."""
+        with self._cache_lock:
+            return imaging.apply_edits_cached(
+                req["base"], req["edits"], self._edit_cache, req["epoch"],
+                auto_luts=req["auto_luts"], scale=req["scale"],
+                src_box=req["src_box"], full_size=req["full_size"],
+                vig_cache=self._vig_cache, focus_cache=self._focus_cache,
+                fast=req["fast"])
 
     def _schedule_preview(self):
         """Coalesce a burst of slider-drag renders into one.
@@ -356,11 +369,15 @@ class ViewerMixin:
         self._render_preview()
 
     def _render_preview(self):
-        """Render only the visible part of the photo at the current zoom + pan.
+        """Prepare one frame, then hand the heavy edit pass off to be drawn.
 
-        Re-scaling just the viewport (not the whole enlarged image) keeps zoom
-        fast on a weak laptop. The cropped+scaled base is cached so slider edits
-        only re-apply the cheap colour pass.
+        The cheap part — geometry, and re-scaling just the visible viewport (not
+        the whole enlarged image) into the cached `_view_base` — runs here on the
+        UI thread. The costly part (the edit pass) is packaged into a request and
+        either run on the worker thread (async mode: the window stays responsive
+        while a heavy effect renders) or run inline; either way `_finish_render`
+        draws the result on the UI thread. The cropped+scaled base is cached, so a
+        slider drag skips the rescale and only pays the (incremental) edit pass.
         """
         self._update_peek_button()   # show/hide the corner peek button with the photo
         if self.current_pil is None:
@@ -408,8 +425,42 @@ class ViewerMixin:
                 self._view_base = region.convert("RGB").resize((dw, dh), Image.LANCZOS)
                 self._view_alpha = None
             self._view_key = key
+            self._view_epoch += 1    # base pixels rebuilt → retire the edit cache
 
-        img = self._render_edited(scale, (sx0, sy0, sx1, sy1), (iw, ih))
+        # The frame request: the base + a full snapshot of the edit inputs, plus
+        # the geometry `_finish_render` needs to place and finish the image. `gen`
+        # tags it so a stale worker result (superseded by a newer render) is
+        # dropped; `view_key` lets the finish detect the view moved on meanwhile.
+        fast = self._interacting and getattr(self, "fast_preview", True)
+        self._render_gen += 1
+        req = {"base": self._view_base, "edits": self._edits(),
+               "auto_luts": self._auto_luts, "epoch": self._view_epoch,
+               "scale": scale, "src_box": (sx0, sy0, sx1, sy1),
+               "full_size": (iw, ih), "fast": fast, "gen": self._render_gen,
+               "off_x": off_x, "off_y": off_y, "sx0": sx0, "sy0": sy0,
+               "vw": vw, "vh": vh, "view_key": self._view_key,
+               "interacting": self._interacting}
+
+        if getattr(self, "async_render", True) and self._start_render_worker():
+            self._submit_render(req)      # worker renders, then posts _finish_render
+        else:
+            self._finish_render(self._run_edit(req), req)
+
+    def _finish_render(self, img, req):
+        """Composite + draw a finished edit frame on the UI thread.
+
+        Runs either inline (sync mode) or via `root.after` from the worker. It is
+        cheap: alpha checker, the straighten / perspective / compare overlays, the
+        canvas blit and the tool overlays. Stale frames are dropped — a newer
+        render (`gen`) or a view that has since moved (`view_key`) means this
+        result no longer matches what should be on screen.
+        """
+        if req["gen"] != self._render_gen:
+            return                        # a newer render has superseded this one
+        if self.current_pil is None or req["view_key"] != self._view_key:
+            return                        # zoom / pan / new photo moved the view on
+        scale, off_x, off_y = req["scale"], req["off_x"], req["off_y"]
+        sx0, sy0, vw = req["sx0"], req["sy0"], req["vw"]
         self._hist_pil = img    # edited photo pixels (pre-checker) → live histogram
         if self._view_alpha is not None:
             bg = self._checker_bg(img.width, img.height)
@@ -450,12 +501,83 @@ class ViewerMixin:
         elif self._text_active():
             self._draw_text_overlay()
         if getattr(self, "show_rulers", True):
-            self._draw_rulers(vw, vh, scale, off_x, off_y)
+            self._draw_rulers(req["vw"], req["vh"], scale, off_x, off_y)
         if self.compare_mode and not self._compare_peek:
-            self._draw_compare_divider(vw, vh)
+            self._draw_compare_divider(req["vw"], req["vh"])
         self._update_zoom_readout(scale)
-        if not self._interacting:
+        if not req["interacting"]:
             self._update_histogram()   # heavy; frozen mid-drag, refreshed on release
+
+    # --- Async render worker ------------------------------------------------
+    # The edit pass is the only heavy step; running it here (off the Tk thread)
+    # keeps the window responsive while a costly effect renders. Only the newest
+    # request is kept — a burst of slider frames collapses to its latest. The
+    # worker touches NO Tk (Tkinter is single-thread only): it computes pixels and
+    # drops them in a queue that the UI thread drains on a short poll, calling
+    # _finish_render there. Toggle it off (Settings) to render inline instead.
+
+    RENDER_POLL_MS = 15    # how often the UI thread checks for a finished frame
+
+    def _start_render_worker(self):
+        "Start the worker on first use; return False if a thread can't be created."
+        if getattr(self, "_render_thread", None) is not None:
+            return True
+        try:
+            self._render_cv = threading.Condition()
+            self._render_req = None      # newest unrendered request (or None)
+            self._render_busy = False    # is the worker mid-render right now?
+            self._render_result_q = queue.Queue()
+            self._poller_on = False      # is the drain callback scheduled?
+            self._render_thread = threading.Thread(
+                target=self._render_worker, name="manoni-render", daemon=True)
+            self._render_thread.start()
+            return True
+        except Exception:
+            self._render_thread = None
+            return False
+
+    def _submit_render(self, req):
+        "Hand the newest request to the worker; any older pending one is dropped."
+        with self._render_cv:
+            self._render_req = req
+            self._render_cv.notify()
+        if not self._poller_on:          # (main thread only — no race with drain)
+            self._poller_on = True
+            self.root.after(self.RENDER_POLL_MS, self._drain_render_results)
+
+    def _render_worker(self):
+        "Background loop: render the newest request, queue the result for the UI."
+        while True:
+            with self._render_cv:
+                while self._render_req is None:
+                    self._render_cv.wait()
+                req = self._render_req
+                self._render_req = None
+                self._render_busy = True
+            try:
+                self._render_result_q.put((self._run_edit(req), req))
+            except Exception:
+                pass              # a failed frame just skips; the next one draws
+            finally:
+                with self._render_cv:
+                    self._render_busy = False
+
+    def _drain_render_results(self):
+        "UI-thread poll: draw the freshest finished frame; keep polling if busy."
+        latest = None
+        try:
+            while True:
+                latest = self._render_result_q.get_nowait()   # keep only the newest
+        except queue.Empty:
+            pass
+        if latest is not None:
+            self._finish_render(latest[0], latest[1])
+        with self._render_cv:
+            outstanding = self._render_req is not None or self._render_busy
+        if outstanding or latest is not None:
+            self.root.after(self.RENDER_POLL_MS, self._drain_render_results)
+        else:
+            self._poller_on = False       # nothing left in flight → stop polling
 
     def _render_histogram(self, w, h):
         "Build the panel's live-histogram image from the edited viewport (None if"
@@ -506,8 +628,9 @@ class ViewerMixin:
         divider = self.compare_frac * vw
         sp = max(0, min(img.width, int(round(divider - img_left))))
         if sp > 0:
-            if img is self._view_base or img is before:
-                img = img.copy()
+            # `img` may be a cached edit-stage output (or _view_base / before) —
+            # copy before pasting so the paste never mutates a shared/cached image.
+            img = img.copy()
             img.paste(before.crop((0, 0, sp, img.height)), (0, 0))
         return img
 
@@ -564,6 +687,7 @@ class ViewerMixin:
         else:
             patch = region.convert("RGB").resize((dw, dh), Image.LANCZOS)
             self._view_base.paste(patch, (dx0, dy0))
+        self._view_epoch += 1   # base pixels changed in place → retire the edit cache
         return True
 
     # --- Transparency checkerboard ------------------------------------------
