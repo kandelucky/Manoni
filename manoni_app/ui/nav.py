@@ -100,12 +100,69 @@ class NavMixin:
 
     def _has_unsaved_edits(self):
         "True if the current photo has edits (sliders or rotation) not yet saved to a copy."
-        if self.current_pil is None or self._edits_saved:
+        if self._edits_saved:
+            return False
+        return self._has_any_edits()
+
+    def _has_any_edits(self):
+        "True if the current photo carries any edit — whether or not it was saved."
+        if self.current_pil is None:
             return False
         return (self._rotated or self._cropped or self._resized or self._perspd
                 or self._healed
                 or any(v != self._slider_neutral(k)
                        for k, v in self._edit_state().items()))
+
+    # --- Restore original (discard every edit, reload the file) --------------
+
+    def restore_original(self):
+        "Discard every edit on the current photo and reload the original from disk."
+        if not self._has_any_edits():
+            self.toast(t("Nothing to restore — no edits yet"))
+            return
+        if not self._ask_restore_original():
+            return
+        self.show_current()   # re-reads the file → original pixels, all edits reset
+        self.toast(t("The original is back — every edit was cleared"))
+
+    def _ask_restore_original(self):
+        "Confirm before wiping the live edits (not undoable). Returns True to proceed."
+        result = {"ok": False}
+        dlg = tk.Toplevel(self.root)
+        dlg.title(t("Restore the original?"))
+        dlg.configure(bg=BG)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+
+        def choose(ok):
+            result["ok"] = ok
+            dlg.destroy()
+
+        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap.pack(fill="both", expand=True)
+        tk.Label(wrap, text=t("Restore the original?"), bg=BG, fg=FG,
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        fname = self.files[self.index] if self.files else ""
+        tk.Label(wrap, text=t("Discard every edit on {fname} and reload the original "
+                              "from disk?").format(fname=fname),
+                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9),
+                 wraplength=360, justify="left").pack(anchor="w", pady=(4, 16))
+
+        row = tk.Frame(wrap, bg=BG)
+        row.pack(anchor="e")
+        make_dialog_button(row, t("Cancel"), lambda: choose(False)).pack(
+            side="right", padx=(8, 0))
+        make_dialog_button(row, t("Restore"), lambda: choose(True),
+                           primary=True).pack(side="right")
+
+        dlg.protocol("WM_DELETE_WINDOW", lambda: choose(False))
+        dlg.bind("<Escape>", lambda e: choose(False))
+        dlg.bind("<Return>", lambda e: choose(True))
+        center_over(self.root, dlg)
+        dlg.grab_set()
+        dlg.focus_set()
+        self.root.wait_window(dlg)
+        return result["ok"]
 
     def _maybe_prompt_save(self):
         "Before leaving an edited photo, offer to save a copy. Returns False to stay."

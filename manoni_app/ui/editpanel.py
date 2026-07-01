@@ -80,6 +80,11 @@ class EditPanelMixin:
         }
         self.sections[self.active_section].pack(fill="both", expand=True)
 
+        # Panel foot: a full-width Restore-original over a full-width Save. These
+        # are the panel's primary actions and only show while the panel is open
+        # (the rail keeps a compact Save for the collapsed state).
+        self._build_panel_actions(panel)
+
     def _refresh_histogram(self):
         "Show or hide the panel's live histogram per the General setting."
         hist = getattr(self, "histogram", None)
@@ -327,9 +332,12 @@ class EditPanelMixin:
         self._update_chevron()
 
     def _build_save_button(self, rail):
-        "A full-width accent Save button pinned to the rail foot (icon over label)."
+        "A compact accent Save button pinned to the rail foot (icon over label)."
+        " Shown only while the panel is collapsed — the open panel carries its"
+        " own full-width Save (see _build_panel_actions)."
         wrap = tk.Frame(rail, bg=BAR)
         wrap.pack(side="bottom", fill="x")
+        self._rail_save_wrap = wrap   # hidden while the panel is open
         tk.Frame(wrap, bg=BORDER, height=1).pack(side="top", fill="x")
 
         btn = tk.Frame(wrap, bg=ACCENT, cursor="hand2")
@@ -352,6 +360,42 @@ class EditPanelMixin:
                                          for c in (btn, ic, tx)])
         btn._tip = Tooltip(btn, t("Save"))
 
+    def _build_panel_actions(self, panel):
+        "The open panel's foot: full-width Restore-original over a full-width Save."
+        wrap = tk.Frame(panel, bg=BAR)
+        # Pin to the panel bottom; the swappable section content expands above it.
+        wrap.pack(side="bottom", fill="x", before=self.section_content)
+        tk.Frame(wrap, bg=BORDER, height=1).pack(side="top", fill="x")
+        self._wide_action(wrap, "rotate-ccw", t("Restore original"),
+                          self.restore_original,
+                          tip=t("Discard every edit and reload the original photo"))
+        self._wide_action(wrap, "save", t("Save"), self.quick_save, accent=True)
+
+    def _wide_action(self, parent, icon_name, label, command, accent=False, tip=None):
+        "One full-width panel action button (icon left of label). accent = primary."
+        bg, hov, fg = ((ACCENT, ACCENT_HOVER, ON_ACCENT) if accent
+                       else (CHIP_BG, HOVER, FG))
+        btn = tk.Frame(parent, bg=bg, cursor="hand2")
+        btn.pack(side="top", fill="x")
+        inner = tk.Frame(btn, bg=bg)          # centers the icon + label
+        inner.pack(pady=9)
+        parts = [btn, inner]
+        img = self.icon(icon_name, size=16)
+        if img is not None:
+            ic = tk.Label(inner, image=img, bg=bg)
+            ic.pack(side="left", padx=(0, 7))
+            parts.append(ic)
+        tx = tk.Label(inner, text=label, bg=bg, fg=fg, font=("Segoe UI", 9, "bold"))
+        tx.pack(side="left")
+        parts.append(tx)
+        for w in parts:
+            w.bind("<Button-1>", lambda e: command())
+            w.bind("<Enter>", lambda e: [p.configure(bg=hov) for p in parts])
+            w.bind("<Leave>", lambda e: [p.configure(bg=bg) for p in parts])
+        if tip:
+            btn._tip = Tooltip(btn, tip)
+        return btn
+
     def _set_panel(self, open_):
         "Show or hide the slider panel (col 3). The icon rail stays put."
         if open_ == self.panel_open:
@@ -359,8 +403,10 @@ class EditPanelMixin:
         self.panel_open = open_
         if open_:
             self.edit_panel.grid()
+            self._rail_save_wrap.pack_forget()   # the open panel has its own Save
         else:
             self.edit_panel.grid_remove()
+            self._rail_save_wrap.pack(side="bottom", fill="x")
             self.preview.configure(cursor="")   # leave crop cursor behind
         self._update_chevron()
         # The preview just changed width; re-fit on the next idle layout pass.

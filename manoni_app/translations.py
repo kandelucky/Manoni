@@ -184,6 +184,17 @@ CATALOG_KA = {
     "Reset this slider": "სლაიდერის განულება",
     "Clear all": "გასუფთავება",
     "Reset all sliders": "ყველა სლაიდერის განულება",
+    "Restore original": "დააბრუნე ორიგინალი",
+    "Discard every edit and reload the original photo":
+        "ყველა ცვლილება უქმდება და ორიგინალი ფოტო თავიდან იტვირთება",
+    "Restore the original?": "დავაბრუნო ორიგინალი?",
+    "Discard every edit on {fname} and reload the original from disk?":
+        "ჩამოვყარო {fname}-ის ყველა ცვლილება და ორიგინალი თავიდან ჩავტვირთო?",
+    "Restore": "დაბრუნება",
+    "The original is back — every edit was cleared":
+        "ორიგინალი დაბრუნდა — ყველა ცვლილება მოიხსნა",
+    "Nothing to restore — no edits yet":
+        "დასაბრუნებელი არაფერია — ცვლილება ჯერ არ არის",
 
     # --- Filters manager (filters.py) -------------------------------------
     "Save the current edit as a filter, or add ready-made filters from a file.":
