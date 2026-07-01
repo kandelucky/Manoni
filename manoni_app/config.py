@@ -51,6 +51,19 @@ DIVIDER   = "#333333"   # thin divider lines inside panels
 CULL_KEEP_TINT   = "#cfe9cf"   # greenish white — keep / keeper
 CULL_REJECT_TINT = "#edcfcf"   # reddish white — reject / discard
 
+# TintKit theme tokens = Manoni's dark palette, so a panel migrated onto TintKit
+# widgets matches the rest of the app exactly (same bg / bar / fg / border …).
+# Applied over TintKit's built-in "dark" scheme once at startup (see manoni.py).
+# The accent is passed separately to Theme(); its on-accent / hover shades are
+# then derived from it by TintKit.
+THEME_DARK = {
+    "bg": BG, "panel": BAR, "bar": BAR, "sidebar": SIDEBAR,
+    "hover": HOVER, "lift": CHIP_BG, "chip": CHIP_BG,
+    "border": BORDER, "divider": DIVIDER,
+    "fg": FG, "fg_dim": FG_DIM, "ring": FG_DIM,
+    "tooltip": "#0f0f0f",
+}
+
 ICON_SIZE = 22
 THUMB_W   = 150   # default thumbnail size (px); adjustable at runtime
 

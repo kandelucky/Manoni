@@ -12,14 +12,10 @@ copy). Mixin on the Manoni window — every method uses the shared `self`.
 import os
 import tkinter as tk
 
-from ..config import (ACCENT, BAR, FG, FG_DIM, HOVER,
-                      EDIT_PAD, ON_ACCENT, ACCENT_HOVER, CHIP_BG)
-from ..widgets import Slider, Tooltip
+import tintkit
+
+from ..config import BAR, FG_DIM, EDIT_PAD
 from ..i18n import t
-
-
-# The black "Cancel/Reset" button, matching the crop panel's.
-DARK_BTN = "#141414"
 
 
 class PerspectiveMixin:
@@ -63,58 +59,36 @@ class PerspectiveMixin:
         "A −100…+100 keystone slider (0 = none) with its own reset button."
         row = tk.Frame(parent, bg=BAR)
         row.pack(fill="x", padx=EDIT_PAD, pady=2)
-        s = Slider(row, label, lambda v, a=attr: self._on_persp(a, v),
-                   lo=-100, hi=100, neutral=0)
+        s = tintkit.Slider(row, self.theme, label,
+                           command=lambda v, a=attr: self._on_persp(a, v),
+                           value=0, lo=-100, hi=100, neutral=0, bg="bar")
         s.pack(side="left", fill="x", expand=True)
-        s._tip = Tooltip(s.canvas, tip)
+        tintkit.HoverTip(s.canvas, self.theme, tip)
         self._persp_reset_btn(row, attr).pack(side="right", padx=(6, 0))
         return s
 
     def _persp_reset_btn(self, parent, attr):
         "A small reset icon that returns one keystone slider to 0."
-        img = self.icon("rotate-ccw", size=14)
-        if img is not None:
-            b = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
-        else:
-            b = tk.Label(parent, text="↺", bg=BAR, fg=FG_DIM, cursor="hand2",
-                         font=("Segoe UI", 11))
-        b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
-        b.bind("<Leave>", lambda e: b.configure(bg=BAR))
-        b.bind("<Button-1>", lambda e, a=attr: self._reset_persp_one(a))
-        b._tip = Tooltip(b, t("Reset this slider"))
+        b = tintkit.IconButton(parent, self.theme, "rotate-ccw",
+                               w=26, h=26, icon_px=15, bg="bar",
+                               command=lambda a=attr: self._reset_persp_one(a))
+        tintkit.HoverTip(b.canvas, self.theme, t("Reset this slider"))
         return b
 
     def _build_perspective_actions(self, parent):
-        "Apply (accent) + a black Reset button, matching the crop panel."
-        apply_btn = tk.Frame(parent, bg=ACCENT, cursor="hand2")
+        "Apply (accent) + a subtle Reset button, matching the crop panel."
+        apply_btn = tintkit.Button(
+            parent, self.theme, t("Apply perspective"), role="primary",
+            variant="filled", stretch=True, bg="bar",
+            command=self.apply_perspective_commit)
         apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(16, 0))
-        atx = tk.Label(apply_btn, text=t("Apply perspective"), bg=ACCENT,
-                       fg=ON_ACCENT, font=("Segoe UI", 10, "bold"))
-        atx.pack(expand=True, pady=10)
-        for w in (apply_btn, atx):
-            w.bind("<Button-1>", lambda e: self.apply_perspective_commit())
-            w.bind("<Enter>", lambda e: [x.configure(bg=ACCENT_HOVER)
-                                         for x in (apply_btn, atx)])
-            w.bind("<Leave>", lambda e: [x.configure(bg=ACCENT)
-                                         for x in (apply_btn, atx)])
 
-        reset = tk.Frame(parent, bg=DARK_BTN, cursor="hand2",
-                         highlightbackground="#2e2e2e", highlightthickness=1)
+        reset = tintkit.Button(
+            parent, self.theme, t("Reset"), role="neutral", variant="outline",
+            icon="rotate-ccw", stretch=True, bg="bar",
+            command=lambda: self._reset_perspective(render=True))
         reset.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
-        rinner = tk.Frame(reset, bg=DARK_BTN)
-        rinner.pack(pady=8)
-        ximg = self.icon("rotate-ccw", size=13)
-        if ximg is not None:
-            tk.Label(rinner, image=ximg, bg=DARK_BTN).pack(side="left", padx=(0, 6))
-        rtx = tk.Label(rinner, text=t("Reset"), bg=DARK_BTN, fg=FG_DIM,
-                       font=("Segoe UI", 9))
-        rtx.pack(side="left")
-        rparts = [reset, rinner] + list(rinner.winfo_children())
-        for w in rparts:
-            w.bind("<Button-1>", lambda e: self._reset_perspective(render=True))
-            w.bind("<Enter>", lambda e: [p.configure(bg="#0d0d0d") for p in rparts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=DARK_BTN) for p in rparts])
-        reset._tip = Tooltip(reset, t("Reset both sliders to zero"))
+        tintkit.HoverTip(reset.canvas, self.theme, t("Reset both sliders to zero"))
 
     # --- Behaviour ----------------------------------------------------------
 

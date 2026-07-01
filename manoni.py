@@ -20,7 +20,8 @@ import tkinter as tk
 
 import tintkit  # DPI + theme; declares DPI awareness at import, before tk.Tk()
 
-from manoni_app.config import BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR
+from manoni_app.config import (BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR,
+                               ICON_DIR, THEME_DARK)
 from manoni_app import i18n
 from manoni_app import translations  # noqa: F401 — registers language packs on import
 from manoni_app.ui.chrome import ChromeMixin
@@ -142,6 +143,11 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.root.tk.call("encoding", "system", "utf-8")
         except tk.TclError:
             pass
+        # Give TintKit Manoni's own palette + icon set BEFORE the Theme is built,
+        # so any panel migrated onto TintKit widgets matches the rest of the app
+        # exactly (same colours) and finds the same Lucide icons.
+        tintkit.theme.SCHEMES["dark"].update(THEME_DARK)
+        tintkit.set_icon_dir(ICON_DIR)
         # One DPI path (tintkit): scale Tk fonts + the kit's canvas geometry to
         # the monitor, resolve the OS-native UI font, and return the factor so
         # icons load at a matching pixel size. Replaces Manoni's apply_tk_scaling.
