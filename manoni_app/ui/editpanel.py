@@ -6,12 +6,15 @@ behaviour is identical to when it lived directly on the class.
 """
 
 import tkinter as tk
+import tkinter.ttk as ttk
+
+import tintkit
 
 from ..config import (BAR, HOVER, ACCENT, FG, FG_DIM,
                       EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP,
                       ON_ACCENT, ACCENT_HOVER, CHIP_BG, BORDER, DIVIDER)
 from .. import imaging
-from ..widgets import Slider, Tooltip, Histogram
+from ..widgets import Tooltip, Histogram
 from ..i18n import t
 
 
@@ -61,9 +64,24 @@ class EditPanelMixin:
                                    height=self._edit_dpi_w(84))
         self.histogram.pack(side="top", fill="x", padx=EDIT_PAD, pady=(8, 4))
 
-        # One swappable content frame per section, stacked in this holder.
-        self.section_content = tk.Frame(panel, bg=BAR)
-        self.section_content.pack(side="top", fill="both", expand=True)
+        # One swappable content frame per section, in a vertical scroll area so a
+        # tall section (all the V3 sliders in Basic / Color) scrolls instead of
+        # being clipped — the fixed-height panel has no room to grow. Same canvas
+        # + auto-hiding Sidebar scrollbar pattern as the crop size list.
+        self._sec_host = tk.Frame(panel, bg=BAR)
+        self._sec_host.pack(side="top", fill="both", expand=True)
+        self._sec_canvas = tk.Canvas(self._sec_host, bg=BAR, highlightthickness=0,
+                                     bd=0)
+        self._sec_scrollbar = ttk.Scrollbar(
+            self._sec_host, orient="vertical", command=self._sec_canvas.yview,
+            style="Sidebar.Vertical.TScrollbar")
+        self._sec_canvas.configure(yscrollcommand=self._sec_scrollbar.set)
+        self.section_content = tk.Frame(self._sec_canvas, bg=BAR)
+        self._sec_win = self._sec_canvas.create_window(
+            (0, 0), window=self.section_content, anchor="nw")
+        self._sec_canvas.pack(side="left", fill="both", expand=True)
+        self.section_content.bind("<Configure>", self._sync_section_scroll)
+        self._sec_canvas.bind("<Configure>", self._on_section_canvas_configure)
         self._refresh_histogram()    # honour the "Show histogram" setting
         self.sections = {
             "basic":   self._build_basic_section(self.section_content),
@@ -79,6 +97,11 @@ class EditPanelMixin:
             "actions": self._build_actions_section(self.section_content),
         }
         self.sections[self.active_section].pack(fill="both", expand=True)
+        # Wheel-scroll the section from anywhere in it (the sliders included), and
+        # settle the initial scroll extent once the panel has a real height.
+        for frame in self.sections.values():
+            self._bind_section_wheel(frame)
+        self.root.after_idle(self._sync_section_scroll)
 
         # Panel foot: a full-width Restore-original over a full-width Save. These
         # are the panel's primary actions and only show while the panel is open
@@ -93,10 +116,47 @@ class EditPanelMixin:
         if getattr(self, "show_histogram", True):
             if not hist.canvas.winfo_manager():   # re-insert above the section content
                 hist.pack(side="top", fill="x", padx=EDIT_PAD, pady=(8, 4),
-                          before=self.section_content)
+                          before=self._sec_host)
             self._update_histogram()
         else:
             hist.canvas.pack_forget()
+
+    # --- Section scroll area -------------------------------------------------
+
+    def _on_section_canvas_configure(self, e):
+        "Keep the inner frame the canvas width; refresh the scroll extent."
+        self._sec_canvas.itemconfigure(self._sec_win, width=e.width)
+        self._sync_section_scroll()
+
+    def _sync_section_scroll(self, _e=None):
+        "Refresh the scroll region; show the scrollbar only when the panel overflows."
+        cv = self._sec_canvas
+        cv.configure(scrollregion=cv.bbox("all"))
+        if self.section_content.winfo_reqheight() > cv.winfo_height() + 1:
+            if not self._sec_scrollbar.winfo_ismapped():
+                self._sec_scrollbar.pack(side="right", fill="y", before=cv)
+        else:
+            if self._sec_scrollbar.winfo_ismapped():
+                self._sec_scrollbar.pack_forget()
+            cv.yview_moveto(0)
+
+    def _section_wheel(self, e):
+        "Wheel over the panel scrolls the open section when it overflows."
+        cv = self._sec_canvas
+        if self.section_content.winfo_reqheight() > cv.winfo_height() + 1:
+            cv.yview_scroll(-1 if e.delta > 0 else 1, "units")
+            return "break"
+        return None
+
+    def _bind_section_wheel(self, w):
+        "Wheel-scroll on a widget + all its descendants, so sliders scroll too."
+        # Skip a nested scroll area (e.g. the crop size list) — it owns its wheel.
+        if (isinstance(w, tk.Canvas) and w is not self._sec_canvas
+                and w.cget("yscrollcommand")):
+            return
+        w.bind("<MouseWheel>", self._section_wheel, add="+")
+        for c in w.winfo_children():
+            self._bind_section_wheel(c)
 
     def _build_basic_section(self, parent):
         "Basic Edits: auto-fix buttons + grouped live sliders (Photoshop order)."
@@ -271,19 +331,15 @@ class EditPanelMixin:
         return f
 
     def _color_slider(self, parent, label, attr, chip):
-        "A labeled live slider with a small colour chip, its own reset button."
-        row = tk.Frame(parent, bg=BAR)
-        row.pack(fill="x", padx=EDIT_PAD, pady=2)
-        sw = tk.Frame(row, bg=chip, width=self._edit_dpi_w(10),
-                      height=self._edit_dpi_w(10))
-        sw.pack(side="left", padx=(0, 6))
-        sw.pack_propagate(False)
-        s = Slider(row, label, lambda v, a=attr: self._on_slider(a, v),
-                   lo=0, hi=200, neutral=100,
-                   on_press=self._edit_gesture_start,
-                   on_release=self._edit_gesture_end)
-        s.pack(side="left", fill="x", expand=True)
-        self._slider_reset_button(row, attr).pack(side="right", padx=(6, 0))
+        "A labeled live TitledSlider with a colour chip in its title strip + reset."
+        s = tintkit.TitledSlider(
+            parent, self.theme, label, value=100, lo=0, hi=200, neutral=100,
+            bg="bar", chip=chip, compact=True,
+            command=lambda v, a=attr: self._on_slider(a, v),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"),
+            on_reset=lambda a=attr: self._reset_slider(a))
+        s.pack(fill="x", padx=EDIT_PAD, pady=(1, 2))
         return s
 
     # --- Tool rail (col 4): vertical labeled icon buttons, Fotor-style -------
@@ -364,7 +420,7 @@ class EditPanelMixin:
         "The open panel's foot: full-width Restore-original over a full-width Save."
         wrap = tk.Frame(panel, bg=BAR)
         # Pin to the panel bottom; the swappable section content expands above it.
-        wrap.pack(side="bottom", fill="x", before=self.section_content)
+        wrap.pack(side="bottom", fill="x", before=self._sec_host)
         tk.Frame(wrap, bg=BORDER, height=1).pack(side="top", fill="x")
         self._wide_action(wrap, "rotate-ccw", t("Restore original"),
                           self.restore_original,
@@ -479,6 +535,10 @@ class EditPanelMixin:
                 frame.pack(fill="both", expand=True)
             else:
                 frame.pack_forget()
+        # Open each section scrolled to the top, and refresh the scrollbar for the
+        # new content height.
+        self._sec_canvas.yview_moveto(0)
+        self.root.after_idle(self._sync_section_scroll)
         self.section_title.configure(text=t(self.SECTION_TITLES[key]))
         self._update_rail()
         if key == "crop":
@@ -511,34 +571,26 @@ class EditPanelMixin:
             tx.configure(bg=bg, fg=fg)
 
     def _slider(self, parent, label, attr, lo=0, hi=200, neutral=100):
-        "A labeled live slider + its own reset button, bound to an attribute."
+        "A labeled live TitledSlider bound to an attribute, with its own reset icon."
         " Default 0–200 → factor 0.0–2.0 (neutral 1.0). Effects pass hi=100,"
         " neutral=0 → 0.0–1.0 (off→full)."
-        # Slider and its reset button share one row so the button sits to the
-        # right of the track; the slider expands to fill the rest of the width.
-        row = tk.Frame(parent, bg=BAR)
-        row.pack(fill="x", padx=EDIT_PAD, pady=2)
-        s = Slider(row, label, lambda v, a=attr: self._on_slider(a, v),
-                   lo=lo, hi=hi, neutral=neutral,
-                   on_press=self._edit_gesture_start,
-                   on_release=self._edit_gesture_end)
-        s.pack(side="left", fill="x", expand=True)
-        self._slider_reset_button(row, attr).pack(side="right", padx=(6, 0))
+        s = tintkit.TitledSlider(
+            parent, self.theme, label, value=neutral, lo=lo, hi=hi,
+            neutral=neutral, bg="bar", compact=True,
+            command=lambda v, a=attr: self._on_slider(a, v),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"),
+            value_fmt=self._slider_fmt(lo, hi, neutral),
+            on_reset=lambda a=attr: self._reset_slider(a))
+        s.pack(fill="x", padx=EDIT_PAD, pady=(1, 2))
         return s
 
-    def _slider_reset_button(self, parent, attr):
-        "A small reset icon that returns just this slider to neutral (undoable)."
-        img = self.icon("rotate-ccw", size=14)
-        if img is not None:
-            b = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
-        else:
-            b = tk.Label(parent, text="↺", bg=BAR, fg=FG_DIM, cursor="hand2",
-                         font=("Segoe UI", 11))
-        b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
-        b.bind("<Leave>", lambda e: b.configure(bg=BAR))
-        b.bind("<Button-1>", lambda e, a=attr: self._reset_slider(a))
-        b._tip = Tooltip(b, t("Reset this slider"))
-        return b
+    def _slider_fmt(self, lo, hi, neutral):
+        "Gauge sliders (rest at an end, e.g. effects) show the raw value; a"
+        " bidirectional tone slider shows the signed delta from neutral."
+        if neutral in (lo, hi):
+            return lambda v, n: str(v)
+        return None                       # TitledSlider default = signed delta
 
     def _clear_button(self, parent):
         "Full-width 'clear all' button (resets every slider as one undo step) —"
