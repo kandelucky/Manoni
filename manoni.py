@@ -622,7 +622,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # --- Misc ---------------------------------------------------------------
 
     def toast(self, message):
-        "Show a short status message in the info bar."
+        "Show a short status message in the bottom info bar."
         self.lbl_info.configure(text=message)
 
     def run(self):

@@ -28,6 +28,74 @@ class NavMixin:
         self.index = index
         self.show_current()
 
+    # --- Bottom info bar: what each arrow does / just did --------------------
+    #
+    # No new widget — this reuses the info bar at the very bottom of the window
+    # (the one that normally shows the current photo's size / date / folder).
+    # Hovering a nav button replaces that line with a description of the button;
+    # moving off restores the photo info. Outcomes ("Wrapped to the first
+    # photo", "Kept → …") arrive through toast(), which writes the same line.
+
+    def _nav_hint(self, text, sub=""):
+        "Pointer is over a nav button → describe it in the bottom info bar. `sub`"
+        " is an optional trailing note (keep / reject use it for their folder)."
+        lbl = getattr(self, "lbl_info", None)
+        if lbl is None:
+            return
+        if sub:
+            text = f"{text}      ·      {sub}"
+        lbl.configure(text=text, fg=FG)          # brighten while hinting
+
+    def _nav_hint_clear(self):
+        "Pointer left a nav button → restore the current photo's info line."
+        lbl = getattr(self, "lbl_info", None)
+        if lbl is not None:
+            lbl.configure(text=getattr(self, "_info_text", ""), fg=FG_DIM)
+
+    def _cull_hint_line(self, folder):
+        "Trailing note for a cull button: where it saves, or that it's unset."
+        if folder:
+            return t("saving to  {path}").format(path=folder)
+        return t("no folder set yet — choose it in  ⚙ Settings")
+
+    # --- Nav-arrow buttons: act, then report the special cases --------------
+    #
+    # A plain step needs no message — the info bar already flips to the new
+    # photo. Only the surprising outcomes are called out (already at an edge, or
+    # a wrap-around), via toast() so they land on the same info line.
+
+    def _nav_click_first(self):
+        self._nav_move(self.first, "first")
+
+    def _nav_click_last(self):
+        self._nav_move(self.last, "last")
+
+    def _nav_click_prev(self):
+        self._nav_move(self.prev, "prev")
+
+    def _nav_click_next(self):
+        self._nav_move(self.next, "next")
+
+    def _nav_move(self, action, kind):
+        "Run one arrow action, then toast only the outcomes that aren't obvious."
+        if not self.files:
+            return
+        before = self.index
+        action()                              # may pop the unsaved-edit dialog
+        if not self.files or self.index == before:
+            if self.files and (kind == "first" or (kind == "prev"
+                                                    and len(self.files) == 1)):
+                self.toast(t("Already on the first photo"))
+            elif self.files and (kind == "last" or (kind == "next"
+                                                    and len(self.files) == 1)):
+                self.toast(t("Already on the last photo"))
+            return                            # cancelled save → the dialog said it
+        # Moved. The prev / next buttons wrap around at the folder edges.
+        if kind == "prev" and before == 0:
+            self.toast(t("Wrapped around to the last photo"))
+        elif kind == "next" and before == len(self.files) - 1:
+            self.toast(t("Wrapped around to the first photo"))
+
     # --- Unsaved-edit guard (offer to save a copy before leaving a photo) ----
 
     def _has_unsaved_edits(self):

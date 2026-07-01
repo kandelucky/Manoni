@@ -45,20 +45,35 @@ class BrowserMixin:
         # RIGHT: navigation arrows, then the position counter. The keep / reject
         # cull buttons sit in the MIDDLE of the arrows (between prev and next) —
         # tinted green (keep, folder-up) and red (reject, folder-down) so they
-        # read at a glance. Each tuple is (icon, command, tip, color); color None
-        # leaves the arrow white.
+        # read at a glance. Each row is (icon, command, tip, color, hint, sub):
+        # color None leaves the arrow white. Hovering a button spells out what it
+        # does in the bottom info bar (nav._nav_hint); `sub` is an optional
+        # trailing note — keep / reject use it to show where they save (or that
+        # no folder is set yet), evaluated fresh so it tracks Settings.
         nav = tk.Frame(bar, bg=BAR)
         nav.pack(side="right", padx=8)
-        for icon_name, command, tip, color in [
-            ("chevrons-left", self.first, t("First"), None),
-            ("chevron-left", self.prev, t("Previous"), None),
-            ("folder-up", self.move_to_folder, t("Keep (keeper)"), CULL_KEEP_TINT),
-            ("folder-down", self.delete, t("Reject"), CULL_REJECT_TINT),
-            ("chevron-right", self.next, t("Next"), None),
-            ("chevrons-right", self.last, t("Last"), None),
+        for icon_name, command, tip, color, hint, sub in [
+            ("chevrons-left", self._nav_click_first, t("First"), None,
+             t("Jump to the first photo of this folder"), None),
+            ("chevron-left", self._nav_click_prev, t("Previous"), None,
+             t("Go to the previous photo  ·  ← key"), None),
+            ("folder-up", self.move_to_folder, t("Keep (keeper)"), CULL_KEEP_TINT,
+             t("Keep — move this photo to the keeper folder  ·  ↑ key"),
+             lambda: self._cull_hint_line(self.cull_keep)),
+            ("folder-down", self.delete, t("Reject"), CULL_REJECT_TINT,
+             t("Reject — move this photo to the discard folder  ·  ↓ key"),
+             lambda: self._cull_hint_line(self.cull_reject)),
+            ("chevron-right", self._nav_click_next, t("Next"), None,
+             t("Go to the next photo  ·  → key"), None),
+            ("chevrons-right", self._nav_click_last, t("Last"), None,
+             t("Jump to the last photo of this folder"), None),
         ]:
-            self._tool_button(nav, icon_name, command, tip, color=color).pack(
-                side="left", padx=4, pady=4)
+            btn = self._tool_button(nav, icon_name, command, tip, color=color)
+            btn.bind("<Enter>",
+                     lambda e, h=hint, s=sub: self._nav_hint(
+                         h, s() if callable(s) else ""), add="+")
+            btn.bind("<Leave>", lambda e: self._nav_hint_clear(), add="+")
+            btn.pack(side="left", padx=4, pady=4)
         self.lbl_pos = tk.Label(nav, text="0 / 0", bg=BAR, fg=FG_DIM,
                                 font=("Segoe UI", 9))
         self.lbl_pos.pack(side="left", padx=10)
@@ -146,6 +161,7 @@ class BrowserMixin:
             self._message = t("No photos found")
             self._render_preview()
             self.lbl_name.configure(text="Manoni")
+            self._info_text = ""
             self.lbl_info.configure(text="")
             self.lbl_pos.configure(text="0 / 0")
             self._refresh_filter_strip()      # no photo → hide the filter strip

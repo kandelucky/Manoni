@@ -675,9 +675,12 @@ class ViewerMixin:
             date_txt = mtime.strftime("%Y/%m/%d %H:%M")
             folder = os.path.dirname(path)
             self.lbl_name.configure(text=file)
-            self.lbl_info.configure(
-                text=f"{self.index+1}/{len(self.files)}   ·   {w}×{h}   ·   "
-                     f"{size_txt}   ·   {date_txt}   ·   {folder}")
+            # Remember this line so the nav-button hover hints can restore it
+            # when the pointer leaves (they borrow the same info bar).
+            self._info_text = (f"{self.index+1}/{len(self.files)}   ·   {w}×{h}"
+                               f"   ·   {size_txt}   ·   {date_txt}   ·   {folder}")
+            self.lbl_info.configure(text=self._info_text, fg=FG_DIM)
         except Exception:
             self.lbl_name.configure(text=file)
-            self.lbl_info.configure(text="")
+            self._info_text = ""
+            self.lbl_info.configure(text="", fg=FG_DIM)
