@@ -16,10 +16,11 @@ import tkinter as tk
 
 from PIL import Image, ImageFilter
 
-from ..config import (BAR, ACCENT, FG, FG_DIM, HOVER, EDIT_PANEL_W, EDIT_PAD,
-                      CHIP_GAP, ON_ACCENT, ACCENT_HOVER, CHIP_BG, DIVIDER)
+import tintkit
+
+from ..config import (BAR, ACCENT, FG, FG_DIM, EDIT_PANEL_W, EDIT_PAD, CHIP_BG,
+                      DIVIDER)
 from ..i18n import t
-from .dialogs import set_chip_active, make_panel_chip
 
 
 class ResizeMixin:
@@ -70,6 +71,7 @@ class ResizeMixin:
     def _build_resize_section(self, parent):
         "Resize panel: current size, mode toggle, a value entry + presets, apply."
         f = tk.Frame(parent, bg=BAR)
+        self._resize_modes = ["px", "pct"]   # tab order for the mode toggle
         self._resize_mode = "px"             # "px" = long side, "pct" = percent
         self._resize_quality = "normal"      # soft / normal / sharp (resample)
         self._resize_strength = {"soft": "medium", "sharp": "medium"}  # per quality
@@ -81,16 +83,12 @@ class ResizeMixin:
                                         font=("Segoe UI", 9))
         self._resize_current.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
 
-        # Mode toggle: scale by the long side (px) or by a percentage.
-        self._resize_mode_chips = {}
-        modes = tk.Frame(f, bg=BAR)
-        modes.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
-        modes.columnconfigure(0, weight=1, uniform="rm")
-        modes.columnconfigure(1, weight=1, uniform="rm")
-        self._resize_mode_chips["px"] = make_panel_chip(
-            modes, t("Long side"), lambda: self._set_resize_mode("px"), 0, CHIP_GAP)
-        self._resize_mode_chips["pct"] = make_panel_chip(
-            modes, t("Percent"), lambda: self._set_resize_mode("pct"), 1, CHIP_GAP)
+        # Mode toggle: scale by the long side (px) or by a percentage — the two
+        # are exclusive, so a segmented control (like the focus / heal toggles).
+        self._resize_mode_tabs = tintkit.SegmentedTabs(
+            f, self.theme, [t("Long side"), t("Percent")], selected=0, bg="bar",
+            command=lambda i, _l: self._set_resize_mode(self._resize_modes[i]))
+        self._resize_mode_tabs.pack(padx=EDIT_PAD, pady=(0, 8))
 
         # Value entry + a live unit suffix (px / %). Enter applies.
         erow = tk.Frame(f, bg=BAR)
@@ -115,19 +113,16 @@ class ResizeMixin:
         self._resize_result.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
 
         # Pixel quality (resample filter). One setting drives the single photo
-        # AND the whole-folder batch.
+        # AND the whole-folder batch. The three are exclusive → a segmented control.
         tk.Label(f, text=t("Pixels"), bg=BAR, fg=FG_DIM, anchor="w",
                  font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
                                                     pady=(12, 4))
-        self._resize_q_chips = {}
-        qrow = tk.Frame(f, bg=BAR)
-        qrow.pack(fill="x", padx=EDIT_PAD)
-        for i in range(len(self.RESIZE_QUALITIES)):
-            qrow.columnconfigure(i, weight=1, uniform="rq")
         qlabels = {"soft": t("Soft"), "normal": t("Normal"), "sharp": t("Sharp")}
-        for i, key in enumerate(self.RESIZE_QUALITIES):
-            self._resize_q_chips[key] = self._resize_quality_chip(
-                qrow, qlabels[key], key, i)
+        self._resize_q_tabs = tintkit.SegmentedTabs(
+            f, self.theme, [qlabels[k] for k in self.RESIZE_QUALITIES],
+            selected=self.RESIZE_QUALITIES.index(self._resize_quality), bg="bar",
+            command=lambda i, _l: self._set_resize_quality(self.RESIZE_QUALITIES[i]))
+        self._resize_q_tabs.pack(padx=EDIT_PAD)
 
         # Strength of the soft/sharp effect (a whole block, shown only for those
         # two — "normal" has no effect to dial). Packed before the hint label.
@@ -135,15 +130,12 @@ class ResizeMixin:
         tk.Label(self._resize_str_block, text=t("Strength"), bg=BAR, fg=FG_DIM,
                  anchor="w", font=("Segoe UI", 8, "bold")).pack(fill="x",
                                                                 pady=(8, 4))
-        self._resize_str_chips = {}
-        srow = tk.Frame(self._resize_str_block, bg=BAR)
-        srow.pack(fill="x")
-        for i in range(len(self.RESIZE_STRENGTHS)):
-            srow.columnconfigure(i, weight=1, uniform="rs")
         slabels = {"light": t("Light"), "medium": t("Medium"), "strong": t("Strong")}
-        for i, key in enumerate(self.RESIZE_STRENGTHS):
-            self._resize_str_chips[key] = self._resize_strength_chip(
-                srow, slabels[key], key, i)
+        self._resize_str_tabs = tintkit.SegmentedTabs(
+            self._resize_str_block, self.theme,
+            [slabels[k] for k in self.RESIZE_STRENGTHS], selected=0, bg="bar",
+            command=lambda i, _l: self._set_resize_strength(self.RESIZE_STRENGTHS[i]))
+        self._resize_str_tabs.pack(anchor="w")
 
         self._resize_q_hint = tk.Label(
             f, text=t("Soft = smoother · Sharp adds web output-sharpening."),
@@ -152,18 +144,18 @@ class ResizeMixin:
         self._resize_q_hint.pack(fill="x", padx=EDIT_PAD, pady=(5, 0))
         self._set_resize_quality(self._resize_quality)   # paints chips + str block
 
-        # Apply (accent, full width).
-        apply_btn = tk.Frame(f, bg=ACCENT, cursor="hand2")
+        # Footer: Resize bakes the target into current_pil; Reset returns the
+        # value to the current photo's size (the outline secondary, x icon).
+        apply_btn = tintkit.Button(
+            f, self.theme, t("Resize"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=self.apply_resize)
         apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(14, 6))
-        atx = tk.Label(apply_btn, text=t("Resize"), bg=ACCENT, fg=ON_ACCENT,
-                       font=("Segoe UI", 10, "bold"))
-        atx.pack(expand=True, pady=10)
-        for w in (apply_btn, atx):
-            w.bind("<Button-1>", lambda e: self.apply_resize())
-            w.bind("<Enter>", lambda e: [x.configure(bg=ACCENT_HOVER)
-                                         for x in (apply_btn, atx)])
-            w.bind("<Leave>", lambda e: [x.configure(bg=ACCENT)
-                                         for x in (apply_btn, atx)])
+        reset_btn = tintkit.Button(
+            f, self.theme, t("Reset"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._reset_resize)
+        reset_btn.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
+        tintkit.HoverTip(reset_btn.canvas, self.theme,
+                         t("Reset the size to the current photo"))
 
         tk.Label(f, text=t("The original stays untouched — Save writes the resized copy."),
                  bg=BAR, fg=FG_DIM, anchor="w", justify="left",
@@ -180,24 +172,11 @@ class ResizeMixin:
                  wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)).pack(
                      fill="x", padx=EDIT_PAD, pady=(0, 6))
 
-        btn = tk.Frame(f, bg=CHIP_BG, cursor="hand2")
-        btn.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
-        inner = tk.Frame(btn, bg=CHIP_BG)
-        inner.pack(pady=9)
-        bparts = [btn, inner]
-        bimg = self.icon("folder-output", size=16)
-        if bimg is not None:
-            bic = tk.Label(inner, image=bimg, bg=CHIP_BG)
-            bic.pack(side="left", padx=(0, 8))
-            bparts.append(bic)
-        btx = tk.Label(inner, text=t("Resize the whole folder"), bg=CHIP_BG, fg=FG,
-                       font=("Segoe UI", 9, "bold"))
-        btx.pack(side="left")
-        bparts.append(btx)
-        for w in bparts:
-            w.bind("<Button-1>", lambda e: self._resize_folder())
-            w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in bparts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=CHIP_BG) for p in bparts])
+        folder_btn = tintkit.Button(
+            f, self.theme, t("Resize the whole folder"), role="neutral",
+            variant="outline", icon="folder-output", stretch=True, bg="bar",
+            command=self._resize_folder)
+        folder_btn.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
 
         # Recompute the result label live as the value changes (typing or preset).
         self._resize_var.trace_add("write", lambda *_: self._update_resize_display())
@@ -222,9 +201,11 @@ class ResizeMixin:
         self._reset_resize_input()
 
     def _refresh_resize_mode(self):
-        "Repaint the mode chips, the unit suffix, and rebuild the preset chips."
-        for m, chip in self._resize_mode_chips.items():
-            set_chip_active(chip, m == self._resize_mode, CHIP_BG)
+        "Sync the mode toggle, the unit suffix, and rebuild the preset buttons."
+        idx = self._resize_modes.index(self._resize_mode)
+        if self._resize_mode_tabs.selected != idx:
+            self._resize_mode_tabs.selected = idx
+            self._resize_mode_tabs.repaint()
         px = self._resize_mode == "px"
         self._resize_unit.configure(text="px" if px else "%")
         pf = self._resize_presets
@@ -232,44 +213,29 @@ class ResizeMixin:
             w.destroy()
         presets = self.RESIZE_PX_PRESETS if px else self.RESIZE_PCT_PRESETS
         suffix = "px" if px else "%"
-        # Equal-width columns so the chips always fit the panel (4 px / 3 percent).
+        # Equal-width columns so the buttons always fit the panel (4 px / 3 percent).
         for i in range(max(len(self.RESIZE_PX_PRESETS), len(self.RESIZE_PCT_PRESETS))):
             pf.columnconfigure(i, weight=1 if i < len(presets) else 0, uniform="rp")
         for i, p in enumerate(presets):
             self._resize_preset_chip(pf, f"{p}{suffix}", p, i)
 
     def _resize_preset_chip(self, parent, label, value, col):
-        "One quick-target chip; click fills the value entry."
-        chip = tk.Label(parent, text=label, bg=CHIP_BG, fg=FG, cursor="hand2",
-                        font=("Segoe UI", 8, "bold"), pady=6)
-        chip.grid(row=0, column=col, sticky="ew", padx=2)
-        chip.bind("<Button-1>", lambda e: self._resize_var.set(str(value)))
-        chip.bind("<Enter>", lambda e: chip.configure(bg=HOVER))
-        chip.bind("<Leave>", lambda e: chip.configure(bg=CHIP_BG))
-        return chip
-
-    def _resize_quality_chip(self, parent, label, key, col):
-        "One pixel-quality chip (soft/normal/sharp); click selects it, like the mode chips."
-        chip = tk.Label(parent, text=label, bg=CHIP_BG, fg=FG, cursor="hand2",
-                        font=("Segoe UI", 8, "bold"), pady=6)
-        chip.grid(row=0, column=col, sticky="ew", padx=2)
-        chip.bind("<Button-1>", lambda e: self._set_resize_quality(key))
-        return chip
+        "One quick-target button; click fills the value entry."
+        b = tintkit.Button(
+            parent, self.theme, label, role="neutral", variant="outline",
+            min_w=40, h=28, stretch=True, bg="bar",
+            command=lambda v=value: self._resize_var.set(str(v)))
+        b.grid(row=0, column=col, sticky="ew", padx=2)
+        return b
 
     def _set_resize_quality(self, q):
-        "Pick the resample quality; light up its chip + show/hide the strength block."
+        "Pick the resample quality; sync the toggle + show/hide the strength block."
         self._resize_quality = q
-        for k, chip in self._resize_q_chips.items():
-            set_chip_active(chip, k == q, CHIP_BG)
+        idx = self.RESIZE_QUALITIES.index(q)
+        if self._resize_q_tabs.selected != idx:
+            self._resize_q_tabs.selected = idx
+            self._resize_q_tabs.repaint()
         self._refresh_resize_strength()
-
-    def _resize_strength_chip(self, parent, label, key, col):
-        "One strength chip (light/medium/strong) for the active soft/sharp effect."
-        chip = tk.Label(parent, text=label, bg=CHIP_BG, fg=FG, cursor="hand2",
-                        font=("Segoe UI", 8, "bold"), pady=6)
-        chip.grid(row=0, column=col, sticky="ew", padx=2)
-        chip.bind("<Button-1>", lambda e: self._set_resize_strength(key))
-        return chip
 
     def _set_resize_strength(self, level):
         "Set the active quality's effect strength; remembered per quality."
@@ -279,15 +245,22 @@ class ResizeMixin:
         self._refresh_resize_strength()
 
     def _refresh_resize_strength(self):
-        "Show the strength block for soft/sharp (hidden for normal) + light its chip."
+        "Show the strength toggle for soft/sharp (hidden for normal) + sync it."
         if self._resize_quality == "normal":
             self._resize_str_block.pack_forget()
             return
         self._resize_str_block.pack(fill="x", padx=EDIT_PAD,
                                     before=self._resize_q_hint)
         active = self._resize_strength[self._resize_quality]
-        for k, chip in self._resize_str_chips.items():
-            set_chip_active(chip, k == active, CHIP_BG)
+        idx = self.RESIZE_STRENGTHS.index(active)
+        if self._resize_str_tabs.selected != idx:
+            self._resize_str_tabs.selected = idx
+            self._resize_str_tabs.repaint()
+
+    def _reset_resize(self):
+        "Outline secondary: return the value to the current photo's size."
+        self._reset_resize_input()
+        self._update_resize_display()
 
     def _reset_resize_input(self):
         "Seed the value: the current long side (px mode) or 100 (percent mode)."
@@ -344,7 +317,7 @@ class ResizeMixin:
     def _enter_resize(self):
         "Open the resize tool: refresh the panel from the current photo, plain view."
         self.preview.configure(cursor="")
-        if hasattr(self, "_resize_mode_chips"):
+        if hasattr(self, "_resize_mode_tabs"):
             self._refresh_resize_mode()
             self._reset_resize_input()
             self._update_resize_display()

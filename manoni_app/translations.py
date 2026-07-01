@@ -380,6 +380,7 @@ CATALOG_KA = {
         "ორიგინალი ხელუხლებელია — შენახვა ჩაწერს შეცვლილ ასლს.",
     "Enter a valid size": "შეიყვანე სწორი ზომა",
     "That's already the current size": "ეს უკვე მიმდინარე ზომაა",
+    "Reset the size to the current photo": "ზომის დაბრუნება მიმდინარე ფოტოზე",
     "Pixels": "პიქსელები",
     "Soft": "რბილი",
     "Normal": "ნორმალური",
