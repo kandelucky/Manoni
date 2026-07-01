@@ -16,12 +16,11 @@ is identical to when it lived directly on the class.
 
 import tkinter as tk
 
-from ..config import (BAR, ACCENT, FG_DIM, EDIT_PANEL_W, EDIT_PAD, CHIP_GAP,
-                      CHIP_BG)
+import tintkit
+
+from ..config import BAR, ACCENT, FG_DIM, EDIT_PANEL_W, EDIT_PAD
 from .. import imaging
-from ..widgets import Slider
 from ..i18n import t
-from .dialogs import make_panel_chip, set_chip_active
 
 
 class HealMixin:
@@ -31,19 +30,21 @@ class HealMixin:
     HEAL_MAX        = 160    # largest brush radius, in source px
     HEAL_WHEEL_STEP = 4      # px per wheel notch / [ ] keypress
     CLONE_SRC       = "#ffcc44"   # colour of the clone source-ring overlay
+    HEAL_DEF_RADIUS   = 24   # brush size a per-slider reset returns to
+    HEAL_DEF_STRENGTH = 100  # strength (%) a per-slider reset returns to
+    HEAL_DEF_FEATHER  = 50   # edge softness (%) a per-slider reset returns to
 
     def _build_heal_section(self, parent):
-        "Retouch panel: heal/clone mode, a hint, and the brush sliders."
+        "Retouch panel: heal/clone mode, a hint, brush sliders, and the footer."
         f = tk.Frame(parent, bg=BAR)
 
-        # Mode toggle: auto heal vs manual clone stamp.
-        self._heal_mode_chips = {}
-        modes = tk.Frame(f, bg=BAR)
-        modes.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
-        modes.columnconfigure(0, weight=1, uniform="hm")
-        modes.columnconfigure(1, weight=1, uniform="hm")
-        self._heal_mode_chip(modes, "Auto heal", "auto", 0)
-        self._heal_mode_chip(modes, "Clone", "clone", 1)
+        # Mode toggle: auto heal vs manual clone stamp — a segmented control
+        # (the two modes are exclusive), matching the focus-tool shape toggle.
+        self._heal_modes = ["auto", "clone"]
+        self._heal_mode_tabs = tintkit.SegmentedTabs(
+            f, self.theme, [t("Auto heal"), t("Clone")], selected=0, bg="bar",
+            command=lambda i, _l: self._set_heal_mode(self._heal_modes[i]))
+        self._heal_mode_tabs.pack(padx=EDIT_PAD, pady=(10, 2))
 
         self._heal_hint = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
                                    font=("Segoe UI", 8), justify="left",
@@ -51,73 +52,101 @@ class HealMixin:
                                        EDIT_PANEL_W - 2 * EDIT_PAD))
         self._heal_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
-        # Clone-only options (alignment + mirror); shown only in clone mode.
+        # Clone-only options (aligned + mirror) — independent on/off toggles, so
+        # checkboxes, not the exclusive segmented control. Shown only in clone
+        # mode (packed / unpacked by _refresh_heal_mode).
         self._clone_opts = tk.Frame(f, bg=BAR)
-        self._clone_opt_chips = {}
-        self._clone_opts.columnconfigure(0, weight=1, uniform="co")
-        self._clone_opts.columnconfigure(1, weight=1, uniform="co")
-        self._clone_toggle_chip(self._clone_opts, "Aligned", "aligned", 0)
-        self._clone_toggle_chip(self._clone_opts, "Mirror", "flip", 1)
+        self._chk_aligned = tintkit.Checkbox(
+            self._clone_opts, self.theme, t("Aligned"),
+            state="on" if self.clone_aligned else "off", bg="bar",
+            command=lambda st: self._set_clone_opt("aligned", st == "on"))
+        self._chk_aligned.pack(anchor="w", padx=EDIT_PAD, pady=(2, 0))
+        self._chk_flip = tintkit.Checkbox(
+            self._clone_opts, self.theme, t("Mirror"),
+            state="on" if self.clone_flip else "off", bg="bar",
+            command=lambda st: self._set_clone_opt("flip", st == "on"))
+        self._chk_flip.pack(anchor="w", padx=EDIT_PAD, pady=(2, 0))
 
-        # Reuse the standard dark Slider. These are absolute magnitudes (not
-        # bidirectional like the tone sliders), so neutral = the low end and the
-        # accent fill reads as a gauge that grows with the value.
-        self.s_heal_size = Slider(f, t("Brush size"), self._set_heal_radius,
-                                  lo=self.HEAL_MIN, hi=self.HEAL_MAX,
-                                  neutral=self.HEAL_MIN)
-        self.s_heal_size.set(self.heal_radius)
-        self.s_heal_size.pack(fill="x", padx=EDIT_PAD, pady=2)
-
-        # Strength: 100 = a solid clone (default), down to 0 = barely there, for
-        # a soft, partial retouch (e.g. fading a wrinkle instead of erasing it).
-        self.s_heal_strength = Slider(f, t("Strength"), self._set_heal_strength,
-                                      lo=0, hi=100, neutral=0)
-        self.s_heal_strength.set(round(self.heal_opacity * 100))
-        self.s_heal_strength.pack(fill="x", padx=EDIT_PAD, pady=2)
-
-        # Edge feather: 0 = a crisp disc edge, higher = a softer, more blurred
-        # blend into the surrounding pixels.
-        self.s_heal_feather = Slider(f, t("Edge softness"), self._set_heal_feather,
-                                     lo=0, hi=100, neutral=0)
-        self.s_heal_feather.set(round(self.heal_feather * 100))
-        self.s_heal_feather.pack(fill="x", padx=EDIT_PAD, pady=2)
+        # Brush sliders. Each carries its title on its own strip (label + value
+        # + reset icon) above a full-width track, so the label never sits on the
+        # track. They are absolute magnitudes (neutral = the low end), so the
+        # readout reads as a gauge. Changing a brush setting is not an image
+        # edit, so unlike the tone sliders these carry no undo gesture.
+        self.s_heal_size = self._heal_slider(
+            f, t("Brush size"), self._set_heal_radius, "size",
+            self.HEAL_MIN, self.HEAL_MAX, self.HEAL_MIN, self.heal_radius)
+        self.s_heal_size.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
+        self.s_heal_strength = self._heal_slider(
+            f, t("Strength"), self._set_heal_strength, "strength",
+            0, 100, 0, round(self.heal_opacity * 100))
+        self.s_heal_strength.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
+        self.s_heal_feather = self._heal_slider(
+            f, t("Edge softness"), self._set_heal_feather, "feather",
+            0, 100, 0, round(self.heal_feather * 100))
+        self.s_heal_feather.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
 
         tk.Label(f, text=t("Ctrl+Z — undo the last action"), bg=BAR, fg=FG_DIM,
                  anchor="w", font=("Segoe UI", 8)).pack(fill="x", padx=EDIT_PAD,
                                                         pady=(12, 4))
+
+        # Footer: Done closes the tool (the strokes are already baked into the
+        # photo); Remove all lifts every retouch on this photo in one undo step.
+        done = tintkit.Button(
+            f, self.theme, t("Done"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
+        done.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
+        remove = tintkit.Button(
+            f, self.theme, t("Remove all"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._remove_all_heal)
+        remove.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
+        tintkit.HoverTip(remove.canvas, self.theme,
+                         t("Remove every retouch on this photo"))
+
         self._refresh_heal_mode()
         return f
 
+    def _heal_slider(self, parent, label, setter, which, lo, hi, neutral, value):
+        "A brush TitledSlider (title strip + reset icon over a full-width track)."
+        # Gauge sliders (grow from the low end): show the raw value, not the
+        # signed delta — "24" reads clearer than "+20" for a brush size.
+        return tintkit.TitledSlider(
+            parent, self.theme, label, value=value, lo=lo, hi=hi, neutral=neutral,
+            command=setter, bg="bar", reset_tip=t("Reset this slider"),
+            value_fmt=lambda v, n: str(v),
+            on_reset=lambda: self._reset_heal_slider(which))
+
+    def _reset_heal_slider(self, which):
+        "Return one brush slider to its default. Not an image edit, so no undo."
+        if which == "size":
+            self._set_heal_radius(self.HEAL_DEF_RADIUS)
+            self.s_heal_size.set(self.HEAL_DEF_RADIUS)
+        elif which == "strength":
+            self._set_heal_strength(self.HEAL_DEF_STRENGTH)
+            self.s_heal_strength.set(self.HEAL_DEF_STRENGTH)
+        else:
+            self._set_heal_feather(self.HEAL_DEF_FEATHER)
+            self.s_heal_feather.set(self.HEAL_DEF_FEATHER)
+
     # --- Mode (heal vs clone) -----------------------------------------------
 
-    def _heal_mode_chip(self, parent, label, mode, col):
-        "One mode chip (accent-filled while its mode is active)."
-        chip = make_panel_chip(parent, t(label),
-                               lambda: self._set_heal_mode(mode), col, CHIP_GAP)
-        self._heal_mode_chips[mode] = chip
-
-    def _clone_toggle_chip(self, parent, label, key, col):
-        "One clone-option toggle chip (accent-filled while on)."
-        chip = make_panel_chip(parent, t(label),
-                               lambda: self._toggle_clone_opt(key), col, CHIP_GAP)
-        self._clone_opt_chips[key] = chip
-
-    def _toggle_clone_opt(self, key):
-        "Flip an aligned / mirror clone option and repaint its chip."
+    def _set_clone_opt(self, key, on):
+        "Set an aligned / mirror clone option from its checkbox, then repaint."
         if key == "aligned":
-            self.clone_aligned = not self.clone_aligned
-            if not self.clone_aligned:
+            self.clone_aligned = on
+            if not on:
                 self.clone_offset = None    # next stroke re-anchors to the source
         else:
-            self.clone_flip = not self.clone_flip
-        self._refresh_clone_opts()
+            self.clone_flip = on
         self._render_preview()
 
-    def _refresh_clone_opts(self):
-        "Repaint the aligned / mirror chips to match their on/off state."
-        states = {"aligned": self.clone_aligned, "flip": self.clone_flip}
-        for k, chip in self._clone_opt_chips.items():
-            set_chip_active(chip, states[k], CHIP_BG)
+    def _sync_clone_opts(self):
+        "Sync the aligned / mirror checkboxes to the current bool state."
+        if not hasattr(self, "_chk_aligned"):
+            return
+        self._chk_aligned.state = "on" if self.clone_aligned else "off"
+        self._chk_aligned.repaint()
+        self._chk_flip.state = "on" if self.clone_flip else "off"
+        self._chk_flip.repaint()
 
     def _set_heal_mode(self, mode):
         "Switch retouch mode; clear any clone source so the next one is deliberate."
@@ -128,15 +157,19 @@ class HealMixin:
         self._render_preview()
 
     def _refresh_heal_mode(self):
-        "Repaint the mode chips, swap the hint, and show clone options in clone mode."
-        for m, chip in self._heal_mode_chips.items():
-            set_chip_active(chip, m == self.heal_mode, CHIP_BG)
+        "Sync the mode toggle, swap the hint, and show clone options in clone mode."
+        if hasattr(self, "_heal_mode_tabs"):
+            idx = (self._heal_modes.index(self.heal_mode)
+                   if self.heal_mode in self._heal_modes else 0)
+            if self._heal_mode_tabs.selected != idx:
+                self._heal_mode_tabs.selected = idx
+                self._heal_mode_tabs.repaint()
         if self.heal_mode == "clone":
             self._heal_hint.configure(
                 text=t("Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size."))
-            self._clone_opts.pack(fill="x", padx=EDIT_PAD, pady=(0, 6),
-                                  before=self.s_heal_size.canvas)
-            self._refresh_clone_opts()
+            self._clone_opts.pack(fill="x", pady=(0, 6),
+                                  before=self.s_heal_size.frame)
+            self._sync_clone_opts()
         else:
             self._heal_hint.configure(
                 text=t("Click or drag over a blemish — I erase it with a copy of nearby clean background. The wheel or [ ] changes the brush size."))
@@ -349,6 +382,30 @@ class HealMixin:
             c.create_line(px, py - 5, px, py + 5, fill=self.CLONE_SRC, tags="healcur")
 
     # --- Undo / redo of a stroke --------------------------------------------
+
+    def _remove_all_heal(self):
+        "Lift every retouch on this photo in one undo step (restore the pre-heal pixels)."
+        if not self._healed or self._before_pil is None or not self.files:
+            self.toast(t("No retouches to remove"))
+            return
+        iw, ih = self.current_pil.size
+        box = (0, 0, iw, ih)
+        # before = the healed pixels a redo brings back; after = the un-healed
+        # snapshot _before_pil has kept aligned through every crop / rotate.
+        # Restoring it drops the retouches but keeps all other edits.
+        before = self.current_pil.convert("RGB").crop(box)
+        after = self._before_pil.convert("RGB").crop(box)
+        self._push_undo({"kind": "heal", "folder": self.folder,
+                         "file": self.files[self.index], "box": box,
+                         "before": before, "after": after})
+        self.current_pil = self._before_pil.copy()
+        self._before_pil = None
+        self._before_base_key = None
+        self._healed = False
+        self._edits_saved = False
+        self._view_key = None
+        self._render_preview()
+        self.toast(t("Retouches removed"))
 
     def _apply_heal_patch(self, cmd, patch):
         "Paste a stored before/after crop back at its box. Same-image only."

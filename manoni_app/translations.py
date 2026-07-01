@@ -421,6 +421,10 @@ CATALOG_KA = {
     "First Alt+click a source": "ჯერ Alt+დააწკაპე წყაროზე",
     "Can't undo — a different image is open":
         "გაუქმება შეუძლებელია — სხვა სურათია",
+    "Remove all": "ყველას მოშორება",
+    "Remove every retouch on this photo": "ამ ფოტოზე ყველა შესწორების მოშორება",
+    "Retouches removed": "შესწორებები მოშორდა",
+    "No retouches to remove": "მოსაშორებელი შესწორება არ არის",
 
     # --- Navigation / cull / undo dialogs (nav.py) ------------------------
     "End of the folder": "ფოლდერის ბოლოა",
