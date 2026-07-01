@@ -24,11 +24,11 @@ import math
 import tkinter as tk
 from tkinter import colorchooser
 
+import tintkit
+
 from ..config import (BAR, ACCENT, FG, FG_DIM, HOVER, ON_ACCENT,
-                      EDIT_PAD, CHIP_GAP, CHIP_BG, BORDER)
-from ..widgets import Slider, Tooltip
+                      EDIT_PAD, CHIP_BG, BORDER)
 from ..i18n import t
-from .dialogs import make_panel_chip, set_chip_active
 from .. import imaging
 
 
@@ -54,18 +54,26 @@ class TextMixin:
                  anchor="w", wraplength=self._edit_dpi_w(190)).pack(
             fill="x", padx=EDIT_PAD, pady=(10, 6))
 
-        # ‘Add text’: the only thing that puts a text on the photo. Accent-filled
-        # so it reads as the primary action of the panel.
-        add = tk.Label(f, text=t("Add text"), bg=ACCENT, fg=ON_ACCENT,
-                       cursor="hand2", font=("Segoe UI", 9, "bold"), pady=7)
-        add.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
-        add.bind("<Button-1>", lambda e: self._add_text())
-        add.bind("<Enter>", lambda e: add.configure(bg=HOVER))
-        add.bind("<Leave>", lambda e: add.configure(bg=ACCENT))
-        add._tip = Tooltip(add, t("Drop a new text element on the photo"))
+        # Top row: ‘Add text’ (the ONLY way a text appears — accent primary) and
+        # a trash icon that removes the selected one.
+        addrow = tk.Frame(f, bg=BAR)
+        addrow.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        add = tintkit.Button(addrow, self.theme, t("Add text"), role="primary",
+                             variant="filled", stretch=True, bg="bar",
+                             command=self._add_text)
+        add.pack(side="left", fill="x", expand=True)
+        tintkit.HoverTip(add.canvas, self.theme,
+                         t("Drop a new text element on the photo"))
+        self._text_del_btn = tintkit.IconButton(
+            addrow, self.theme, "trash-2", w=36, h=36, icon_px=15, bg="bar",
+            command=self._delete_text)
+        self._text_del_btn.pack(side="left", padx=(6, 0))
+        tintkit.HoverTip(self._text_del_btn.canvas, self.theme,
+                         t("Remove the selected text from the photo"))
 
         # The string itself: a small multi-line box. A whole typing session is
-        # one undo step (snapshot on focus-in, recorded on focus-out).
+        # one undo step (snapshot on focus-in, recorded on focus-out). Kept a
+        # tk.Text — TintKit's TextField is single-line only (multi-line pending).
         self._text_entry = tk.Text(f, height=2, bg=CHIP_BG, fg=FG,
                                    insertbackground=FG, relief="flat", wrap="word",
                                    font=("Segoe UI", 10), padx=6, pady=4,
@@ -76,38 +84,33 @@ class TextMixin:
         self._text_entry.bind("<FocusIn>", lambda e: self._edit_snapshot())
         self._text_entry.bind("<FocusOut>", lambda e: self._edit_commit())
 
-        # Font: two chips per row (accent-filled while active).
+        # Font: a compact dropdown (six families is too many for a segmented pill).
         self._group_header(f, t("Font"))
-        self._text_font_chips = {}
-        grid = tk.Frame(f, bg=BAR)
-        grid.pack(fill="x", padx=EDIT_PAD, pady=2)
-        grid.columnconfigure(0, weight=1, uniform="tf")
-        grid.columnconfigure(1, weight=1, uniform="tf")
-        for i, fam in enumerate(imaging.TEXT_FONTS):
-            row = tk.Frame(grid, bg=BAR)
-            row.grid(row=i // 2, column=i % 2, sticky="ew",
-                     padx=(0, CHIP_GAP // 2) if i % 2 == 0 else (CHIP_GAP // 2, 0),
-                     pady=2)
-            row.columnconfigure(0, weight=1)
-            chip = make_panel_chip(row, t(fam),
-                                   lambda fm=fam: self._set_text_font(fm), 0, 0)
-            chip.grid(sticky="ew")
-            self._text_font_chips[fam] = chip
+        self._text_fonts = list(imaging.TEXT_FONTS)
+        self._text_font_dd = tintkit.Dropdown(
+            f, self.theme, [t(fam) for fam in self._text_fonts], selected=0,
+            bg="bar", command=lambda i, _l: self._set_text_font(self._text_fonts[i]))
+        self._text_font_dd.pack(fill="x", padx=EDIT_PAD, pady=2)
 
-        # Size (as % of the photo's short side) and opacity. The press/release
-        # hooks fold a whole drag into one undo step.
-        self.s_text_size = Slider(f, t("Size"), self._set_text_size,
-                                  lo=1, hi=50, neutral=8,
-                                  on_press=self._edit_gesture_start,
-                                  on_release=self._edit_gesture_end)
+        # Size (as % of the photo's short side) and opacity, each a TitledSlider
+        # with its own reset. The press/release hooks fold a whole drag into one
+        # undo step; the readouts are raw gauges (a % and 0–100).
+        self.s_text_size = tintkit.TitledSlider(
+            f, self.theme, t("Size"), value=8, lo=1, hi=50, neutral=8, bg="bar",
+            command=self._set_text_size, on_press=self._edit_gesture_start,
+            on_release=self._edit_gesture_end, reset_tip=t("Reset this slider"),
+            value_fmt=lambda v, n: str(v),
+            on_reset=lambda: self._reset_text_slider("size"))
         self.s_text_size.pack(fill="x", padx=EDIT_PAD, pady=(8, 2))
-        self.s_text_opacity = Slider(f, t("Opacity"), self._set_text_opacity,
-                                     lo=0, hi=100, neutral=100,
-                                     on_press=self._edit_gesture_start,
-                                     on_release=self._edit_gesture_end)
+        self.s_text_opacity = tintkit.TitledSlider(
+            f, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
+            bg="bar", command=self._set_text_opacity,
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
+            on_reset=lambda: self._reset_text_slider("opacity"))
         self.s_text_opacity.pack(fill="x", padx=EDIT_PAD, pady=2)
 
-        # Colour swatch + a shadow toggle, side by side.
+        # Colour swatch + a shadow checkbox, side by side.
         row = tk.Frame(f, bg=BAR)
         row.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
         tk.Label(row, text=t("Colour"), bg=BAR, fg=FG_DIM,
@@ -120,52 +123,43 @@ class TextMixin:
         self._text_swatch.pack(side="left", padx=(8, 0))
         self._text_swatch.pack_propagate(False)
         self._text_swatch.bind("<Button-1>", lambda e: self._pick_text_color())
-        self._text_swatch._tip = Tooltip(self._text_swatch, t("Pick the text colour"))
-        self._text_shadow_chip = tk.Label(
-            row, text=t("Shadow"), bg=CHIP_BG, fg=FG, cursor="hand2",
-            font=("Segoe UI", 8, "bold"), padx=10, pady=6)
-        self._text_shadow_chip.pack(side="right")
-        self._text_shadow_chip.bind("<Button-1>", lambda e: self._toggle_text_shadow())
-        self._text_shadow_chip._tip = Tooltip(
-            self._text_shadow_chip, t("A soft drop shadow, for light text on a bright photo"))
+        tintkit.HoverTip(self._text_swatch, self.theme, t("Pick the text colour"))
+        self._text_shadow_chk = tintkit.Checkbox(
+            row, self.theme, t("Shadow"), state="off", bg="bar",
+            command=lambda _st: self._toggle_text_shadow())
+        self._text_shadow_chk.pack(side="right")
+        tintkit.HoverTip(
+            self._text_shadow_chk.canvas, self.theme,
+            t("A soft drop shadow, for light text on a bright photo"))
 
         # Alignment (matters for multi-line text): left / centre / right.
         self._group_header(f, t("Alignment"))
-        self._text_align_chips = {}
-        arow = tk.Frame(f, bg=BAR)
-        arow.pack(fill="x", padx=EDIT_PAD, pady=2)
-        for col, (key, label) in enumerate(
-                (("left", "Left"), ("center", "Centre"), ("right", "Right"))):
-            arow.columnconfigure(col, weight=1, uniform="ta")
-            chip = tk.Label(arow, text=t(label), bg=CHIP_BG, fg=FG, cursor="hand2",
-                            font=("Segoe UI", 8, "bold"), padx=4, pady=6)
-            pad = (0, CHIP_GAP // 2) if col == 0 else \
-                  (CHIP_GAP // 2, CHIP_GAP // 2) if col == 1 else (CHIP_GAP // 2, 0)
-            chip.grid(row=0, column=col, sticky="ew", padx=pad)
-            chip.bind("<Button-1>", lambda e, k=key: self._set_text_align(k))
-            self._text_align_chips[key] = chip
+        self._text_aligns = ["left", "center", "right"]
+        self._text_align_tabs = tintkit.SegmentedTabs(
+            f, self.theme, [t("Left"), t("Centre"), t("Right")], selected=1,
+            bg="bar",
+            command=lambda i, _l: self._set_text_align(self._text_aligns[i]))
+        self._text_align_tabs.pack(padx=EDIT_PAD, pady=2)
 
         # One-click placement: a 3×3 grid snapping the text to a corner / edge /
         # centre with a small margin — the watermark staple.
         self._group_header(f, t("Position"))
         self._build_text_position_grid(f)
 
-        # Bottom row: delete the selected element, or wipe them all. Their fg is
-        # dimmed by _refresh_text_buttons when there's nothing to act on.
-        row = tk.Frame(f, bg=BAR)
-        row.pack(fill="x", padx=EDIT_PAD, pady=(14, 8))
-        self._text_del_btn = tk.Label(row, text=t("Delete text"), bg=BAR, fg=FG_DIM,
-                                      cursor="hand2", anchor="w", font=("Segoe UI", 9))
-        self._text_del_btn.pack(side="left")
-        self._text_del_btn.bind("<Button-1>", lambda e: self._delete_text())
-        self._text_del_btn._tip = Tooltip(self._text_del_btn,
-                                          t("Remove the selected text from the photo"))
-        self._text_delall_btn = tk.Label(row, text=t("Delete all"), bg=BAR, fg=FG_DIM,
-                                         cursor="hand2", anchor="e", font=("Segoe UI", 9))
-        self._text_delall_btn.pack(side="right")
-        self._text_delall_btn.bind("<Button-1>", lambda e: self._delete_all_text())
-        self._text_delall_btn._tip = Tooltip(self._text_delall_btn,
-                                             t("Remove every text from the photo"))
+        # Footer: Done closes the tool (the texts stay live on the photo); Delete
+        # all wipes every text. 'Delete text' (the selected one) is the trash icon
+        # up by 'Add text'. Delete all dims to disabled while there's nothing to wipe.
+        done = tintkit.Button(
+            f, self.theme, t("Done"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
+        done.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
+        self._text_delall_btn = tintkit.Button(
+            f, self.theme, t("Delete all"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._delete_all_text)
+        self._text_delall_btn.pack(fill="x", padx=EDIT_PAD, pady=(8, 8))
+        tintkit.HoverTip(self._text_delall_btn.canvas, self.theme,
+                         t("Remove every text from the photo"))
+        self._refresh_text_buttons()          # start Delete-all disabled if empty
         return f
 
     def _build_text_position_grid(self, parent):
@@ -325,24 +319,32 @@ class TextMixin:
         self.s_text_opacity.set(round((ov.get("opacity", 1.0) if has else 1.0) * 100))
         self._text_swatch.configure(bg=ov.get("color", "#ffffff") if has else "#ffffff")
         active_font = imaging.resolve_font_family(ov.get("font", "Sans") if has else "Sans")
-        for fam, chip in getattr(self, "_text_font_chips", {}).items():
-            set_chip_active(chip, fam == active_font, CHIP_BG)
+        if hasattr(self, "_text_font_dd"):
+            fidx = (self._text_fonts.index(active_font)
+                    if active_font in self._text_fonts else 0)
+            if self._text_font_dd.selected != fidx:
+                self._text_font_dd.selected = fidx
+                self._text_font_dd.repaint()
         active_align = ov.get("align", "center") if has else "center"
-        for key, chip in getattr(self, "_text_align_chips", {}).items():
-            set_chip_active(chip, key == active_align, CHIP_BG)
-        set_chip_active(self._text_shadow_chip, bool(has and ov.get("shadow")), CHIP_BG)
+        if hasattr(self, "_text_align_tabs"):
+            aidx = (self._text_aligns.index(active_align)
+                    if active_align in self._text_aligns else 1)
+            if self._text_align_tabs.selected != aidx:
+                self._text_align_tabs.selected = aidx
+                self._text_align_tabs.repaint()
+        if hasattr(self, "_text_shadow_chk"):
+            self._text_shadow_chk.state = "on" if (has and ov.get("shadow")) else "off"
+            self._text_shadow_chk.repaint()
         self._refresh_text_buttons()
 
     def _refresh_text_buttons(self):
-        "Dim ‘Delete text’ when nothing is selected and ‘Delete all’ when empty."
-        sel = self.text_overlay is not None
-        if hasattr(self, "_text_del_btn"):
-            self._text_del_btn.configure(fg=FG if sel else FG_DIM,
-                                         cursor="hand2" if sel else "arrow")
+        "Disable ‘Delete all’ while there's no text to wipe (the trash icon by"
+        " 'Add text' just no-ops when nothing is selected)."
         if hasattr(self, "_text_delall_btn"):
-            on = bool(self.texts)
-            self._text_delall_btn.configure(fg=FG if on else FG_DIM,
-                                            cursor="hand2" if on else "arrow")
+            want = not bool(self.texts)
+            if self._text_delall_btn.disabled != want:
+                self._text_delall_btn.disabled = want
+                self._text_delall_btn.repaint()
 
     def _clear_text_for_geometry(self):
         "Drop ALL text when the image geometry changes (rotate / crop / resize /"
@@ -384,6 +386,23 @@ class TextMixin:
                              "opacity": max(0.0, min(1.0, int(v) / 100.0))}
         self._edits_saved = False
         self._schedule_preview()
+
+    def _reset_text_slider(self, which):
+        "Return one text slider to neutral on the selected element (one undo step)."
+        if self.text_overlay is None or self.current_pil is None:
+            return
+        before = self._edit_state()
+        if which == "size":
+            short = max(1, min(self.current_pil.size))
+            self.text_overlay = {**self.text_overlay,
+                                 "size": max(self.TEXT_MIN_SIZE, 8 / 100.0 * short)}
+            self.s_text_size.set(8)
+        else:
+            self.text_overlay = {**self.text_overlay, "opacity": 1.0}
+            self.s_text_opacity.set(100)
+        self._edits_saved = False
+        self._render_preview()
+        self._record_edit(before)
 
     def _set_text_font(self, family):
         "Switch the font (undoable)."
