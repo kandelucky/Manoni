@@ -18,10 +18,11 @@ import json
 import threading
 import tkinter as tk
 
-from manoni_app.config import BG, THUMB_W, STATE_FILE, ROOT_DIR
+import tintkit  # DPI + theme; declares DPI awareness at import, before tk.Tk()
+
+from manoni_app.config import BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR
 from manoni_app import i18n
 from manoni_app import translations  # noqa: F401 — registers language packs on import
-from manoni_app.scaling import set_dpi_awareness, apply_tk_scaling
 from manoni_app.ui.chrome import ChromeMixin
 from manoni_app.ui.editpanel import EditPanelMixin
 from manoni_app.ui.saving import SaveMixin
@@ -114,10 +115,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                       "focus": None, "auto_mode": None, "texts": []}
 
     def __init__(self, folder=None):
-        # Declare DPI awareness BEFORE the first window so Windows draws the
-        # UI at the monitor's true pixels instead of bitmap-stretching it
-        # (the blur seen at 150 % scaling). See manoni_app/scaling.py.
-        set_dpi_awareness()
+        # DPI awareness is declared the moment tintkit is imported (its
+        # enable_dpi_awareness runs at import, before this first window exists),
+        # so Windows draws the UI at the monitor's true pixels instead of
+        # bitmap-stretching it — the blur otherwise seen at 150 % scaling.
 
         # Give this process its own Windows taskbar identity. Without it, Tk
         # apps launched via pythonw.exe share a default identity and Windows
@@ -141,9 +142,13 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.root.tk.call("encoding", "system", "utf-8")
         except tk.TclError:
             pass
-        # Tell Tk the real DPI so point-sized fonts render crisp; keep the
-        # factor so icons can be loaded at a matching pixel size.
-        self.dpi = apply_tk_scaling(self.root)
+        # One DPI path (tintkit): scale Tk fonts + the kit's canvas geometry to
+        # the monitor, resolve the OS-native UI font, and return the factor so
+        # icons load at a matching pixel size. Replaces Manoni's apply_tk_scaling.
+        self.dpi = tintkit.setup_dpi(self.root)
+        # One live Theme for the whole app (dark, Manoni's accent). Wired now;
+        # each panel starts reading from it as it migrates onto TintKit.
+        self.theme = tintkit.Theme(scheme="dark", accent=ACCENT)
         self.root.title("Manoni")
         # Manoni's own window/taskbar icon (manoni.ico / -icon.png at the root).
         try:
