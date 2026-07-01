@@ -70,8 +70,8 @@ class BrowserMixin:
         ]:
             btn = self._tool_button(nav, icon_name, command, tip, color=color)
             btn.bind("<Enter>",
-                     lambda e, h=hint, s=sub: self._nav_hint(
-                         h, s() if callable(s) else ""), add="+")
+                     lambda e, h=hint, s=sub, c=color: self._nav_hint(
+                         h, s() if callable(s) else "", c), add="+")
             btn.bind("<Leave>", lambda e: self._nav_hint_clear(), add="+")
             btn.pack(side="left", padx=4, pady=4)
         self.lbl_pos = tk.Label(nav, text="0 / 0", bg=BAR, fg=FG_DIM,

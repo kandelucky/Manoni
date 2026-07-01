@@ -36,15 +36,16 @@ class NavMixin:
     # moving off restores the photo info. Outcomes ("Wrapped to the first
     # photo", "Kept → …") arrive through toast(), which writes the same line.
 
-    def _nav_hint(self, text, sub=""):
+    def _nav_hint(self, text, sub="", color=None):
         "Pointer is over a nav button → describe it in the bottom info bar. `sub`"
-        " is an optional trailing note (keep / reject use it for their folder)."
+        " is an optional trailing note (keep / reject use it for their folder);"
+        " `color` tints the whole line (keep / reject use their button tint)."
         lbl = getattr(self, "lbl_info", None)
         if lbl is None:
             return
         if sub:
             text = f"{text}      ·      {sub}"
-        lbl.configure(text=text, fg=FG)          # brighten while hinting
+        lbl.configure(text=text, fg=color or FG)   # brighten (or tint) while hinting
 
     def _nav_hint_clear(self):
         "Pointer left a nav button → restore the current photo's info line."
