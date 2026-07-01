@@ -329,6 +329,7 @@ CATALOG_KA = {
         "დახარე მარცხენა/მარჯვენა — გაასწორე გადახრილი ჰორიზონტალები",
     "Apply perspective": "პერსპექტივის დადება",
     "Reset": "განულება",
+    "Remove effect": "ეფექტის მოშორება",
     "Reset both sliders to zero": "ორივე სლაიდერის განულება",
     "Move a slider first": "ჯერ სლაიდერი გადაწიე",
     "Perspective applied  ·  Save to write it to a file":

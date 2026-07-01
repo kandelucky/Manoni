@@ -87,8 +87,8 @@ class PerspectiveMixin:
         apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(16, 0))
 
         reset = tintkit.Button(
-            parent, self.theme, t("Reset"), role="neutral", variant="outline",
-            icon="x", stretch=True, bg="bar",
+            parent, self.theme, t("Remove effect"), role="neutral",
+            variant="outline", icon="x", stretch=True, bg="bar",
             command=lambda: self._reset_perspective(render=True))
         reset.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
         tintkit.HoverTip(reset.canvas, self.theme, t("Reset both sliders to zero"))
