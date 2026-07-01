@@ -222,6 +222,10 @@ class HealMixin:
         self._heal_before_img = self.current_pil.convert("RGB")  # always an RGB copy
         self._heal_dirty = None
         self._heal_last = None
+        # Rebuild the view base fresh at the stroke's first dab, so a still-running
+        # async render from before the stroke isn't reading the very buffer the
+        # in-place dab patches are about to mutate.
+        self._view_key = None
         self._heal_dab(event.x, event.y)
         return "break"
 
@@ -297,7 +301,7 @@ class HealMixin:
         # smooth on a big photo (the old full-viewport rescale per dab froze it).
         if not self._patch_view_base(box):
             self._view_key = None
-        self._render_preview()
+        self._render_preview(inline=True)   # in-place patch → keep it off the worker
 
     def _grow_dirty(self, box):
         "Union `box` into the current stroke's dirty rectangle (for one undo crop)."

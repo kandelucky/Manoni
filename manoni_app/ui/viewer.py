@@ -368,7 +368,7 @@ class ViewerMixin:
         self._preview_scheduled = False
         self._render_preview()
 
-    def _render_preview(self):
+    def _render_preview(self, inline=False):
         """Prepare one frame, then hand the heavy edit pass off to be drawn.
 
         The cheap part — geometry, and re-scaling just the visible viewport (not
@@ -378,6 +378,10 @@ class ViewerMixin:
         while a heavy effect renders) or run inline; either way `_finish_render`
         draws the result on the UI thread. The cropped+scaled base is cached, so a
         slider drag skips the rescale and only pays the (incremental) edit pass.
+
+        `inline` forces the sync path even in async mode: a heal stroke patches
+        `_view_base` in place per dab, so it must not hand that live-mutating
+        buffer to the worker thread (which would read it while the next dab writes).
         """
         self._update_peek_button()   # show/hide the corner peek button with the photo
         if self.current_pil is None:
@@ -441,7 +445,8 @@ class ViewerMixin:
                "vw": vw, "vh": vh, "view_key": self._view_key,
                "interacting": self._interacting}
 
-        if getattr(self, "async_render", True) and self._start_render_worker():
+        if not inline and getattr(self, "async_render", True) \
+                and self._start_render_worker():
             self._submit_render(req)      # worker renders, then posts _finish_render
         else:
             self._finish_render(self._run_edit(req), req)
@@ -574,7 +579,11 @@ class ViewerMixin:
             self._finish_render(latest[0], latest[1])
         with self._render_cv:
             outstanding = self._render_req is not None or self._render_busy
-        if outstanding or latest is not None:
+        # The queue check closes a race: the worker puts a result BEFORE clearing
+        # _render_busy, so if we observed busy=False the result is already queued.
+        # Without it, a frame that lands between the drain above and this check
+        # would be stranded until the next submit.
+        if outstanding or latest is not None or not self._render_result_q.empty():
             self.root.after(self.RENDER_POLL_MS, self._drain_render_results)
         else:
             self._poller_on = False       # nothing left in flight → stop polling
