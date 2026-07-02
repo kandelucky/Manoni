@@ -24,6 +24,7 @@ import tkinter.filedialog as tkfd
 
 import tintkit
 
+from ..config import ACCENTS
 from .. import i18n
 from ..i18n import t
 from .about import (APP_VERSION, AUTHOR_NAME, AUTHOR_HANDLE, BUILT_WITH,
@@ -301,6 +302,9 @@ class SettingsMixin:
         tintkit.Toggle(r, self.theme, value=(self.theme.scheme == "light"),
                        command=pick_scheme).pack()
 
+        r = self._set_row(p, t("Accent color"), t("The app's highlight colour."))
+        self._set_accent_swatches(r).pack()
+
         r = self._set_row(p, t("Show filter strip"),
                           t("The row of filter previews under the photo."))
 
@@ -366,6 +370,46 @@ class SettingsMixin:
     def _set_pref(self, key, val):
         "Set a simple on/off General preference attribute and persist it."
         setattr(self, key, val)
+        self._save_state()
+
+    def _set_accent_swatches(self, parent):
+        "A row of accent-colour swatches; the active one wears a theme-fg ring."
+        " Clicking re-derives the whole app's accent (TintKit) and persists it."
+        box = self._tw(tk.Frame(parent), bg="bg")
+        sz = self._edit_dpi_w(20)
+        swatches = []
+        for name, hexcol in ACCENTS:
+            sw = tk.Frame(box, width=sz, height=sz, bg=hexcol, cursor="hand2",
+                          highlightthickness=2)
+            sw.pack_propagate(False)
+            sw.pack(side="left", padx=3)
+            sw._accent = hexcol
+            sw.bind("<Button-1>", lambda e, c=hexcol: self._pick_accent(c))
+            tintkit.HoverTip(sw, self.theme, t(name))
+            swatches.append(sw)
+
+        def repaint():
+            # The ring is theme fg on the active swatch; on the rest it matches the
+            # panel bg so it reads as a plain colour chip. Re-runs on accent + on a
+            # dark<->light switch (both fire theme subscribers).
+            try:
+                for sw in swatches:
+                    active = sw._accent.lower() == self.theme.accent.lower()
+                    ring = self.theme["fg"] if active else self.theme["bg"]
+                    sw.configure(highlightbackground=ring, highlightcolor=ring)
+            except tk.TclError:
+                self.theme.unsubscribe(repaint)
+
+        self.theme.subscribe(repaint)
+        box.bind("<Destroy>",
+                 lambda e: e.widget is box and self.theme.unsubscribe(repaint),
+                 add="+")
+        repaint()
+        return box
+
+    def _pick_accent(self, hexcol):
+        "Set the app accent (repaints every accent-using widget) and persist it."
+        self.theme.set(accent=hexcol)
         self._save_state()
 
     def _set_view_index(self, keys):

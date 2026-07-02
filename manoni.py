@@ -512,6 +512,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "confirm_reject": self.confirm_reject,
                  "warn_unsaved": self.warn_unsaved,
                  "scheme": self.theme.scheme,   # dark / light interface theme
+                 "accent": self.theme.accent,   # highlight colour (accent picker)
                  "language": i18n.get_language()}
         if self.folder_list_height is not None:
             state["folder_list_height"] = self.folder_list_height
@@ -577,6 +578,12 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         scheme = state.get("scheme")
         if scheme in ("dark", "light") and scheme != self.theme.scheme:
             self.theme.set(scheme=scheme)
+        # Accent colour (the app highlight). Any well-formed #rrggbb is honoured,
+        # so a hand-edited state can't crash the Theme.
+        accent = state.get("accent")
+        if isinstance(accent, str) and len(accent) == 7 and accent[0] == "#" \
+                and all(c in "0123456789abcdefABCDEF" for c in accent[1:]):
+            self.theme.set(accent=accent)
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "show_filter_strip", "show_histogram",

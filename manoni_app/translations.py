@@ -460,6 +460,16 @@ CATALOG_KA = {
     "Light mode": "ღია თემა",
     "Switch between the dark and light interface.":
         "გადართე მუქ და ღია ინტერფეისს შორის.",
+    "Accent color": "აქცენტის ფერი",
+    "The app's highlight colour.": "აპის მთავარი ფერი.",
+    "Blue": "ლურჯი",
+    "Teal": "ფირუზისფერი",
+    "Green": "მწვანე",
+    "Purple": "იისფერი",
+    "Pink": "ვარდისფერი",
+    "Orange": "ნარინჯისფერი",
+    "Red": "წითელი",
+    "Amber": "ქარვისფერი",
     "Show filter strip": "ფილტრების ზოლის ჩვენება",
     "The row of filter previews under the photo.":
         "ფილტრების გადახედვების ზოლი ფოტოს ქვეშ.",

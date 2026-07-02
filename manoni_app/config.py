@@ -57,6 +57,21 @@ CULL_REJECT_TINT = "#edcfcf"   # dark scheme: reddish white — reject / discard
 CULL_KEEP_TINT_LIGHT   = "#2e7d32"   # light scheme: readable green
 CULL_REJECT_TINT_LIGHT = "#c62828"   # light scheme: readable red
 
+# Accent-colour choices for the picker (Settings → General → Interface). The
+# active one drives the whole app's highlight (TintKit derives its hover / soft /
+# on-accent shades). ACCENT (blue) is the default; each is medium-saturation so
+# the derived light on-accent text stays legible on the fill. (name, hex)
+ACCENTS = [
+    ("Blue",   "#4aa3ff"),
+    ("Teal",   "#24b1a6"),
+    ("Green",  "#45b36b"),
+    ("Purple", "#9b87f5"),
+    ("Pink",   "#e0699f"),
+    ("Orange", "#ef8a53"),
+    ("Red",    "#e5645c"),
+    ("Amber",  "#d6a85c"),
+]
+
 # TintKit theme tokens = Manoni's dark palette, so a panel migrated onto TintKit
 # widgets matches the rest of the app exactly (same bg / bar / fg / border …).
 # Applied over TintKit's built-in "dark" scheme once at startup (see manoni.py).
