@@ -11,10 +11,14 @@ import shutil
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import (BG, BAR, ACCENT, FG, FG_DIM, SUPPORTED,
-                      CULL_KEEP_TINT, CULL_REJECT_TINT)
+import tintkit
+
+# nav's dialogs are transient modals — they read live theme colours at build time
+# (they can't outlive a dark<->light switch). Only the scheme-independent cull
+# icon tints + SUPPORTED stay as config constants.
+from ..config import SUPPORTED, CULL_KEEP_TINT, CULL_REJECT_TINT
 from ..i18n import t
-from .dialogs import make_dialog_button, center_over
+from .dialogs import center_over
 
 
 class NavMixin:
@@ -45,13 +49,15 @@ class NavMixin:
             return
         if sub:
             text = f"{text}      ·      {sub}"
-        lbl.configure(text=text, fg=color or FG)   # brighten (or tint) while hinting
+        # brighten (or tint) while hinting — theme fg so it reads in light mode too
+        lbl.configure(text=text, fg=color or self.theme["fg"])
 
     def _nav_hint_clear(self):
         "Pointer left a nav button → restore the current photo's info line."
         lbl = getattr(self, "lbl_info", None)
         if lbl is not None:
-            lbl.configure(text=getattr(self, "_info_text", ""), fg=FG_DIM)
+            lbl.configure(text=getattr(self, "_info_text", ""),
+                          fg=self.theme["fg_dim"])
 
     def _cull_hint_line(self, folder):
         "Trailing note for a cull button: where it saves, or that it's unset."
@@ -129,9 +135,10 @@ class NavMixin:
     def _ask_restore_original(self):
         "Confirm before wiping the live edits (not undoable). Returns True to proceed."
         result = {"ok": False}
+        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Restore the original?"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
@@ -139,22 +146,23 @@ class NavMixin:
             result["ok"] = ok
             dlg.destroy()
 
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("Restore the original?"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("Restore the original?"), bg=bg, fg=fg,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
         fname = self.files[self.index] if self.files else ""
         tk.Label(wrap, text=t("Discard every edit on {fname} and reload the original "
                               "from disk?").format(fname=fname),
-                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9),
+                 bg=bg, fg=fg_dim, font=("Segoe UI", 9),
                  wraplength=360, justify="left").pack(anchor="w", pady=(4, 16))
 
-        row = tk.Frame(wrap, bg=BG)
+        row = tk.Frame(wrap, bg=bg)
         row.pack(anchor="e")
-        make_dialog_button(row, t("Cancel"), lambda: choose(False)).pack(
+        tintkit.Button(row, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=lambda: choose(False)).pack(
             side="right", padx=(8, 0))
-        make_dialog_button(row, t("Restore"), lambda: choose(True),
-                           primary=True).pack(side="right")
+        tintkit.Button(row, self.theme, t("Restore"), role="primary",
+                       command=lambda: choose(True)).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: choose(False))
         dlg.bind("<Escape>", lambda e: choose(False))
@@ -185,9 +193,10 @@ class NavMixin:
         on the photo. Returns 'save', 'discard', or 'cancel'.
         """
         result = {"choice": "cancel"}
+        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Save?"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
@@ -195,22 +204,25 @@ class NavMixin:
             result["choice"] = c
             dlg.destroy()
 
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("The image has changed"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("The image has changed"), bg=bg, fg=fg,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
         fname = self.files[self.index] if self.files else ""
-        tk.Label(wrap, text=t("{fname} — save a copy to _edited?").format(fname=fname), bg=BG,
-                 fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 16))
+        tk.Label(wrap, text=t("{fname} — save a copy to _edited?").format(fname=fname), bg=bg,
+                 fg=fg_dim, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 16))
 
-        row = tk.Frame(wrap, bg=BG)
+        row = tk.Frame(wrap, bg=bg)
         row.pack(anchor="e")
-        make_dialog_button(row, t("Cancel"), lambda: choose("cancel")).pack(
+        tintkit.Button(row, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=lambda: choose("cancel")).pack(
             side="right", padx=(8, 0))
-        make_dialog_button(row, t("Don't save"), lambda: choose("discard")).pack(
+        tintkit.Button(row, self.theme, t("Don't save"), role="neutral",
+                       variant="outline",
+                       command=lambda: choose("discard")).pack(
             side="right", padx=(8, 0))
-        make_dialog_button(row, t("Save"), lambda: choose("save"),
-                           primary=True).pack(side="right")
+        tintkit.Button(row, self.theme, t("Save"), role="primary",
+                       command=lambda: choose("save")).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
         dlg.bind("<Escape>", lambda e: choose("cancel"))
@@ -369,20 +381,21 @@ class NavMixin:
         "wrap" / "sibling", or None if the user cancels.
         """
         st = {"action": None, "remember": False, "ok": False}
+        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
         dlg = tk.Toplevel(self.root)
         dlg.title(t("End of the folder") if direction > 0
                   else t("Start of the folder"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
 
         tk.Label(wrap, text=(t("You're on the last photo") if direction > 0
                              else t("You're on the first photo")),
-                 bg=BG, fg=FG, font=("Segoe UI", 11, "bold")).pack(anchor="w")
+                 bg=bg, fg=fg, font=("Segoe UI", 11, "bold")).pack(anchor="w")
         tk.Label(wrap, text=t("Where should the arrow keys go next?"),
-                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w",
+                 bg=bg, fg=fg_dim, font=("Segoe UI", 9)).pack(anchor="w",
                                                               pady=(4, 14))
 
         radios = []
@@ -391,15 +404,15 @@ class NavMixin:
             st["action"] = val
             for v, dot in radios:
                 dot.configure(text="◉" if v == val else "○",
-                              fg=ACCENT if v == val else FG)
+                              fg=self.theme["accent"] if v == val else fg)
 
         def radio(val, label):
-            row = tk.Frame(wrap, bg=BG, cursor="hand2")
+            row = tk.Frame(wrap, bg=bg, cursor="hand2")
             row.pack(anchor="w", pady=3)
-            dot = tk.Label(row, text="○", bg=BG, fg=FG, font=("Segoe UI", 13),
+            dot = tk.Label(row, text="○", bg=bg, fg=fg, font=("Segoe UI", 13),
                            cursor="hand2")
             dot.pack(side="left")
-            lb = tk.Label(row, text=label, bg=BG, fg=FG, font=("Segoe UI", 10),
+            lb = tk.Label(row, text=label, bg=bg, fg=fg, font=("Segoe UI", 10),
                           cursor="hand2")
             lb.pack(side="left", padx=(8, 0))
             radios.append((val, dot))
@@ -412,19 +425,19 @@ class NavMixin:
               else t("Go to the previous folder"))
 
         # Remember-this-choice toggle (so the dialog stops popping up).
-        rem = tk.Frame(wrap, bg=BG, cursor="hand2")
+        rem = tk.Frame(wrap, bg=bg, cursor="hand2")
         rem.pack(anchor="w", pady=(14, 0))
-        bx = tk.Label(rem, text="☐", bg=BG, fg=FG, font=("Segoe UI", 13),
+        bx = tk.Label(rem, text="☐", bg=bg, fg=fg, font=("Segoe UI", 13),
                       cursor="hand2")
         bx.pack(side="left")
-        rl = tk.Label(rem, text=t("Remember my choice"), bg=BG, fg=FG,
+        rl = tk.Label(rem, text=t("Remember my choice"), bg=bg, fg=fg,
                       font=("Segoe UI", 9), cursor="hand2")
         rl.pack(side="left", padx=(8, 0))
 
         def toggle_rem(_e=None):
             st["remember"] = not st["remember"]
             bx.configure(text="☑" if st["remember"] else "☐",
-                         fg=ACCENT if st["remember"] else FG)
+                         fg=self.theme["accent"] if st["remember"] else fg)
         for w in (rem, bx, rl):
             w.bind("<Button-1>", toggle_rem)
 
@@ -434,12 +447,13 @@ class NavMixin:
             st["ok"] = True
             dlg.destroy()
 
-        brow = tk.Frame(wrap, bg=BG)
+        brow = tk.Frame(wrap, bg=bg)
         brow.pack(anchor="e", pady=(18, 0))
-        make_dialog_button(brow, t("Cancel"), dlg.destroy).pack(
+        tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=dlg.destroy).pack(
             side="right", padx=(8, 0))
-        make_dialog_button(brow, t("OK"), confirm, primary=True).pack(
-            side="right")
+        tintkit.Button(brow, self.theme, t("OK"), role="primary",
+                       command=confirm).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -510,28 +524,30 @@ class NavMixin:
         "Configure the two sort folders (keep + reject) used by the cull buttons."
         st = {"keep": self.cull_keep or "", "reject": self.cull_reject or "",
               "ok": False}
+        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
+        bar = self.theme["bar"]
 
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Sorting folders"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
 
-        tk.Label(wrap, text=t("Sorting folders"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("Sorting folders"), bg=bg, fg=fg,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
         tk.Label(wrap, text=t("Set where kept and rejected photos go. Until both are set, the buttons don't work."),
-                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9), justify="left",
+                 bg=bg, fg=fg_dim, font=("Segoe UI", 9), justify="left",
                  wraplength=380).pack(anchor="w", pady=(4, 4))
 
         keep_var = tk.StringVar(value=st["keep"])
         reject_var = tk.StringVar(value=st["reject"])
 
         def folder_row(label, var):
-            tk.Label(wrap, text=label, bg=BG, fg=FG_DIM,
+            tk.Label(wrap, text=label, bg=bg, fg=fg_dim,
                      font=("Segoe UI", 8)).pack(anchor="w", pady=(12, 2))
-            row = tk.Frame(wrap, bg=BG)
+            row = tk.Frame(wrap, bg=bg)
             row.pack(fill="x")
 
             def pick():
@@ -542,9 +558,10 @@ class NavMixin:
                 dlg.grab_set()
                 if d:
                     var.set(d)
-            make_dialog_button(row, t("Select"), pick).pack(side="right",
-                                                            padx=(6, 0))
-            tk.Entry(row, textvariable=var, bg=BAR, fg=FG, insertbackground=FG,
+            tintkit.Button(row, self.theme, t("Select"), role="neutral",
+                           variant="outline", command=pick).pack(
+                side="right", padx=(6, 0))
+            tk.Entry(row, textvariable=var, bg=bar, fg=fg, insertbackground=fg,
                      relief="flat", font=("Segoe UI", 9), width=34).pack(
                          side="left", fill="x", expand=True, ipady=5)
 
@@ -557,12 +574,13 @@ class NavMixin:
             st["ok"] = True
             dlg.destroy()
 
-        brow = tk.Frame(wrap, bg=BG)
+        brow = tk.Frame(wrap, bg=bg)
         brow.pack(anchor="e", pady=(18, 0))
-        make_dialog_button(brow, t("Cancel"), dlg.destroy).pack(
+        tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=dlg.destroy).pack(
             side="right", padx=(8, 0))
-        make_dialog_button(brow, t("Save"), confirm, primary=True).pack(
-            side="right")
+        tintkit.Button(brow, self.theme, t("Save"), role="primary",
+                       command=confirm).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -584,17 +602,18 @@ class NavMixin:
 
     def _cull_help_dialog(self):
         "Explain the cull workflow: what keep / reject / options do."
+        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Culling — Help"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=24, pady=20)
+        wrap = tk.Frame(dlg, bg=bg, padx=24, pady=20)
         wrap.pack(fill="both", expand=True)
 
-        tk.Label(wrap, text=t("Culling photos"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("Culling photos"), bg=bg, fg=fg,
                  font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 4))
-        tk.Label(wrap, text=t("You browse the photos and sort each into two folders — keep and discard."), bg=BG, fg=FG_DIM,
+        tk.Label(wrap, text=t("You browse the photos and sort each into two folders — keep and discard."), bg=bg, fg=fg_dim,
                  font=("Segoe UI", 9), justify="left",
                  wraplength=360).pack(anchor="w", pady=(0, 12))
 
@@ -607,26 +626,26 @@ class NavMixin:
              "Set these two folders — until you do, the buttons don't work.", None),
         ]
         for icon_name, title, desc, color in rows:
-            r = tk.Frame(wrap, bg=BG)
+            r = tk.Frame(wrap, bg=bg)
             r.pack(fill="x", pady=6)
             img = self.icon(icon_name, color=color)
             if img is not None:
-                tk.Label(r, image=img, bg=BG).pack(side="left", padx=(0, 10))
-            col = tk.Frame(r, bg=BG)
+                tk.Label(r, image=img, bg=bg).pack(side="left", padx=(0, 10))
+            col = tk.Frame(r, bg=bg)
             col.pack(side="left", fill="x", expand=True)
-            tk.Label(col, text=t(title), bg=BG, fg=FG, anchor="w",
+            tk.Label(col, text=t(title), bg=bg, fg=fg, anchor="w",
                      font=("Segoe UI", 10, "bold")).pack(anchor="w")
-            tk.Label(col, text=t(desc), bg=BG, fg=FG_DIM, anchor="w",
+            tk.Label(col, text=t(desc), bg=bg, fg=fg_dim, anchor="w",
                      font=("Segoe UI", 9), justify="left",
                      wraplength=300).pack(anchor="w")
 
-        tk.Label(wrap, text=t("Ctrl+Z undoes any move."), bg=BG,
-                 fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(12, 0))
+        tk.Label(wrap, text=t("Ctrl+Z undoes any move."), bg=bg,
+                 fg=fg_dim, font=("Segoe UI", 9)).pack(anchor="w", pady=(12, 0))
 
-        brow = tk.Frame(wrap, bg=BG)
+        brow = tk.Frame(wrap, bg=bg)
         brow.pack(anchor="e", pady=(16, 0))
-        make_dialog_button(brow, t("Got it"), dlg.destroy,
-                           primary=True).pack(side="right")
+        tintkit.Button(brow, self.theme, t("Got it"), role="primary",
+                       command=dlg.destroy).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
