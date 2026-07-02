@@ -28,14 +28,9 @@ import tkinter.filedialog as tkfd
 from PIL import Image
 import tintkit
 
-from ..config import (BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD,
-                      CHIP_BG, DIVIDER)
+from ..config import EDIT_PAD
 from .. import imaging
 from ..i18n import t
-
-
-# Saved-action rows share the filters-manager row shade.
-ROW_BG = CHIP_BG
 
 
 class ActionsMixin:
@@ -394,19 +389,20 @@ class ActionsMixin:
 
         dlg = tk.Toplevel(self.root)
         dlg.title(title)
-        dlg.configure(bg=BG)
+        self._tw(dlg, bg="bg")
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=16)
+        wrap = self._tw(tk.Frame(dlg, padx=22, pady=16), bg="bg")
         wrap.pack(fill="both", expand=True)
 
-        tk.Label(wrap, text=intro,
-                 bg=BG, fg=FG, font=("Segoe UI", 10, "bold"),
-                 wraplength=320, justify="left").pack(anchor="w", pady=(0, 10))
+        self._tw(tk.Label(wrap, text=intro,
+                 font=("Segoe UI", 10, "bold"),
+                 wraplength=320, justify="left"), bg="bg", fg="fg").pack(
+                     anchor="w", pady=(0, 10))
 
         def heading(text):
-            tk.Label(wrap, text=text, bg=BG, fg=FG_DIM,
-                     font=("Segoe UI", 8)).pack(anchor="w", pady=(8, 2))
+            self._tw(tk.Label(wrap, text=text, font=("Segoe UI", 8)),
+                     bg="bg", fg="fg_dim").pack(anchor="w", pady=(8, 2))
 
         # Output folder + browse.
         heading(t("Output folder"))
@@ -420,7 +416,7 @@ class ActionsMixin:
             if d:
                 dir_var.set(d)
 
-        frow = tk.Frame(wrap, bg=BG)
+        frow = self._tw(tk.Frame(wrap), bg="bg")
         frow.pack(fill="x")
         tintkit.Button(frow, self.theme, t("Select"), role="neutral",
                        variant="outline", command=pick_dir, bg="bg").pack(
@@ -431,9 +427,9 @@ class ActionsMixin:
 
         # Quality (lossy only) — built before format so format can show/hide it.
         q_opts = (80, 90, 95, 100)
-        qbox = tk.Frame(wrap, bg=BG)
-        tk.Label(qbox, text=t("Quality"), bg=BG, fg=FG_DIM,
-                 font=("Segoe UI", 8)).pack(anchor="w", pady=(8, 2))
+        qbox = self._tw(tk.Frame(wrap), bg="bg")
+        self._tw(tk.Label(qbox, text=t("Quality"), font=("Segoe UI", 8)),
+                 bg="bg", fg="fg_dim").pack(anchor="w", pady=(8, 2))
         st["quality"] = min(q_opts, key=lambda q: abs(q - st["quality"]))
 
         def pick_q(i, _label):
@@ -444,7 +440,7 @@ class ActionsMixin:
 
         # Format drives the quality visibility.
         heading(t("Format"))
-        fmt_row = tk.Frame(wrap, bg=BG)
+        fmt_row = self._tw(tk.Frame(wrap), bg="bg")
         fmt_row.pack(anchor="w")
         fmt_opts = ("JPEG", "PNG", "WEBP")
 
@@ -465,7 +461,7 @@ class ActionsMixin:
             st["ok"] = True
             dlg.destroy()
 
-        brow = tk.Frame(wrap, bg=BG)
+        brow = self._tw(tk.Frame(wrap), bg="bg")
         brow.pack(anchor="e", pady=(16, 0))
         tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
                        variant="outline", command=dlg.destroy, bg="bg").pack(
@@ -486,12 +482,12 @@ class ActionsMixin:
 
     def _build_actions_section(self, parent):
         "Actions panel: a Record/Stop toggle + the list of saved actions to play."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
-        tk.Label(f, text=t("Record your edits as an action, then play it on any open photo."),
-                 bg=BAR, fg=FG_DIM, anchor="w", justify="left",
-                 font=("Segoe UI", 8), wraplength=self._edit_dpi_w(210)) \
-            .pack(fill="x", padx=EDIT_PAD, pady=(12, 6))
+        self._tw(tk.Label(f, text=t("Record your edits as an action, then play it on any open photo."),
+                 anchor="w", justify="left",
+                 font=("Segoe UI", 8), wraplength=self._edit_dpi_w(210)),
+                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(12, 6))
 
         # Record / Stop toggle: a real Button that flips to danger-red (Stop)
         # while the recorder is armed (see _refresh_action_recorder).
@@ -501,18 +497,18 @@ class ActionsMixin:
             command=self._toggle_recording)
         self._rec_btn.pack(fill="x", padx=EDIT_PAD, pady=(2, 2))
 
-        self._rec_status = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
-                                    font=("Segoe UI", 8))
+        self._rec_status = self._tw(tk.Label(f, text="", anchor="w",
+                                    font=("Segoe UI", 8)), bg="bar", fg="fg_dim")
         self._rec_status.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
 
-        tk.Frame(f, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
-                                                 pady=(4, 8))
+        self._tw(tk.Frame(f, height=1), bg="divider").pack(
+            fill="x", padx=EDIT_PAD, pady=(4, 8))
 
-        self._lbl_action_count = tk.Label(f, text="", bg=BAR, fg=FG, anchor="w",
-                                          font=("Segoe UI", 8, "bold"))
+        self._lbl_action_count = self._tw(tk.Label(f, text="", anchor="w",
+                                          font=("Segoe UI", 8, "bold")), bg="bar", fg="fg")
         self._lbl_action_count.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
 
-        self._actions_list = tk.Frame(f, bg=BAR)
+        self._actions_list = self._tw(tk.Frame(f), bg="bar")
         self._actions_list.pack(fill="x", padx=EDIT_PAD)
 
         # Footer: Done just closes the tool. Actions are a manager — nothing to
@@ -556,8 +552,8 @@ class ActionsMixin:
         for w in self._actions_list.winfo_children():
             w.destroy()
         if not self.user_actions:
-            tk.Label(self._actions_list, text=t("No actions yet"), bg=BAR,
-                     fg=FG_DIM, font=("Segoe UI", 8), anchor="w") \
+            self._tw(tk.Label(self._actions_list, text=t("No actions yet"),
+                     font=("Segoe UI", 8), anchor="w"), bg="bar", fg="fg_dim") \
                 .pack(fill="x", pady=(2, 4))
             return
         for act in list(self.user_actions):
@@ -565,14 +561,14 @@ class ActionsMixin:
 
     def _action_row(self, act):
         "One saved action: a play area (icon + name) + rename / delete icons."
-        row = tk.Frame(self._actions_list, bg=ROW_BG, cursor="hand2")
+        row = self._tw(tk.Frame(self._actions_list, cursor="hand2"), bg="chip")
         row.pack(fill="x", pady=2)
         pimg = self.icon("circle-play", size=16)
-        pic = (tk.Label(row, image=pimg, bg=ROW_BG) if pimg is not None
-               else tk.Label(row, text="▶", bg=ROW_BG, fg=ACCENT))
+        pic = (self._tw(tk.Label(row, image=pimg), bg="chip") if pimg is not None
+               else self._tw(tk.Label(row, text="▶"), bg="chip", fg="accent"))
         pic.pack(side="left", padx=(8, 8), pady=7)
-        nm = tk.Label(row, text=act["name"], bg=ROW_BG, fg=FG, anchor="w",
-                      font=("Segoe UI", 9))
+        nm = self._tw(tk.Label(row, text=act["name"], anchor="w",
+                      font=("Segoe UI", 9)), bg="chip", fg="fg")
         nm.pack(side="left", fill="x", expand=True)
         # batch / rename / delete on the right (own clicks; don't trigger play)
         self._action_icon(row, "trash-2", lambda: self._delete_action(act),
@@ -585,8 +581,8 @@ class ActionsMixin:
         play_parts = (row, pic, nm)
         for w in play_parts:
             w.bind("<Button-1>", lambda e, a=act: self._play_action(a))
-            w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in play_parts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=ROW_BG) for p in play_parts])
+            w.bind("<Enter>", lambda e: [p.configure(bg=self.theme["hover"]) for p in play_parts])
+            w.bind("<Leave>", lambda e: [p.configure(bg=self.theme["chip"]) for p in play_parts])
         pic._tip = tintkit.HoverTip(pic, self.theme, t("Play this action"))
 
     def _action_icon(self, parent, icon_name, command, tip):
@@ -616,21 +612,21 @@ class ActionsMixin:
 
     def _ask_action_name(self, title, default=""):
         "Modal dark prompt for an action name. Returns the trimmed text or None."
-        from ..config import BG
         result = {"val": None}
         dlg = tk.Toplevel(self.root)
         dlg.title(title)
-        dlg.configure(bg=BG)
+        self._tw(dlg, bg="bg")
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = self._tw(tk.Frame(dlg, padx=22, pady=18), bg="bg")
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("Action name"), bg=BG, fg=FG,
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 8))
+        self._tw(tk.Label(wrap, text=t("Action name"),
+                 font=("Segoe UI", 11, "bold")), bg="bg", fg="fg").pack(
+                     anchor="w", pady=(0, 8))
 
-        e = tk.Entry(wrap, bg=BAR, fg=FG, insertbackground=FG, width=24,
-                     relief="flat", font=("Segoe UI", 11))
+        e = self._tw(tk.Entry(wrap, width=24, relief="flat",
+                     font=("Segoe UI", 11)), bg="bar", fg="fg", insert="fg")
         e.insert(0, default)
         e.pack(anchor="w", ipady=5, fill="x")
 
@@ -640,12 +636,13 @@ class ActionsMixin:
                 result["val"] = txt
             dlg.destroy()
 
-        btnrow = tk.Frame(wrap, bg=BG)
+        btnrow = self._tw(tk.Frame(wrap), bg="bg")
         btnrow.pack(anchor="e", pady=(16, 0))
-        self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(side="right",
-                                                                 padx=(8, 0))
-        self._dialog_btn(btnrow, t("Save"), confirm,
-                         primary=True).pack(side="right")
+        tintkit.Button(btnrow, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=dlg.destroy, bg="bg").pack(
+                           side="right", padx=(8, 0))
+        tintkit.Button(btnrow, self.theme, t("Save"), role="primary",
+                       variant="filled", command=confirm, bg="bg").pack(side="right")
 
         dlg.bind("<Return>", lambda e: confirm())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
