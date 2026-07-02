@@ -9,7 +9,6 @@ import os
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import BG, FG_DIM
 from ..i18n import t
 import tintkit
 
@@ -154,15 +153,15 @@ class SaveMixin:
 
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Save as"))
-        dlg.configure(bg=BG)
+        self._tw(dlg, bg="bg")
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=16)
+        wrap = self._tw(tk.Frame(dlg, padx=22, pady=16), bg="bg")
         wrap.pack(fill="both", expand=True)
 
         def heading(text):
-            tk.Label(wrap, text=text, bg=BG, fg=FG_DIM,
-                     font=("Segoe UI", 8)).pack(anchor="w", pady=(10, 2))
+            self._tw(tk.Label(wrap, text=text, font=("Segoe UI", 8)),
+                     bg="bg", fg="fg_dim").pack(anchor="w", pady=(10, 2))
 
         # --- Folder (with a browse button) ---
         heading(t("Folder"))
@@ -176,7 +175,7 @@ class SaveMixin:
             if d:
                 dir_var.set(d)
 
-        frow = tk.Frame(wrap, bg=BG); frow.pack(fill="x")
+        frow = self._tw(tk.Frame(wrap), bg="bg"); frow.pack(fill="x")
         tintkit.Button(frow, self.theme, t("Select"), role="neutral",
                        variant="outline", command=pick_dir, bg="bg").pack(
                            side="right", padx=(6, 0))
@@ -187,9 +186,9 @@ class SaveMixin:
         # --- Name (with a live extension suffix) ---
         heading(t("Name"))
         name_var = tk.StringVar(value=self._save_basename())
-        nrow = tk.Frame(wrap, bg=BG); nrow.pack(fill="x")
-        ext_lbl = tk.Label(nrow, text=self.FMT_EXT[st["fmt"]], bg=BG, fg=FG_DIM,
-                           font=("Segoe UI", 10))
+        nrow = self._tw(tk.Frame(wrap), bg="bg"); nrow.pack(fill="x")
+        ext_lbl = self._tw(tk.Label(nrow, text=self.FMT_EXT[st["fmt"]],
+                           font=("Segoe UI", 10)), bg="bg", fg="fg_dim")
         ext_lbl.pack(side="right", padx=(6, 0))
         name_field = tintkit.TextField(nrow, self.theme, bg="bg")
         name_field.entry.configure(textvariable=name_var)
@@ -197,9 +196,9 @@ class SaveMixin:
         ne = name_field.entry                      # for the focus/select-all below
 
         # --- Quality (lossy only) — built before format so format can show/hide it ---
-        qbox = tk.Frame(wrap, bg=BG)
-        tk.Label(qbox, text=t("Quality"), bg=BG, fg=FG_DIM,
-                 font=("Segoe UI", 8)).pack(anchor="w", pady=(10, 2))
+        qbox = self._tw(tk.Frame(wrap), bg="bg")
+        self._tw(tk.Label(qbox, text=t("Quality"), font=("Segoe UI", 8)),
+                 bg="bg", fg="fg_dim").pack(anchor="w", pady=(10, 2))
 
         def pick_q(i, _label):
             st["quality"] = q_opts[i]
@@ -224,7 +223,7 @@ class SaveMixin:
 
         # --- Format (drives the extension label + quality visibility) ---
         heading(t("Format"))
-        fmt_row = tk.Frame(wrap, bg=BG); fmt_row.pack(anchor="w")
+        fmt_row = self._tw(tk.Frame(wrap), bg="bg"); fmt_row.pack(anchor="w")
         fmt_opts = ("JPEG", "PNG", "WEBP")
 
         def apply_fmt(f):
@@ -255,7 +254,7 @@ class SaveMixin:
             st["ok"] = True
             dlg.destroy()
 
-        brow = tk.Frame(wrap, bg=BG); brow.pack(anchor="e", pady=(16, 0))
+        brow = self._tw(tk.Frame(wrap), bg="bg"); brow.pack(anchor="e", pady=(16, 0))
         tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
                        variant="outline", command=dlg.destroy, bg="bg").pack(
                            side="right", padx=(8, 0))
