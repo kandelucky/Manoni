@@ -63,16 +63,22 @@ class ChromeMixin:
 
     # --- Live theming for plain tk widgets ----------------------------------
 
-    def _tw(self, w, bg=None, fg=None):
+    def _tw(self, w, bg=None, fg=None, insert=None, hl=None):
         "Bind a plain tk widget to theme tokens; restyle now + on every theme.set."
-        " Lets a not-yet-tintkit tk.Label/Frame follow dark<->light like the"
-        " migrated widgets do. `bg`/`fg` are token KEYS (\"bar\", \"fg_dim\"…)."
+        " Lets a not-yet-tintkit tk.Label/Frame/Entry follow dark<->light like the"
+        " migrated widgets do. Args are token KEYS (\"bar\", \"fg_dim\"…): bg/fg for"
+        " Labels/Frames, `insert` = an Entry's caret, `hl` = highlightbackground"
+        " (a focus-ring / swatch border)."
         def restyle():
             kw = {}
             if bg is not None:
                 kw["bg"] = self.theme[bg]
             if fg is not None:
                 kw["fg"] = self.theme[fg]
+            if insert is not None:
+                kw["insertbackground"] = self.theme[insert]
+            if hl is not None:
+                kw["highlightbackground"] = self.theme[hl]
             try:
                 w.configure(**kw)
             except tk.TclError:                  # widget already destroyed
