@@ -21,7 +21,7 @@ import tkinter as tk
 
 import tintkit
 
-from ..config import BAR, ACCENT, FG_DIM, EDIT_PANEL_W, EDIT_PAD, ON_ACCENT
+from ..config import ACCENT, EDIT_PANEL_W, EDIT_PAD, ON_ACCENT
 from ..i18n import t
 
 
@@ -35,7 +35,7 @@ class FocusMixin:
 
     def _build_focus_section(self, parent):
         "Focus-blur panel: a shape toggle, a hint, blur + feather sliders, remove."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
         # Shape toggle: circle vs line (tilt-shift) — a segmented control.
         self._focus_shapes = ["circle", "line"]
@@ -44,10 +44,11 @@ class FocusMixin:
             command=lambda i, _l: self._set_focus_shape(self._focus_shapes[i]))
         self._focus_shape_tabs.pack(padx=EDIT_PAD, pady=(10, 2))
 
-        self._focus_hint = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
+        self._focus_hint = self._tw(tk.Label(f, text="", anchor="w",
                                     font=("Segoe UI", 8), justify="left",
                                     wraplength=self._edit_dpi_w(
-                                        EDIT_PANEL_W - 2 * EDIT_PAD))
+                                        EDIT_PANEL_W - 2 * EDIT_PAD)),
+                                    bg="bar", fg="fg_dim")
         self._focus_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
         # Blur strength and edge softness. Absolute magnitudes (neutral = the low
