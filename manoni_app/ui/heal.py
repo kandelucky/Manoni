@@ -18,7 +18,7 @@ import tkinter as tk
 
 import tintkit
 
-from ..config import BAR, ACCENT, FG_DIM, EDIT_PANEL_W, EDIT_PAD
+from ..config import ACCENT, EDIT_PANEL_W, EDIT_PAD
 from .. import imaging
 from ..i18n import t
 
@@ -36,7 +36,7 @@ class HealMixin:
 
     def _build_heal_section(self, parent):
         "Retouch panel: heal/clone mode, a hint, brush sliders, and the footer."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
         # Mode toggle: auto heal vs manual clone stamp — a segmented control
         # (the two modes are exclusive), matching the focus-tool shape toggle.
@@ -46,16 +46,17 @@ class HealMixin:
             command=lambda i, _l: self._set_heal_mode(self._heal_modes[i]))
         self._heal_mode_tabs.pack(padx=EDIT_PAD, pady=(10, 2))
 
-        self._heal_hint = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
+        self._heal_hint = self._tw(tk.Label(f, text="", anchor="w",
                                    font=("Segoe UI", 8), justify="left",
                                    wraplength=self._edit_dpi_w(
-                                       EDIT_PANEL_W - 2 * EDIT_PAD))
+                                       EDIT_PANEL_W - 2 * EDIT_PAD)),
+                                   bg="bar", fg="fg_dim")
         self._heal_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
         # Clone-only options (aligned + mirror) — independent on/off toggles, so
         # checkboxes, not the exclusive segmented control. Shown only in clone
         # mode (packed / unpacked by _refresh_heal_mode).
-        self._clone_opts = tk.Frame(f, bg=BAR)
+        self._clone_opts = self._tw(tk.Frame(f), bg="bar")
         self._chk_aligned = tintkit.Checkbox(
             self._clone_opts, self.theme, t("Aligned"),
             state="on" if self.clone_aligned else "off", bg="bar",
@@ -85,9 +86,9 @@ class HealMixin:
             0, 100, 0, round(self.heal_feather * 100))
         self.s_heal_feather.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
 
-        tk.Label(f, text=t("Ctrl+Z — undo the last action"), bg=BAR, fg=FG_DIM,
-                 anchor="w", font=("Segoe UI", 8)).pack(fill="x", padx=EDIT_PAD,
-                                                        pady=(12, 4))
+        self._tw(tk.Label(f, text=t("Ctrl+Z — undo the last action"),
+                 anchor="w", font=("Segoe UI", 8)), bg="bar", fg="fg_dim").pack(
+                     fill="x", padx=EDIT_PAD, pady=(12, 4))
 
         # Footer: Done closes the tool (the strokes are already baked into the
         # photo); Remove all lifts every retouch on this photo in one undo step.
