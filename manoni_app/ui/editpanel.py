@@ -10,9 +10,7 @@ import tkinter.ttk as ttk
 
 import tintkit
 
-from ..config import (BAR, HOVER, ACCENT, FG, FG_DIM,
-                      EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP,
-                      ON_ACCENT, ACCENT_HOVER, CHIP_BG, BORDER, DIVIDER)
+from ..config import EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP
 from .. import imaging
 from ..widgets import Tooltip, Histogram
 from ..i18n import t
@@ -43,7 +41,7 @@ class EditPanelMixin:
         # packed, so grid_propagate would be a no-op) stops the panel shrinking /
         # growing to whichever tool's content is open. Width is DPI-scaled so the
         # (DPI-scaled) labels fit the same at any Windows scaling.
-        panel = tk.Frame(parent, bg=BAR, width=self._edit_dpi_w(EDIT_PANEL_W))
+        panel = self._tw(tk.Frame(parent, width=self._edit_dpi_w(EDIT_PANEL_W)), bg="bar")
         panel.grid(row=0, column=3, rowspan=3, sticky="ns")   # full height: clips the strips
         panel.pack_propagate(False)
         self.edit_panel = panel
@@ -51,10 +49,10 @@ class EditPanelMixin:
             panel.grid_remove()
 
         # Blue header that names the open section (Fotor "Basic Edits" tab look).
-        self.section_title = tk.Label(panel, text=t(self.SECTION_TITLES["basic"]),
-                                      bg=ACCENT, fg=ON_ACCENT, anchor="w",
+        self.section_title = self._tw(tk.Label(panel, text=t(self.SECTION_TITLES["basic"]),
+                                      anchor="w",
                                       font=("Segoe UI", 10, "bold"),
-                                      padx=14, pady=8)
+                                      padx=14, pady=8), bg="accent", fg="on_accent")
         self.section_title.pack(side="top", fill="x")
 
         # Live histogram: sits under the header, above the swappable content, so
@@ -68,15 +66,15 @@ class EditPanelMixin:
         # tall section (all the V3 sliders in Basic / Color) scrolls instead of
         # being clipped — the fixed-height panel has no room to grow. Same canvas
         # + auto-hiding Sidebar scrollbar pattern as the crop size list.
-        self._sec_host = tk.Frame(panel, bg=BAR)
+        self._sec_host = self._tw(tk.Frame(panel), bg="bar")
         self._sec_host.pack(side="top", fill="both", expand=True)
-        self._sec_canvas = tk.Canvas(self._sec_host, bg=BAR, highlightthickness=0,
-                                     bd=0)
+        self._sec_canvas = self._tw(tk.Canvas(self._sec_host, highlightthickness=0,
+                                     bd=0), bg="bar")
         self._sec_scrollbar = ttk.Scrollbar(
             self._sec_host, orient="vertical", command=self._sec_canvas.yview,
             style="Sidebar.Vertical.TScrollbar")
         self._sec_canvas.configure(yscrollcommand=self._sec_scrollbar.set)
-        self.section_content = tk.Frame(self._sec_canvas, bg=BAR)
+        self.section_content = self._tw(tk.Frame(self._sec_canvas), bg="bar")
         self._sec_win = self._sec_canvas.create_window(
             (0, 0), window=self.section_content, anchor="nw")
         self._sec_canvas.pack(side="left", fill="both", expand=True)
@@ -160,12 +158,12 @@ class EditPanelMixin:
 
     def _build_basic_section(self, parent):
         "Basic Edits: auto-fix buttons + grouped live sliders (Photoshop order)."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
         # Auto corrections at the very top, like Photoshop's Auto Levels / Auto
         # Contrast. They are mutually exclusive one-click toggles.
         self.auto_buttons = {}
-        autobar = tk.Frame(f, bg=BAR)
+        autobar = self._tw(tk.Frame(f), bg="bar")
         autobar.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
         autobar.columnconfigure(0, weight=1, uniform="auto")
         autobar.columnconfigure(1, weight=1, uniform="auto")
@@ -222,16 +220,16 @@ class EditPanelMixin:
         "A thin divider + small bold caption that splits the basic sliders into"
         " Photoshop-style groups (white balance / tone / detail) instead of one"
         " glued strip."
-        tk.Frame(parent, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
-                                                       pady=(12, 0))
-        tk.Label(parent, text=text, bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
-                                                    pady=(4, 2))
+        self._tw(tk.Frame(parent, height=1), bg="divider").pack(
+            fill="x", padx=EDIT_PAD, pady=(12, 0))
+        self._tw(tk.Label(parent, text=text, anchor="w",
+                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
+                     fill="x", padx=EDIT_PAD, pady=(4, 2))
 
     def _auto_btn(self, parent, text, mode, col, tip):
         "One auto-correction toggle button (accent-filled while its mode is on)."
-        b = tk.Label(parent, text=text, bg=CHIP_BG, fg=FG, cursor="hand2",
-                     font=("Segoe UI", 8, "bold"), padx=4, pady=6)
+        b = self._tw(tk.Label(parent, text=text, cursor="hand2",
+                     font=("Segoe UI", 8, "bold"), padx=4, pady=6), bg="chip", fg="fg")
         b._mode = mode
         pad = (0, CHIP_GAP // 2) if col == 0 else (CHIP_GAP // 2, 0)
         b.grid(row=0, column=col, sticky="ew", padx=pad)
@@ -245,7 +243,7 @@ class EditPanelMixin:
         "Brighten an auto button on hover; the active one keeps its accent fill."
         if btn._mode == self.auto_mode:
             return
-        btn.configure(bg=HOVER if entering else CHIP_BG)
+        btn.configure(bg=self.theme["hover"] if entering else self.theme["chip"])
 
     def _refresh_auto_buttons(self):
         "Repaint the auto buttons so the active mode is accent-filled, rest neutral."
@@ -253,13 +251,13 @@ class EditPanelMixin:
             return
         for mode, btn in self.auto_buttons.items():
             active = (mode == self.auto_mode)
-            btn.configure(bg=ACCENT if active else CHIP_BG,
-                          fg=ON_ACCENT if active else FG)
+            btn.configure(bg=self.theme["accent"] if active else self.theme["chip"],
+                          fg=self.theme["on_accent"] if active else self.theme["fg"])
 
     def _build_effects_section(self, parent):
         "Effects: creative looks, each a 0→full strength slider. B&W + sepia +"
         " vignette + film grain. They share the edit pipeline, undo and reset."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
         # Effects rest at 0 (off): hi=100, neutral=0 → strength 0.0–1.0.
         self.s_bw = self._slider(f, t("Black & White"), "bw", hi=100, neutral=0)
         self.sliders["bw"] = self.s_bw   # join the shared reset / undo machinery
@@ -301,7 +299,7 @@ class EditPanelMixin:
         "Color mixer (HSL): per-hue saturation for the eight bands, plus a"
         " separate 'gold shine'. Each slider strengthens (right) or weakens"
         " (left) just that colour; they share the edit pipeline, undo and reset."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
         self._group_header(f, t("Saturation"))
         for attr, label, chip in self.COLOR_BANDS:
@@ -347,13 +345,13 @@ class EditPanelMixin:
     def _build_tool_rail(self, parent):
         "Always-visible icon rail: a collapse chevron on top, then the tool icons"
         " (click one to open the panel to it); Save pinned to the bottom."
-        rail = tk.Frame(parent, bg=BAR, width=self._edit_dpi_w(EDIT_RAIL_W))
+        rail = self._tw(tk.Frame(parent, width=self._edit_dpi_w(EDIT_RAIL_W)), bg="bar")
         rail.grid(row=0, column=4, rowspan=3, sticky="ns")   # full height: clips the strips
         rail.pack_propagate(False)   # children are packed → fix the width here
         self.rail = rail   # the rail itself never hides; only edit_panel collapses
 
         self.rail_buttons = {}   # section key -> cell frame (for active highlight)
-        top = tk.Frame(rail, bg=BAR)
+        top = self._tw(tk.Frame(rail), bg="bar")
         top.pack(side="top", fill="x", pady=(8, 0))
 
         # Collapse chevron: '<' (panel closed) opens it, '>' (panel open) closes
@@ -361,7 +359,7 @@ class EditPanelMixin:
         self.btn_chevron = self._tool_button(
             top, "chevron-left", self.toggle_panel, t("Open / collapse the panel"))
         self.btn_chevron.pack(side="top", pady=(0, 6))
-        tk.Frame(top, bg=BORDER, height=1).pack(side="top", fill="x",
+        self._tw(tk.Frame(top, height=1), bg="border").pack(side="top", fill="x",
                                                    padx=12, pady=(0, 6))
 
         for key, icon_name, label in [
@@ -385,43 +383,44 @@ class EditPanelMixin:
         self._build_save_button(rail)
 
         self._update_rail()
+        self.theme.subscribe(self._update_rail)   # repaint the rail on dark<->light
         self._update_chevron()
 
     def _build_save_button(self, rail):
         "A compact accent Save button pinned to the rail foot (icon over label)."
         " Shown only while the panel is collapsed — the open panel carries its"
         " own full-width Save (see _build_panel_actions)."
-        wrap = tk.Frame(rail, bg=BAR)
+        wrap = self._tw(tk.Frame(rail), bg="bar")
         wrap.pack(side="bottom", fill="x")
         self._rail_save_wrap = wrap   # hidden while the panel is open
-        tk.Frame(wrap, bg=BORDER, height=1).pack(side="top", fill="x")
+        self._tw(tk.Frame(wrap, height=1), bg="border").pack(side="top", fill="x")
 
-        btn = tk.Frame(wrap, bg=ACCENT, cursor="hand2")
+        btn = self._tw(tk.Frame(wrap, cursor="hand2"), bg="accent")
         btn.pack(side="top", fill="x")
         img = self.icon("save")
         if img is not None:
-            ic = tk.Label(btn, image=img, bg=ACCENT)
+            ic = self._tw(tk.Label(btn, image=img), bg="accent")
         else:
-            ic = tk.Label(btn, text="💾", bg=ACCENT, fg=ON_ACCENT,
-                          font=("Segoe UI", 14))
+            ic = self._tw(tk.Label(btn, text="💾", font=("Segoe UI", 14)),
+                          bg="accent", fg="on_accent")
         ic.pack(pady=(8, 2))
-        tx = tk.Label(btn, text=t("Save"), bg=ACCENT, fg=ON_ACCENT,
-                      font=("Segoe UI", 8, "bold"))
+        tx = self._tw(tk.Label(btn, text=t("Save"),
+                      font=("Segoe UI", 8, "bold")), bg="accent", fg="on_accent")
         tx.pack(pady=(0, 8))
         for w in (btn, ic, tx):
             w.bind("<Button-1>", lambda e: self.quick_save())
-            w.bind("<Enter>", lambda e: [c.configure(bg=ACCENT_HOVER)
+            w.bind("<Enter>", lambda e: [c.configure(bg=self.theme["accent_hover"])
                                          for c in (btn, ic, tx)])
-            w.bind("<Leave>", lambda e: [c.configure(bg=ACCENT)
+            w.bind("<Leave>", lambda e: [c.configure(bg=self.theme["accent"])
                                          for c in (btn, ic, tx)])
         btn._tip = Tooltip(btn, t("Save"))
 
     def _build_panel_actions(self, panel):
         "The open panel's foot: full-width Restore-original over a full-width Save."
-        wrap = tk.Frame(panel, bg=BAR)
+        wrap = self._tw(tk.Frame(panel), bg="bar")
         # Pin to the panel bottom; the swappable section content expands above it.
         wrap.pack(side="bottom", fill="x", before=self._sec_host)
-        tk.Frame(wrap, bg=BORDER, height=1).pack(side="top", fill="x")
+        self._tw(tk.Frame(wrap, height=1), bg="border").pack(side="top", fill="x")
         self._wide_action(wrap, "rotate-ccw", t("Restore original"),
                           self.restore_original,
                           tip=t("Discard every edit and reload the original photo"))
@@ -474,15 +473,17 @@ class EditPanelMixin:
 
     def _rail_button(self, parent, icon_name, label, key=None, command=None):
         "One rail cell: icon stacked over a label. key = selectable section."
-        cell = tk.Frame(parent, bg=BAR, cursor="hand2")
+        cell = tk.Frame(parent, bg=self.theme["bar"], cursor="hand2")
         cell.pack(side="top", fill="x", pady=2)
         img = self.icon(icon_name)
         if img is not None:
-            ic = tk.Label(cell, image=img, bg=BAR)
+            ic = tk.Label(cell, image=img, bg=self.theme["bar"])
         else:
-            ic = tk.Label(cell, text="□", bg=BAR, fg=FG, font=("Segoe UI", 14))
+            ic = tk.Label(cell, text="□", bg=self.theme["bar"], fg=self.theme["fg"],
+                          font=("Segoe UI", 14))
         ic.pack(pady=(8, 2))
-        tx = tk.Label(cell, text=t(label), bg=BAR, fg=FG_DIM, font=("Segoe UI", 8))
+        tx = tk.Label(cell, text=t(label), bg=self.theme["bar"],
+                      fg=self.theme["fg_dim"], font=("Segoe UI", 8))
         tx.pack(pady=(0, 8))
         cell._widgets = (ic, tx)
 
@@ -504,8 +505,8 @@ class EditPanelMixin:
         "Brighten a rail cell on hover; the active section keeps its accent fill."
         if key is not None and key == self.active_section:
             return
-        bg = HOVER if entering else BAR
-        fg = FG if entering else FG_DIM
+        bg = self.theme["hover"] if entering else self.theme["bar"]
+        fg = self.theme["fg"] if entering else self.theme["fg_dim"]
         ic, tx = cell._widgets
         cell.configure(bg=bg)
         ic.configure(bg=bg)
@@ -552,8 +553,8 @@ class EditPanelMixin:
         "Fill the active section's rail cell with the accent colour; dim the rest."
         for k, cell in self.rail_buttons.items():
             active = (k == self.active_section)
-            bg = ACCENT if active else BAR
-            fg = ON_ACCENT if active else FG_DIM
+            bg = self.theme["accent"] if active else self.theme["bar"]
+            fg = self.theme["on_accent"] if active else self.theme["fg_dim"]
             ic, tx = cell._widgets
             cell.configure(bg=bg)
             ic.configure(bg=bg)
@@ -584,25 +585,24 @@ class EditPanelMixin:
     def _clear_button(self, parent):
         "Full-width 'clear all' button (resets every slider as one undo step) —"
         " a real filled button, replacing the old plain-text reset link."
-        NORMAL = CHIP_BG
-        btn = tk.Frame(parent, bg=NORMAL, cursor="hand2")
+        btn = self._tw(tk.Frame(parent, cursor="hand2"), bg="chip")
         btn.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
-        inner = tk.Frame(btn, bg=NORMAL)          # centers the icon + label
+        inner = self._tw(tk.Frame(btn), bg="chip")   # centers the icon + label
         inner.pack(pady=7)
         parts = [btn, inner]
         img = self.icon("rotate-ccw", size=16)
         if img is not None:
-            ic = tk.Label(inner, image=img, bg=NORMAL)
+            ic = self._tw(tk.Label(inner, image=img), bg="chip")
             ic.pack(side="left", padx=(0, 6))
             parts.append(ic)
-        tx = tk.Label(inner, text=t("Clear all"), bg=NORMAL, fg=FG,
-                      font=("Segoe UI", 9, "bold"))
+        tx = self._tw(tk.Label(inner, text=t("Clear all"),
+                      font=("Segoe UI", 9, "bold")), bg="chip", fg="fg")
         tx.pack(side="left")
         parts.append(tx)
         for w in parts:
             w.bind("<Button-1>", lambda e: self._reset_edits())
-            w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in parts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=NORMAL) for p in parts])
+            w.bind("<Enter>", lambda e: [p.configure(bg=self.theme["hover"]) for p in parts])
+            w.bind("<Leave>", lambda e: [p.configure(bg=self.theme["chip"]) for p in parts])
         btn._tip = Tooltip(btn, t("Reset all sliders"))
         return btn
 
