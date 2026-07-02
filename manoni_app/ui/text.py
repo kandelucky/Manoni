@@ -26,8 +26,7 @@ from tkinter import colorchooser
 
 import tintkit
 
-from ..config import (BAR, ACCENT, FG, FG_DIM, HOVER, ON_ACCENT,
-                      EDIT_PAD, CHIP_BG, BORDER)
+from ..config import ACCENT, FG_DIM, ON_ACCENT, EDIT_PAD
 from ..i18n import t
 from .. import imaging
 
@@ -46,17 +45,17 @@ class TextMixin:
 
     def _build_text_section(self, parent):
         "Text panel: the string, font, size + opacity, colour, shadow, placement."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
-        tk.Label(f, text=t("Add a text, then drag it on the photo to place it. "
+        self._tw(tk.Label(f, text=t("Add a text, then drag it on the photo to place it. "
                            "The corner handle resizes it. Add as many as you like."),
-                 bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), justify="left",
-                 anchor="w", wraplength=self._edit_dpi_w(190)).pack(
-            fill="x", padx=EDIT_PAD, pady=(10, 6))
+                 font=("Segoe UI", 8), justify="left",
+                 anchor="w", wraplength=self._edit_dpi_w(190)),
+                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(10, 6))
 
         # Top row: ‘Add text’ (the ONLY way a text appears — accent primary) and
         # a trash icon that removes the selected one.
-        addrow = tk.Frame(f, bg=BAR)
+        addrow = self._tw(tk.Frame(f), bg="bar")
         addrow.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
         add = tintkit.Button(addrow, self.theme, t("Add text"), role="primary",
                              variant="filled", stretch=True, bg="bar",
@@ -109,15 +108,14 @@ class TextMixin:
         self.s_text_opacity.pack(fill="x", padx=EDIT_PAD, pady=2)
 
         # Colour swatch + a shadow checkbox, side by side.
-        row = tk.Frame(f, bg=BAR)
+        row = self._tw(tk.Frame(f), bg="bar")
         row.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
-        tk.Label(row, text=t("Colour"), bg=BAR, fg=FG_DIM,
-                 font=("Segoe UI", 8, "bold")).pack(side="left")
-        self._text_swatch = tk.Frame(row, bg="#ffffff", cursor="hand2",
+        self._tw(tk.Label(row, text=t("Colour"),
+                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
+        self._text_swatch = self._tw(tk.Frame(row, bg="#ffffff", cursor="hand2",
                                      width=self._edit_dpi_w(28),
                                      height=self._edit_dpi_w(16),
-                                     highlightthickness=1,
-                                     highlightbackground=BORDER)
+                                     highlightthickness=1), hl="border")
         self._text_swatch.pack(side="left", padx=(8, 0))
         self._text_swatch.pack_propagate(False)
         self._text_swatch.bind("<Button-1>", lambda e: self._pick_text_color())
@@ -162,26 +160,30 @@ class TextMixin:
 
     def _build_text_position_grid(self, parent):
         "A 3×3 grid of buttons; each snaps the text to that anchor with a margin."
-        grid = tk.Frame(parent, bg=BAR)
+        grid = self._tw(tk.Frame(parent), bg="bar")
         grid.pack(padx=EDIT_PAD, pady=2)
         for r, v in enumerate(("t", "m", "b")):
             for c, h in enumerate(("l", "c", "r")):
-                cell = tk.Frame(grid, bg=CHIP_BG, cursor="hand2",
+                cell = self._tw(tk.Frame(grid, cursor="hand2",
                                 width=self._edit_dpi_w(34),
-                                height=self._edit_dpi_w(22))
+                                height=self._edit_dpi_w(22)), bg="chip")
                 cell.grid(row=r, column=c, padx=2, pady=2)
                 cell.pack_propagate(False)
-                dot = tk.Frame(cell, bg=FG_DIM,
-                               width=self._edit_dpi_w(6), height=self._edit_dpi_w(6))
+                dot = self._tw(tk.Frame(cell,
+                               width=self._edit_dpi_w(6), height=self._edit_dpi_w(6)),
+                               bg="fg_dim")
                 # Place the dot toward the cell side it represents (a visual hint).
                 dot.place(relx={"l": 0.18, "c": 0.5, "r": 0.82}[h],
                           rely={"t": 0.22, "m": 0.5, "b": 0.78}[v], anchor="center")
+                # Hover reads live theme tokens so it tracks dark<->light too.
                 for w in (cell, dot):
                     w.bind("<Button-1>", lambda e, hh=h, vv=v: self._place_text(hh, vv))
                     w.bind("<Enter>", lambda e, cc=cell, dd=dot:
-                           (cc.configure(bg=HOVER), dd.configure(bg=FG)))
+                           (cc.configure(bg=self.theme["hover"]),
+                            dd.configure(bg=self.theme["fg"])))
                     w.bind("<Leave>", lambda e, cc=cell, dd=dot:
-                           (cc.configure(bg=CHIP_BG), dd.configure(bg=FG_DIM)))
+                           (cc.configure(bg=self.theme["chip"]),
+                            dd.configure(bg=self.theme["fg_dim"])))
 
     # --- State + entry ------------------------------------------------------
 
