@@ -9,9 +9,9 @@ import os
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
-from ..config import BG, BAR, ACCENT, FG, FG_DIM
+from ..config import BG, FG_DIM
 from ..i18n import t
-from .dialogs import make_dialog_button, make_chip, set_chip_active
+import tintkit
 
 
 class SaveMixin:
@@ -177,10 +177,12 @@ class SaveMixin:
                 dir_var.set(d)
 
         frow = tk.Frame(wrap, bg=BG); frow.pack(fill="x")
-        make_dialog_button(frow, t("Select"), pick_dir).pack(side="right", padx=(6, 0))
-        tk.Entry(frow, textvariable=dir_var, bg=BAR, fg=FG, insertbackground=FG,
-                 relief="flat", font=("Segoe UI", 9)).pack(
-                     side="left", fill="x", expand=True, ipady=5)
+        tintkit.Button(frow, self.theme, t("Select"), role="neutral",
+                       variant="outline", command=pick_dir, bg="bg").pack(
+                           side="right", padx=(6, 0))
+        dir_field = tintkit.TextField(frow, self.theme, bg="bg")
+        dir_field.entry.configure(textvariable=dir_var)
+        dir_field.pack(side="left", fill="x", expand=True)
 
         # --- Name (with a live extension suffix) ---
         heading(t("Name"))
@@ -189,43 +191,30 @@ class SaveMixin:
         ext_lbl = tk.Label(nrow, text=self.FMT_EXT[st["fmt"]], bg=BG, fg=FG_DIM,
                            font=("Segoe UI", 10))
         ext_lbl.pack(side="right", padx=(6, 0))
-        ne = tk.Entry(nrow, textvariable=name_var, bg=BAR, fg=FG, insertbackground=FG,
-                      relief="flat", font=("Segoe UI", 10))
-        ne.pack(side="left", fill="x", expand=True, ipady=5)
+        name_field = tintkit.TextField(nrow, self.theme, bg="bg")
+        name_field.entry.configure(textvariable=name_var)
+        name_field.pack(side="left", fill="x", expand=True)
+        ne = name_field.entry                      # for the focus/select-all below
 
         # --- Quality (lossy only) — built before format so format can show/hide it ---
         qbox = tk.Frame(wrap, bg=BG)
         tk.Label(qbox, text=t("Quality"), bg=BG, fg=FG_DIM,
                  font=("Segoe UI", 8)).pack(anchor="w", pady=(10, 2))
-        qrow = tk.Frame(qbox, bg=BG); qrow.pack(anchor="w")
-        q_chips = {}
 
-        def pick_q(q):
-            st["quality"] = q
-            for k, w in q_chips.items():
-                set_chip_active(w, k == q)
-        for q in q_opts:
-            q_chips[q] = make_chip(qrow, str(q), lambda q=q: pick_q(q))
+        def pick_q(i, _label):
+            st["quality"] = q_opts[i]
+        tintkit.SegmentedTabs(qbox, self.theme, [str(q) for q in q_opts],
+                              selected=q_opts.index(st["quality"]),
+                              command=pick_q, bg="bg").pack(anchor="w")
 
         # --- Checkboxes (built before format; format packs qbox above them) ---
         def checkbox(label, key):
-            "A ☐/☑ toggle bound to st[key]; returns the (unpacked) row frame."
-            row = tk.Frame(wrap, bg=BG)
-            bx = tk.Label(row, text="☑" if st[key] else "☐", bg=BG,
-                          fg=ACCENT if st[key] else FG, font=("Segoe UI", 13),
-                          cursor="hand2")
-            bx.pack(side="left")
-            lb = tk.Label(row, text=label, bg=BG, fg=FG, font=("Segoe UI", 9),
-                          cursor="hand2")
-            lb.pack(side="left", padx=(6, 0))
-
-            def toggle(_e=None):
-                st[key] = not st[key]
-                bx.configure(text="☑" if st[key] else "☐",
-                             fg=ACCENT if st[key] else FG)
-            for w in (bx, lb):
-                w.bind("<Button-1>", toggle)
-            return row
+            "A tintkit checkbox bound to st[key] (on/off ← its bool)."
+            def toggled(state):
+                st[key] = (state == "on")
+            return tintkit.Checkbox(wrap, self.theme, label,
+                                    state="on" if st[key] else "off",
+                                    command=toggled, bg="bg")
 
         # Keep camera/colour metadata (ICC + EXIF). Quick save arms this config.
         meta_chk = checkbox(t("Keep metadata (camera info, GPS, colour profile)"),
@@ -233,29 +222,27 @@ class SaveMixin:
         srgb_chk = checkbox(t("Convert colours to sRGB (best for web)"), "to_srgb")
         chk = checkbox(t("Use this config for quick save"), "quick")
 
-        # --- Format chips (drive the extension label + quality visibility) ---
+        # --- Format (drives the extension label + quality visibility) ---
         heading(t("Format"))
         fmt_row = tk.Frame(wrap, bg=BG); fmt_row.pack(anchor="w")
-        fmt_chips = {}
+        fmt_opts = ("JPEG", "PNG", "WEBP")
 
-        def pick_fmt(f):
+        def apply_fmt(f):
             st["fmt"] = f
-            for k, w in fmt_chips.items():
-                set_chip_active(w, k == f)
             ext_lbl.configure(text=self.FMT_EXT[f])
             if f == "PNG":
                 qbox.pack_forget()                 # PNG is lossless — no quality
             else:
-                qbox.pack(fill="x", anchor="w", before=meta_chk)
-        for f in ("JPEG", "PNG", "WEBP"):
-            fmt_chips[f] = make_chip(fmt_row, f, lambda f=f: pick_fmt(f))
+                qbox.pack(fill="x", anchor="w", before=meta_chk.canvas)
+        tintkit.SegmentedTabs(fmt_row, self.theme, list(fmt_opts),
+                              selected=fmt_opts.index(st["fmt"]),
+                              command=lambda i, label: apply_fmt(label),
+                              bg="bg").pack(anchor="w")
 
         meta_chk.pack(anchor="w", pady=(14, 0))    # below format/quality
         srgb_chk.pack(anchor="w", pady=(8, 0))
         chk.pack(anchor="w", pady=(8, 0))
-        pick_fmt(st["fmt"])                        # initial styling + quality visibility
-        for k, w in q_chips.items():
-            set_chip_active(w, k == st["quality"])
+        apply_fmt(st["fmt"])                        # initial styling + quality visibility
 
         # --- Confirm / cancel ---
         def confirm():
@@ -269,8 +256,12 @@ class SaveMixin:
             dlg.destroy()
 
         brow = tk.Frame(wrap, bg=BG); brow.pack(anchor="e", pady=(16, 0))
-        make_dialog_button(brow, t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
-        make_dialog_button(brow, t("Save"), confirm, primary=True).pack(side="right")
+        tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=dlg.destroy, bg="bg").pack(
+                           side="right", padx=(8, 0))
+        tintkit.Button(brow, self.theme, t("Save"), role="primary",
+                       variant="filled", command=confirm, bg="bg").pack(
+                           side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
