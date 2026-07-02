@@ -12,9 +12,8 @@ import tkinter as tk
 
 from PIL import Image, ExifTags
 
-from ..config import BG, BAR, ACCENT, FG, FG_DIM
 from ..i18n import t
-from .dialogs import make_dialog_button
+import tintkit
 
 _EXIF_IFD = 0x8769     # the Exif sub-IFD (exposure, ISO, lens, …)
 _GPS_IFD = 0x8825      # the GPS sub-IFD
@@ -261,23 +260,24 @@ class MetadataMixin:
 
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Photo info"))
-        dlg.configure(bg=BG)
+        self._tw(dlg, bg="bg")
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=16, pady=14)
+        wrap = self._tw(tk.Frame(dlg, padx=16, pady=14), bg="bg")
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("Photo info"), bg=BG, fg=FG,
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 10))
+        self._tw(tk.Label(wrap, text=t("Photo info"),
+                 font=("Segoe UI", 11, "bold")), bg="bg", fg="fg").pack(
+                     anchor="w", pady=(0, 10))
 
         # Scrollable body (same idiom as _filter_dialog, but with our own button
         # row below so the red action stays pinned, never scrolling away).
-        area = tk.Frame(wrap, bg=BG)
+        area = self._tw(tk.Frame(wrap), bg="bg")
         area.pack(fill="both", expand=True)
-        canvas = tk.Canvas(area, bg=BAR, highlightthickness=0,
+        canvas = self._tw(tk.Canvas(area, highlightthickness=0,
                            width=self._edit_dpi_w(300),
-                           height=self._edit_dpi_w(250))
+                           height=self._edit_dpi_w(250)), bg="bar")
         sb = self._make_scrollbar(area, canvas)
-        body = tk.Frame(canvas, bg=BAR)
+        body = self._tw(tk.Frame(canvas), bg="bar")
         win = canvas.create_window((0, 0), window=body, anchor="nw")
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
@@ -293,9 +293,10 @@ class MetadataMixin:
 
         # Buttons: a red "Delete metadata" on the left (only when there IS any to
         # delete), Close on the right.
-        brow = tk.Frame(wrap, bg=BG)
+        brow = self._tw(tk.Frame(wrap), bg="bg")
         brow.pack(fill="x", pady=(12, 0))
-        self._dialog_btn(brow, t("Close"), dlg.destroy).pack(side="right")
+        tintkit.Button(brow, self.theme, t("Close"), role="neutral",
+                       variant="outline", command=dlg.destroy, bg="bg").pack(side="right")
         if has_embedded:
             self._danger_btn(brow, t("Delete metadata"),
                              lambda: self._strip_metadata(dlg)).pack(side="left")
@@ -312,31 +313,34 @@ class MetadataMixin:
         body.grid_columnconfigure(1, weight=1)
         r = 0
         for i, (title, rows) in enumerate(sections):
-            tk.Label(body, text=title, bg=BAR, fg=ACCENT,
-                     font=("Segoe UI", 9, "bold"), anchor="w").grid(
+            self._tw(tk.Label(body, text=title,
+                     font=("Segoe UI", 9, "bold"), anchor="w"),
+                     bg="bar", fg="accent").grid(
                 row=r, column=0, columnspan=2, sticky="w",
                 padx=10, pady=(12 if i else 8, 4))
             r += 1
             for key, val in rows:
-                tk.Label(body, text=key, bg=BAR, fg=FG_DIM, font=("Segoe UI", 9),
-                         anchor="nw").grid(row=r, column=0, sticky="nw",
-                                           padx=(18, 10), pady=2)
-                tk.Label(body, text=val, bg=BAR, fg=FG, font=("Segoe UI", 9),
+                self._tw(tk.Label(body, text=key, font=("Segoe UI", 9),
+                         anchor="nw"), bg="bar", fg="fg_dim").grid(
+                             row=r, column=0, sticky="nw", padx=(18, 10), pady=2)
+                self._tw(tk.Label(body, text=val, font=("Segoe UI", 9),
                          anchor="nw", justify="left",
-                         wraplength=self._edit_dpi_w(190)).grid(
+                         wraplength=self._edit_dpi_w(190)), bg="bar", fg="fg").grid(
                     row=r, column=1, sticky="nw", padx=(0, 10), pady=2)
                 r += 1
 
         if not has_embedded:
-            tk.Label(body, text=t("This photo has no embedded metadata "
+            self._tw(tk.Label(body, text=t("This photo has no embedded metadata "
                                   "(no colour profile or EXIF)."),
-                     bg=BAR, fg=FG_DIM, font=("Segoe UI", 9), anchor="w",
-                     justify="left", wraplength=self._edit_dpi_w(280)).grid(
+                     font=("Segoe UI", 9), anchor="w",
+                     justify="left", wraplength=self._edit_dpi_w(280)),
+                     bg="bar", fg="fg_dim").grid(
                 row=r, column=0, columnspan=2, sticky="w", padx=10, pady=(12, 6))
 
     def _danger_btn(self, parent, text, command):
-        "A red (destructive-action) dialog button (see ui/dialogs.py)."
-        return make_dialog_button(parent, text, command, danger=True)
+        "A red (destructive-action) dialog button."
+        return tintkit.Button(parent, self.theme, text, role="danger",
+                              variant="filled", command=command, bg="bg")
 
     # --- strip (the red button) --------------------------------------------
 
