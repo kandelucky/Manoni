@@ -18,8 +18,7 @@ from PIL import Image, ImageFilter
 
 import tintkit
 
-from ..config import (BAR, ACCENT, FG, FG_DIM, EDIT_PANEL_W, EDIT_PAD, CHIP_BG,
-                      DIVIDER)
+from ..config import EDIT_PANEL_W, EDIT_PAD
 from ..i18n import t
 
 
@@ -70,7 +69,7 @@ class ResizeMixin:
 
     def _build_resize_section(self, parent):
         "Resize panel: current size, mode toggle, a value entry + presets, apply."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
         self._resize_modes = ["px", "pct"]   # tab order for the mode toggle
         self._resize_mode = "px"             # "px" = long side, "pct" = percent
         self._resize_quality = "normal"      # soft / normal / sharp (resample)
@@ -79,8 +78,8 @@ class ResizeMixin:
 
         self._resize_group(f, t("Size"))
         # Current dimensions, refreshed on enter and after every resize.
-        self._resize_current = tk.Label(f, text="", bg=BAR, fg=FG_DIM, anchor="w",
-                                        font=("Segoe UI", 9))
+        self._resize_current = self._tw(tk.Label(f, text="", anchor="w",
+                                        font=("Segoe UI", 9)), bg="bar", fg="fg_dim")
         self._resize_current.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
 
         # Mode toggle: scale by the long side (px) or by a percentage — the two
@@ -91,32 +90,33 @@ class ResizeMixin:
         self._resize_mode_tabs.pack(padx=EDIT_PAD, pady=(0, 8))
 
         # Value entry + a live unit suffix (px / %). Enter applies.
-        erow = tk.Frame(f, bg=BAR)
+        erow = self._tw(tk.Frame(f), bg="bar")
         erow.pack(fill="x", padx=EDIT_PAD)
-        self._resize_unit = tk.Label(erow, text="px", bg=BAR, fg=FG_DIM,
-                                     font=("Segoe UI", 9))
+        self._resize_unit = self._tw(tk.Label(erow, text="px",
+                                     font=("Segoe UI", 9)), bg="bar", fg="fg_dim")
         self._resize_unit.pack(side="right", padx=(6, 0))
-        ent = tk.Entry(erow, textvariable=self._resize_var, bg=CHIP_BG, fg=FG,
-                       insertbackground=FG, relief="flat", justify="center",
-                       font=("Segoe UI", 11))
+        ent = self._tw(tk.Entry(erow, textvariable=self._resize_var,
+                       relief="flat", justify="center",
+                       font=("Segoe UI", 11)), bg="chip", fg="fg", insert="fg")
         ent.pack(side="left", fill="x", expand=True, ipady=5)
         ent.bind("<Return>", lambda e: self.apply_resize())
         self._resize_entry = ent
 
         # Quick-target chips (rebuilt when the mode changes).
-        self._resize_presets = tk.Frame(f, bg=BAR)
+        self._resize_presets = self._tw(tk.Frame(f), bg="bar")
         self._resize_presets.pack(fill="x", padx=EDIT_PAD, pady=(8, 2))
 
         # Live result of the current input ("→ W × H").
-        self._resize_result = tk.Label(f, text="", bg=BAR, fg=ACCENT, anchor="w",
-                                       font=("Segoe UI", 10, "bold"))
+        self._resize_result = self._tw(tk.Label(f, text="", anchor="w",
+                                       font=("Segoe UI", 10, "bold")),
+                                       bg="bar", fg="accent")
         self._resize_result.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
 
         # Pixel quality (resample filter). One setting drives the single photo
         # AND the whole-folder batch. The three are exclusive → a segmented control.
-        tk.Label(f, text=t("Pixels"), bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
-                                                    pady=(12, 4))
+        self._tw(tk.Label(f, text=t("Pixels"), anchor="w",
+                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
+                     fill="x", padx=EDIT_PAD, pady=(12, 4))
         qlabels = {"soft": t("Soft"), "normal": t("Normal"), "sharp": t("Sharp")}
         self._resize_q_tabs = tintkit.SegmentedTabs(
             f, self.theme, [qlabels[k] for k in self.RESIZE_QUALITIES],
@@ -126,10 +126,10 @@ class ResizeMixin:
 
         # Strength of the soft/sharp effect (a whole block, shown only for those
         # two — "normal" has no effect to dial). Packed before the hint label.
-        self._resize_str_block = tk.Frame(f, bg=BAR)
-        tk.Label(self._resize_str_block, text=t("Strength"), bg=BAR, fg=FG_DIM,
-                 anchor="w", font=("Segoe UI", 8, "bold")).pack(fill="x",
-                                                                pady=(8, 4))
+        self._resize_str_block = self._tw(tk.Frame(f), bg="bar")
+        self._tw(tk.Label(self._resize_str_block, text=t("Strength"),
+                 anchor="w", font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(fill="x", pady=(8, 4))
         slabels = {"light": t("Light"), "medium": t("Medium"), "strong": t("Strong")}
         self._resize_str_tabs = tintkit.SegmentedTabs(
             self._resize_str_block, self.theme,
@@ -137,10 +137,11 @@ class ResizeMixin:
             command=lambda i, _l: self._set_resize_strength(self.RESIZE_STRENGTHS[i]))
         self._resize_str_tabs.pack(anchor="w")
 
-        self._resize_q_hint = tk.Label(
+        self._resize_q_hint = self._tw(tk.Label(
             f, text=t("Soft = smoother · Sharp adds web output-sharpening."),
-            bg=BAR, fg=FG_DIM, anchor="w", justify="left", font=("Segoe UI", 8),
-            wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD))
+            anchor="w", justify="left", font=("Segoe UI", 8),
+            wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
+            bg="bar", fg="fg_dim")
         self._resize_q_hint.pack(fill="x", padx=EDIT_PAD, pady=(5, 0))
         self._set_resize_quality(self._resize_quality)   # paints chips + str block
 
@@ -157,20 +158,20 @@ class ResizeMixin:
         tintkit.HoverTip(reset_btn.canvas, self.theme,
                          t("Reset the size to the current photo"))
 
-        tk.Label(f, text=t("The original stays untouched — Save writes the resized copy."),
-                 bg=BAR, fg=FG_DIM, anchor="w", justify="left",
+        self._tw(tk.Label(f, text=t("The original stays untouched — Save writes the resized copy."),
+                 anchor="w", justify="left",
                  font=("Segoe UI", 8),
-                 wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)).pack(
-                     fill="x", padx=EDIT_PAD, pady=(2, 6))
+                 wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
+                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
 
         # --- Whole-folder batch (same size rule applied to every photo) -------
         self._resize_group(f, t("Whole folder"))
-        tk.Label(f, text=t("Resize every photo in the folder with the size above. "
+        self._tw(tk.Label(f, text=t("Resize every photo in the folder with the size above. "
                            "Originals are untouched; the copies go to a new folder."),
-                 bg=BAR, fg=FG_DIM, anchor="w", justify="left",
+                 anchor="w", justify="left",
                  font=("Segoe UI", 8),
-                 wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)).pack(
-                     fill="x", padx=EDIT_PAD, pady=(0, 6))
+                 wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
+                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
 
         folder_btn = tintkit.Button(
             f, self.theme, t("Resize the whole folder"), role="neutral",
@@ -184,11 +185,11 @@ class ResizeMixin:
 
     def _resize_group(self, parent, text):
         "A thin divider + small bold caption titling the resize panel."
-        tk.Frame(parent, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
-                                                    pady=(12, 0))
-        tk.Label(parent, text=text, bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
-                                                    pady=(4, 6))
+        self._tw(tk.Frame(parent, height=1), bg="divider").pack(
+            fill="x", padx=EDIT_PAD, pady=(12, 0))
+        self._tw(tk.Label(parent, text=text, anchor="w",
+                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
+                     fill="x", padx=EDIT_PAD, pady=(4, 6))
 
     # --- Mode + presets -----------------------------------------------------
 
