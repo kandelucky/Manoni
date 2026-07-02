@@ -12,19 +12,13 @@ from PIL import Image
 
 import tintkit
 
-from ..config import (ACCENT, BAR, BG, FG, FG_DIM, HOVER,
-                      EDIT_PANEL_W, EDIT_PAD, ON_ACCENT, CHIP_BG)
-from ..widgets import Tooltip
+# ACCENT / ON_ACCENT stay as fixed config constants for the on-photo crop-overlay
+# draw (handles) — accent is scheme-independent and those draws sit over the
+# image, not on chrome. Every crop-panel widget reads self.theme live instead so
+# the panel switches dark<->light with the rest of the app.
+from ..config import ACCENT, ON_ACCENT, EDIT_PANEL_W, EDIT_PAD
 from ..i18n import t
-from .dialogs import make_dialog_button, center_over
-
-
-# Local palette for the crop panel (kept here so the rest of the app is unaffected).
-# CHIP_BG (neutral preset / row background) is the shared one from config.
-SEG_TRACK = "#202020"   # segmented-control trough
-SEL_BG    = "#26415c"   # accent-tinted fill for a selected row
-GLYPH     = "#cfcfcf"   # ratio-shape stroke on a neutral chip
-GLYPH_DIM = "#bdbdbd"   # ratio-shape stroke on the small ratio cards
+from .dialogs import center_over
 
 
 class CropMixin:
@@ -43,13 +37,17 @@ class CropMixin:
 
     def _build_crop_section(self, parent):
         "Crop panel: form segment + ratio cards + social rows + saved sizes + apply."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
         # Every selectable element registers a (widget, paint) pair so one of them
         # can be shown active at a time. Fixed selectors (segment/cards/social) are
         # built once; the saved-size rows are rebuilt as that list changes.
         self._crop_selectors = []
         self._size_selectors = []
         self._crop_btn_active = None
+        # A dark<->light switch repaints every selector to its resting/active look
+        # through the same registry the panel uses at runtime (built once here, so
+        # subscribing once is safe — same lifetime as the panel).
+        self.theme.subscribe(self._restyle_crop_chips)
 
         self._crop_group_header(f, "ratio", t("Shape"))
         self._build_crop_segment(f)
@@ -92,8 +90,10 @@ class CropMixin:
 
     # --- Ratio-shape glyph (a small rectangle drawn at the right proportions) -
 
-    def _ratio_glyph(self, parent, ratio, box=24, bg=CHIP_BG, stroke=GLYPH):
+    def _ratio_glyph(self, parent, ratio, box=24, bg=None, stroke=None):
         "A tiny canvas holding a rectangle of aspect `ratio`, centered in `box` px."
+        bg = bg or self.theme["chip"]
+        stroke = stroke or self.theme["fg"]
         px = self._edit_dpi_w(box)
         cv = tk.Canvas(parent, width=px, height=px, bg=bg,
                        highlightthickness=0, bd=0)
@@ -117,20 +117,20 @@ class CropMixin:
 
     def _crop_group_header(self, parent, icon_name, text):
         "A small icon + dim bold caption that titles a group in the crop panel."
-        row = tk.Frame(parent, bg=BAR)
+        row = self._tw(tk.Frame(parent), bg="bar")
         row.pack(fill="x", padx=EDIT_PAD, pady=(13, 6))
         img = self.icon(icon_name, size=12)
         if img is not None:
-            ic = tk.Label(row, image=img, bg=BAR)
+            ic = self._tw(tk.Label(row, image=img), bg="bar")
             ic.pack(side="left", padx=(0, 6))
-        tk.Label(row, text=text, bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(side="left")
+        self._tw(tk.Label(row, text=text, anchor="w",
+                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
 
     # --- Form segment: Free / Orig. / Custom --------------------------------
 
     def _build_crop_segment(self, parent):
         "Segmented control for the crop kind (free / original / one-off custom)."
-        track = tk.Frame(parent, bg=SEG_TRACK)
+        track = self._tw(tk.Frame(parent), bg="bg")   # trough is the darkest surface
         track.pack(fill="x", padx=EDIT_PAD, pady=(0, 5))
         for icon_name, label, kind in [("maximize", t("Free"), None),
                                        ("image", t("Orig."), "orig"),
@@ -139,26 +139,28 @@ class CropMixin:
 
     def _segment_button(self, track, icon_name, label, kind):
         "One segment cell (icon over label); active = filled, like a tab."
-        cell = tk.Frame(track, bg=SEG_TRACK, cursor="hand2")
+        cell = tk.Frame(track, bg=self.theme["bg"], cursor="hand2")
         cell.pack(side="left", fill="both", expand=True, padx=2, pady=2)
         img = self.icon(icon_name, size=15)
-        ic = (tk.Label(cell, image=img, bg=SEG_TRACK) if img is not None
-              else tk.Label(cell, text="□", bg=SEG_TRACK, fg=FG))
+        ic = (tk.Label(cell, image=img, bg=self.theme["bg"]) if img is not None
+              else tk.Label(cell, text="□", bg=self.theme["bg"], fg=self.theme["fg"]))
         ic.pack(pady=(6, 1))
-        tx = tk.Label(cell, text=label, bg=SEG_TRACK, fg=FG_DIM,
+        tx = tk.Label(cell, text=label, bg=self.theme["bg"], fg=self.theme["fg_dim"],
                       font=("Segoe UI", 8))
         tx.pack(pady=(0, 6))
 
         def paint(active):
-            bg = CHIP_BG if active else SEG_TRACK
+            bg = self.theme["chip"] if active else self.theme["bg"]
             cell.configure(bg=bg)
             ic.configure(bg=bg)
-            tx.configure(bg=bg, fg=FG if active else FG_DIM)
+            tx.configure(bg=bg, fg=self.theme["fg"] if active else self.theme["fg_dim"])
 
         def hover(on):
             if cell is self._crop_btn_active:
                 return
-            bg = "#2a2a2a" if on else SEG_TRACK
+            # halfway between the trough and the active fill = a gentle hint
+            bg = tintkit.mix(self.theme["bg"], self.theme["chip"], 0.5) if on \
+                else self.theme["bg"]
             cell.configure(bg=bg)
             ic.configure(bg=bg)
             tx.configure(bg=bg)
@@ -192,7 +194,7 @@ class CropMixin:
 
     def _build_ratio_cards(self, parent):
         "A 4-column row of small ratio cards (shape + label)."
-        grid = tk.Frame(parent, bg=BAR)
+        grid = self._tw(tk.Frame(parent), bg="bar")
         grid.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
         for i in range(len(self.CROP_RATIO_CARDS)):
             grid.columnconfigure(i, weight=1, uniform="rc")
@@ -201,28 +203,30 @@ class CropMixin:
 
     def _ratio_card(self, grid, label, ratio, col):
         "One ratio card: a proportion shape over its label; active = accent fill."
-        card = tk.Frame(grid, bg=CHIP_BG, cursor="hand2")
+        card = tk.Frame(grid, bg=self.theme["chip"], cursor="hand2")
         card.grid(row=0, column=col, sticky="ew", padx=2, pady=2)
-        glyph = self._ratio_glyph(card, ratio, box=22, bg=CHIP_BG, stroke=GLYPH_DIM)
+        glyph = self._ratio_glyph(card, ratio, box=22, bg=self.theme["chip"],
+                                  stroke=self.theme["fg_dim"])
         glyph.pack(pady=(8, 3))
-        tx = tk.Label(card, text=label, bg=CHIP_BG, fg=FG_DIM,
+        tx = tk.Label(card, text=label, bg=self.theme["chip"], fg=self.theme["fg_dim"],
                       font=("Segoe UI", 8))
         tx.pack(pady=(0, 7))
 
         def paint(active):
-            bg = ACCENT if active else CHIP_BG
+            bg = self.theme["accent"] if active else self.theme["chip"]
             card.configure(bg=bg)
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, ON_ACCENT if active else GLYPH_DIM)
-            tx.configure(bg=bg, fg=ON_ACCENT if active else FG_DIM)
+            self._draw_ratio_glyph(
+                glyph, ratio, self.theme["on_accent"] if active else self.theme["fg_dim"])
+            tx.configure(bg=bg, fg=self.theme["on_accent"] if active else self.theme["fg_dim"])
 
         def hover(on):
             if card is self._crop_btn_active:
                 return
-            bg = HOVER if on else CHIP_BG
+            bg = self.theme["hover"] if on else self.theme["chip"]
             card.configure(bg=bg)
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, GLYPH_DIM)
+            self._draw_ratio_glyph(glyph, ratio, self.theme["fg_dim"])
             tx.configure(bg=bg)
 
         for w in (card, glyph, tx):
@@ -299,47 +303,49 @@ class CropMixin:
 
     def _build_social_rows(self, parent):
         "A vertical list of social-network presets, each a full-width row."
-        wrap = tk.Frame(parent, bg=BAR)
+        wrap = self._tw(tk.Frame(parent), bg="bar")
         wrap.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
         for name, sub, rlabel, ratio in self.CROP_SOCIAL:
             self._preset_row(wrap, t(name), t(sub), rlabel, ratio)
 
     def _preset_row(self, parent, name, sub, rlabel, ratio):
         "One social row: shape · name/subtitle · ratio. Active = accent-tinted."
-        row = tk.Frame(parent, bg=CHIP_BG, cursor="hand2")
+        row = tk.Frame(parent, bg=self.theme["chip"], cursor="hand2")
         row.pack(fill="x", pady=2)
-        glyph = self._ratio_glyph(row, ratio, box=24, bg=CHIP_BG, stroke=GLYPH)
+        glyph = self._ratio_glyph(row, ratio, box=24, bg=self.theme["chip"],
+                                  stroke=self.theme["fg"])
         glyph.pack(side="left", padx=(8, 10), pady=6)
-        txt = tk.Frame(row, bg=CHIP_BG)
+        txt = tk.Frame(row, bg=self.theme["chip"])
         txt.pack(side="left", fill="x", expand=True)
-        t1 = tk.Label(txt, text=name, bg=CHIP_BG, fg=FG, anchor="w",
-                      font=("Segoe UI", 9))
+        t1 = tk.Label(txt, text=name, bg=self.theme["chip"], fg=self.theme["fg"],
+                      anchor="w", font=("Segoe UI", 9))
         t1.pack(fill="x")
-        t2 = tk.Label(txt, text=sub, bg=CHIP_BG, fg=FG_DIM, anchor="w",
-                      font=("Segoe UI", 7))
+        t2 = tk.Label(txt, text=sub, bg=self.theme["chip"], fg=self.theme["fg_dim"],
+                      anchor="w", font=("Segoe UI", 7))
         t2.pack(fill="x")
-        rl = tk.Label(row, text=rlabel, bg=CHIP_BG, fg=FG_DIM,
+        rl = tk.Label(row, text=rlabel, bg=self.theme["chip"], fg=self.theme["fg_dim"],
                       font=("Segoe UI", 8))
         rl.pack(side="right", padx=10)
         cells = (row, txt, t2)
 
         def paint(active):
-            bg = SEL_BG if active else CHIP_BG
+            bg = self.theme["accent_soft"] if active else self.theme["chip"]
             for w in cells:
                 w.configure(bg=bg)
-            t1.configure(bg=bg, fg="#ffffff" if active else FG)
-            rl.configure(bg=bg, fg=ACCENT if active else FG_DIM)
+            t1.configure(bg=bg, fg=self.theme["on_accent"] if active else self.theme["fg"])
+            rl.configure(bg=bg, fg=self.theme["accent"] if active else self.theme["fg_dim"])
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, ACCENT if active else GLYPH)
+            self._draw_ratio_glyph(glyph, ratio,
+                                   self.theme["accent"] if active else self.theme["fg"])
 
         def hover(on):
             if row is self._crop_btn_active:
                 return
-            bg = HOVER if on else CHIP_BG
+            bg = self.theme["hover"] if on else self.theme["chip"]
             for w in (row, txt, t1, t2, rl):
                 w.configure(bg=bg)
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, GLYPH)
+            self._draw_ratio_glyph(glyph, ratio, self.theme["fg"])
 
         for w in (row, glyph, txt, t1, t2, rl):
             w.bind("<Button-1>", lambda e: self._pick_simple(row, ratio))
@@ -351,42 +357,47 @@ class CropMixin:
 
     def _build_my_sizes(self, parent):
         "The '+ Your size' add button plus the scrollable list of saved sizes."
-        add = tk.Frame(parent, bg=BAR, cursor="hand2",
-                       highlightbackground="#3d3d3d", highlightthickness=1)
+        # The add button has only a resting look (no active state), so _tw keeps
+        # its fill/accent text/border in sync on a theme switch; the hover closure
+        # reads the live theme for its transient accent-tint.
+        add = self._tw(tk.Frame(parent, cursor="hand2", highlightthickness=1),
+                       bg="bar", hl="border")
         add.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
-        inner = tk.Frame(add, bg=BAR)
+        inner = self._tw(tk.Frame(add), bg="bar")
         inner.pack(pady=6)
-        plus = tk.Label(inner, text="＋", bg=BAR, fg=ACCENT,
-                        font=("Segoe UI", 11, "bold"))
+        plus = self._tw(tk.Label(inner, text="＋", font=("Segoe UI", 11, "bold")),
+                        bg="bar", fg="accent")
         plus.pack(side="left", padx=(0, 5))
-        lbl = tk.Label(inner, text=t("Your size"), bg=BAR, fg=ACCENT,
-                       font=("Segoe UI", 8, "bold"))
+        lbl = self._tw(tk.Label(inner, text=t("Your size"),
+                       font=("Segoe UI", 8, "bold")), bg="bar", fg="accent")
         lbl.pack(side="left")
         addparts = (add, inner, plus, lbl)
 
         def add_hover(on):
-            bg = "#202b38" if on else BAR
+            bg = tintkit.mix(self.theme["bar"], self.theme["accent"], 0.12) if on \
+                else self.theme["bar"]
             for w in addparts:
                 w.configure(bg=bg)
-            add.configure(highlightbackground=ACCENT if on else "#3d3d3d")
+            add.configure(highlightbackground=self.theme["accent"] if on
+                          else self.theme["border"])
 
         for w in addparts:
             w.bind("<Button-1>", lambda e: self._add_custom_size())
             w.bind("<Enter>", lambda e: add_hover(True))
             w.bind("<Leave>", lambda e: add_hover(False))
-        add._tip = Tooltip(add, t("Add your size to the list"))
+        tintkit.HoverTip(add, self.theme, t("Add your size to the list"))
 
         # Scroll area: a fixed-height canvas + inner frame + slim scrollbar. The
         # canvas height tracks the content up to a cap, then the list scrolls.
         self._sizes_max_h = self._edit_dpi_w(116)
-        holder = tk.Frame(parent, bg=BAR)
+        holder = self._tw(tk.Frame(parent), bg="bar")
         holder.pack(fill="x", padx=EDIT_PAD)
-        cv = tk.Canvas(holder, bg=BAR, highlightthickness=0, bd=0,
-                       height=self._sizes_max_h)
+        cv = self._tw(tk.Canvas(holder, highlightthickness=0, bd=0,
+                      height=self._sizes_max_h), bg="bar")
         sb = ttk.Scrollbar(holder, orient="vertical", command=cv.yview,
                            style="Sidebar.Vertical.TScrollbar")
         cv.configure(yscrollcommand=sb.set)
-        inner = tk.Frame(cv, bg=BAR)
+        inner = self._tw(tk.Frame(cv), bg="bar")
         win = cv.create_window((0, 0), window=inner, anchor="nw")
         cv.pack(side="left", fill="x", expand=True)
 
@@ -426,10 +437,10 @@ class CropMixin:
             w.destroy()
         self._size_selectors = []
         if not self.crop_sizes:
-            ph = tk.Label(inner, text=t("No sizes yet"),
-                          bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), anchor="w",
-                          justify="left",
-                          wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD - 10))
+            ph = self._tw(tk.Label(inner, text=t("No sizes yet"),
+                          font=("Segoe UI", 8), anchor="w", justify="left",
+                          wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD - 10)),
+                          bg="bar", fg="fg_dim")
             ph.pack(fill="x", pady=(2, 4))
             self._bind_sizes_wheel(ph)
         else:
@@ -440,45 +451,48 @@ class CropMixin:
     def _size_row(self, parent, idx, sz):
         "One saved-size row: shape · name/dimensions · edit · delete. Selectable."
         ratio = sz["w"] / sz["h"]
-        row = tk.Frame(parent, bg=CHIP_BG, cursor="hand2")
+        row = tk.Frame(parent, bg=self.theme["chip"], cursor="hand2")
         row.pack(fill="x", pady=2)
-        glyph = self._ratio_glyph(row, ratio, box=22, bg=CHIP_BG, stroke=GLYPH)
+        glyph = self._ratio_glyph(row, ratio, box=22, bg=self.theme["chip"],
+                                  stroke=self.theme["fg"])
         glyph.pack(side="left", padx=(8, 10), pady=5)
-        acts = tk.Frame(row, bg=CHIP_BG)
+        acts = tk.Frame(row, bg=self.theme["chip"])
         acts.pack(side="right", padx=(0, 6))
-        edit = self._size_action(acts, "pencil", "#2c3b4f", t("Edit"),
+        edit = self._size_action(acts, "pencil", "accent", t("Edit"),
                                  lambda: self._edit_custom_size(idx))
         edit.pack(side="left")
-        dele = self._size_action(acts, "trash-2", "#4a2b2b", t("Delete"),
+        dele = self._size_action(acts, "trash-2", "danger", t("Delete"),
                                  lambda: self._delete_custom_size(idx))
         dele.pack(side="left")
-        txt = tk.Frame(row, bg=CHIP_BG)
+        txt = tk.Frame(row, bg=self.theme["chip"])
         txt.pack(side="left", fill="x", expand=True)
-        t1 = tk.Label(txt, text=sz["name"] or self._size_dims(sz), bg=CHIP_BG,
-                      fg=FG, anchor="w", font=("Segoe UI", 9))
+        t1 = tk.Label(txt, text=sz["name"] or self._size_dims(sz),
+                      bg=self.theme["chip"], fg=self.theme["fg"], anchor="w",
+                      font=("Segoe UI", 9))
         t1.pack(fill="x")
-        t2 = tk.Label(txt, text=self._size_caption(sz), bg=CHIP_BG, fg=FG_DIM,
-                      anchor="w", font=("Segoe UI", 7))
+        t2 = tk.Label(txt, text=self._size_caption(sz), bg=self.theme["chip"],
+                      fg=self.theme["fg_dim"], anchor="w", font=("Segoe UI", 7))
         t2.pack(fill="x")
 
         def paint(active):
-            bg = SEL_BG if active else CHIP_BG
+            bg = self.theme["accent_soft"] if active else self.theme["chip"]
             for w in (row, txt, t2, acts):
                 w.configure(bg=bg)
-            t1.configure(bg=bg, fg="#ffffff" if active else FG)
+            t1.configure(bg=bg, fg=self.theme["on_accent"] if active else self.theme["fg"])
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, ACCENT if active else GLYPH)
+            self._draw_ratio_glyph(glyph, ratio,
+                                   self.theme["accent"] if active else self.theme["fg"])
             edit.configure(bg=bg)
             dele.configure(bg=bg)
 
         def hover(on):
             if row is self._crop_btn_active:
                 return
-            bg = HOVER if on else CHIP_BG
+            bg = self.theme["hover"] if on else self.theme["chip"]
             for w in (row, txt, t1, t2, acts, edit, dele):
                 w.configure(bg=bg)
             glyph.configure(bg=bg)
-            self._draw_ratio_glyph(glyph, ratio, GLYPH)
+            self._draw_ratio_glyph(glyph, ratio, self.theme["fg"])
 
         for w in (row, glyph, txt, t1, t2):
             w.bind("<Button-1>", lambda e: self._pick_simple(row, ratio))
@@ -488,16 +502,19 @@ class CropMixin:
             self._bind_sizes_wheel(w)
         self._size_selectors.append((row, paint))
 
-    def _size_action(self, parent, icon_name, hov, tip, command):
-        "A small edit/delete icon button inside a saved-size row."
+    def _size_action(self, parent, icon_name, tint, tip, command):
+        "A small edit/delete icon button inside a saved-size row (`tint` = the"
+        " theme token its hover tints toward, e.g. 'accent' / 'danger')."
         img = self.icon(icon_name, size=13)
-        b = (tk.Label(parent, image=img, bg=CHIP_BG, cursor="hand2") if img
-             is not None else tk.Label(parent, text="·", bg=CHIP_BG, fg=FG_DIM,
-                                       cursor="hand2"))
+        chip = self.theme["chip"]
+        b = (tk.Label(parent, image=img, bg=chip, cursor="hand2") if img
+             is not None else tk.Label(parent, text="·", bg=chip,
+                                       fg=self.theme["fg_dim"], cursor="hand2"))
         b.bind("<Button-1>", lambda e: command())
-        b.bind("<Enter>", lambda e: b.configure(bg=hov))
-        b.bind("<Leave>", lambda e: b.configure(bg=CHIP_BG))
-        b._tip = Tooltip(b, tip)
+        b.bind("<Enter>", lambda e: b.configure(
+            bg=tintkit.mix(self.theme["chip"], self.theme[tint], 0.35)))
+        b.bind("<Leave>", lambda e: b.configure(bg=self.theme["chip"]))
+        tintkit.HoverTip(b, self.theme, tip)
         return b
 
     # --- Saved-size formatting + CRUD ---------------------------------------
@@ -575,7 +592,7 @@ class CropMixin:
 
     def _build_crop_actions(self, parent):
         "Flip (icon) + Crop (primary) on one row, then the outline Cancel button."
-        bar = tk.Frame(parent, bg=BAR)
+        bar = self._tw(tk.Frame(parent), bg="bar")
         bar.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
 
         flip = tintkit.IconButton(bar, self.theme, "arrow-left-right", w=44, h=36,
@@ -598,38 +615,42 @@ class CropMixin:
     # --- Create / edit "Your size" dialog (same window for both) ------------
 
     def _ask_size_dialog(self, title, name="", w="", h="", with_name=True):
-        "Modal dark dialog for a name + width:height. Returns (name, w, h) or None."
+        "Modal dialog for a name + width:height. Returns (name, w, h) or None."
+        # Modal (grab_set + wait_window) → can't outlive a theme switch, so read
+        # the live theme once into locals (the nav/saving dialog pattern).
+        bg, bar = self.theme["bg"], self.theme["bar"]
+        fg, fg_dim = self.theme["fg"], self.theme["fg_dim"]
         result = {"val": None}
         dlg = tk.Toplevel(self.root)
         dlg.title(t(title))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t(title), bg=BG, fg=FG,
+        tk.Label(wrap, text=t(title), bg=bg, fg=fg,
                  font=("Segoe UI", 12, "bold")).pack(anchor="w")
         tk.Label(wrap, text=t("Name it and set width : height (pixels or a ratio, e.g. 4:5)."),
-                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9), justify="left",
+                 bg=bg, fg=fg_dim, font=("Segoe UI", 9), justify="left",
                  wraplength=300).pack(anchor="w", pady=(5, 14))
 
         e_name = None
         if with_name:
-            tk.Label(wrap, text=t("Name"), bg=BG, fg=FG_DIM,
+            tk.Label(wrap, text=t("Name"), bg=bg, fg=fg_dim,
                      font=("Segoe UI", 8, "bold")).pack(anchor="w")
-            e_name = tk.Entry(wrap, bg=BAR, fg=FG, insertbackground=FG,
+            e_name = tk.Entry(wrap, bg=bar, fg=fg, insertbackground=fg,
                               relief="flat", font=("Segoe UI", 11))
             e_name.insert(0, name)
             e_name.pack(fill="x", ipady=5, pady=(4, 12))
 
-        tk.Label(wrap, text=t("Size — Width : Height"), bg=BG, fg=FG_DIM,
+        tk.Label(wrap, text=t("Size — Width : Height"), bg=bg, fg=fg_dim,
                  font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
-        row = tk.Frame(wrap, bg=BG)
+        row = tk.Frame(wrap, bg=bg)
         row.pack(anchor="w")
 
         def mkentry(value):
-            e = tk.Entry(row, bg=BAR, fg=FG, insertbackground=FG, width=6,
+            e = tk.Entry(row, bg=bar, fg=fg, insertbackground=fg, width=6,
                          relief="flat", justify="center", font=("Segoe UI", 12))
             e.insert(0, value)
             return e
@@ -640,11 +661,12 @@ class CropMixin:
             w0 = str(int(round(self.crop_rect[2] - self.crop_rect[0])))
             h0 = str(int(round(self.crop_rect[3] - self.crop_rect[1])))
         e_w = mkentry(w0); e_w.pack(side="left", ipady=4)
-        tk.Label(row, text=":", bg=BG, fg=FG,
+        tk.Label(row, text=":", bg=bg, fg=fg,
                  font=("Segoe UI", 13, "bold")).pack(side="left", padx=8)
         e_h = mkentry(h0); e_h.pack(side="left", ipady=4)
 
-        err = tk.Label(wrap, text="", bg=BG, fg="#ff6b6b", font=("Segoe UI", 8))
+        err = tk.Label(wrap, text="", bg=bg, fg=self.theme["danger"],
+                       font=("Segoe UI", 8))
         err.pack(anchor="w", pady=(8, 0))
 
         def confirm():
@@ -663,12 +685,12 @@ class CropMixin:
             result["val"] = (nm, cw, ch)
             dlg.destroy()
 
-        btnrow = tk.Frame(wrap, bg=BG)
+        btnrow = tk.Frame(wrap, bg=bg)
         btnrow.pack(anchor="e", pady=(14, 0))
 
-        make_dialog_button(btnrow, t("Cancel"), dlg.destroy).pack(
+        self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(
             side="right", padx=(8, 0))
-        make_dialog_button(btnrow, t("Save"), confirm, primary=True).pack(
+        self._dialog_btn(btnrow, t("Save"), confirm, primary=True).pack(
             side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)

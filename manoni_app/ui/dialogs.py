@@ -1,39 +1,10 @@
-"""Shared dialog building blocks: the flat dialog button and the
-center-over-the-main-window placement.
+"""Shared dialog placement: center a Toplevel over the main window.
 
-These used to be copy-pasted across nav / saving / filters / crop / metadata /
-actions (several verbatim copies of the same button, plus the same centering
-math). They live here once so a tweak to the look or placement lands everywhere.
+This module used to also hold `make_dialog_button` (a flat label-as-button copied
+across nav / saving / filters / crop / metadata / actions). Every dialog now
+builds a themed `tintkit.Button` (via each mixin's `self._dialog_btn`), so only
+the centering math remains here.
 """
-
-from ..config import BAR, HOVER, ACCENT, FG, ON_ACCENT, ACCENT_HOVER
-
-import tkinter as tk
-
-DANGER = "#a83232"        # destructive-action button (e.g. "Delete metadata")
-DANGER_HOVER = "#c43d3d"
-
-
-def make_dialog_button(parent, text, command, primary=False, danger=False):
-    """A flat label-as-button for dialogs.
-
-    primary -> accent fill + bold; danger -> red fill + white + bold;
-    otherwise the neutral BAR fill. Click fires `command`.
-    """
-    if danger:
-        bg, hov, fg, bold = DANGER, DANGER_HOVER, "#ffffff", True
-    else:
-        bg = ACCENT if primary else BAR
-        hov = ACCENT_HOVER if primary else HOVER
-        fg = ON_ACCENT if primary else FG
-        bold = primary
-    b = tk.Label(parent, text=text, bg=bg, fg=fg, cursor="hand2",
-                 padx=14, pady=7,
-                 font=("Segoe UI", 9, "bold" if bold else "normal"))
-    b.bind("<Enter>", lambda e: b.configure(bg=hov))
-    b.bind("<Leave>", lambda e: b.configure(bg=bg))
-    b.bind("<Button-1>", lambda e: command())
-    return b
 
 
 def center_over(root, dlg):
