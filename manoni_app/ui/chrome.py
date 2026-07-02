@@ -61,6 +61,31 @@ class ChromeMixin:
         self.icons[key] = img
         return img
 
+    # --- Live theming for plain tk widgets ----------------------------------
+
+    def _tw(self, w, bg=None, fg=None):
+        "Bind a plain tk widget to theme tokens; restyle now + on every theme.set."
+        " Lets a not-yet-tintkit tk.Label/Frame follow dark<->light like the"
+        " migrated widgets do. `bg`/`fg` are token KEYS (\"bar\", \"fg_dim\"…)."
+        def restyle():
+            kw = {}
+            if bg is not None:
+                kw["bg"] = self.theme[bg]
+            if fg is not None:
+                kw["fg"] = self.theme[fg]
+            try:
+                w.configure(**kw)
+            except tk.TclError:                  # widget already destroyed
+                self.theme.unsubscribe(restyle)
+
+        def _drop(e):
+            if e.widget is w:                    # ignore child <Destroy> bubbling
+                self.theme.unsubscribe(restyle)
+        self.theme.subscribe(restyle)
+        w.bind("<Destroy>", _drop, add="+")
+        restyle()
+        return w
+
     def _tool_button(self, parent, icon_name, command, tooltip="", size=None,
                      color=None):
         "A flat icon button with hover effect (falls back to text if no icon)."

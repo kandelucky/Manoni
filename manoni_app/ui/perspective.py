@@ -14,7 +14,7 @@ import tkinter as tk
 
 import tintkit
 
-from ..config import BAR, FG_DIM, EDIT_PAD
+from ..config import EDIT_PAD
 from ..i18n import t
 
 
@@ -23,13 +23,13 @@ class PerspectiveMixin:
 
     def _build_perspective_section(self, parent):
         "Perspective panel: vertical + horizontal keystone sliders, then Apply."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
-        intro = tk.Label(
+        intro = self._tw(tk.Label(
             f, text=t("Straighten converging verticals or horizontals "
                       "(buildings shot from below / to the side)."),
-            bg=BAR, fg=FG_DIM, font=("Segoe UI", 8), justify="left", anchor="w",
-            wraplength=self._edit_dpi_w(190))
+            font=("Segoe UI", 8), justify="left", anchor="w",
+            wraplength=self._edit_dpi_w(190)), bg="bar", fg="fg_dim")
         intro.pack(fill="x", padx=EDIT_PAD, pady=(12, 6))
 
         self._persp_group_header(f, "move", t("Vertical"))
@@ -47,13 +47,13 @@ class PerspectiveMixin:
 
     def _persp_group_header(self, parent, icon_name, text):
         "A small icon + dim caption titling a slider in the perspective panel."
-        row = tk.Frame(parent, bg=BAR)
+        row = self._tw(tk.Frame(parent), bg="bar")
         row.pack(fill="x", padx=EDIT_PAD, pady=(12, 4))
         img = self.icon(icon_name, size=12)
         if img is not None:
-            tk.Label(row, image=img, bg=BAR).pack(side="left", padx=(0, 6))
-        tk.Label(row, text=text, bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(side="left")
+            self._tw(tk.Label(row, image=img), bg="bar").pack(side="left", padx=(0, 6))
+        self._tw(tk.Label(row, text=text, anchor="w",
+                          font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
 
     def _persp_slider(self, parent, label, attr, tip):
         "A −100…+100 keystone TitledSlider (0 = none); reset icon sits in its strip."
