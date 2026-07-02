@@ -15,7 +15,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image, ImageTk
 
-from ..config import (BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM, SUPPORTED,
+# Chrome + sidebar cells now read colours from self.theme (via chrome's `_tw`);
+# HOVER/ACCENT/FG/FG_DIM stay imported only for the loading overlay, which is a
+# deliberate near-black blackout (LOADING_BG) that keeps its fixed colours in
+# both schemes. CULL_KEEP_TINT/REJECT_TINT are scheme-independent icon tints.
+from ..config import (HOVER, ACCENT, FG, FG_DIM, SUPPORTED,
                       ICON_DIR, CULL_KEEP_TINT, CULL_REJECT_TINT)
 from ..i18n import t
 from ..storage import unique_path
@@ -38,7 +42,7 @@ class BrowserMixin:
         # preview column (col 2). In edit mode the full-height tool panels (cols
         # 3-4) sit beside it and clip it on the right. Row 1 above it holds the
         # filter preview strip (when shown); this nav/zoom bar is the last row.
-        bar = tk.Frame(self.body, bg=BAR, height=34)
+        bar = self._tw(tk.Frame(self.body, height=34), bg="bar")
         bar.grid(row=2, column=2, sticky="ew")
         bar.grid_propagate(False)
 
@@ -50,7 +54,7 @@ class BrowserMixin:
         # does in the bottom info bar (nav._nav_hint); `sub` is an optional
         # trailing note — keep / reject use it to show where they save (or that
         # no folder is set yet), evaluated fresh so it tracks Settings.
-        nav = tk.Frame(bar, bg=BAR)
+        nav = self._tw(tk.Frame(bar), bg="bar")
         nav.pack(side="right", padx=8)
         for icon_name, command, tip, color, hint, sub in [
             ("chevrons-left", self._nav_click_first, t("First"), None,
@@ -74,12 +78,16 @@ class BrowserMixin:
                          h, s() if callable(s) else "", c), add="+")
             btn.bind("<Leave>", lambda e: self._nav_hint_clear(), add="+")
             btn.pack(side="left", padx=4, pady=4)
-        self.lbl_pos = tk.Label(nav, text="0 / 0", bg=BAR, fg=FG_DIM,
-                                font=("Segoe UI", 9))
+        self.lbl_pos = self._tw(
+            tk.Label(nav, text="0 / 0", font=("Segoe UI", 9)),
+            bg="bar", fg="fg_dim")
         self.lbl_pos.pack(side="left", padx=10)
+        # The thumbnail selection border reads from the theme; repaint the visible
+        # cells' borders on a dark<->light switch (this bar is built once).
+        self.theme.subscribe(self._highlight_thumb)
 
         # CENTER: rotate the current photo (truly centered over the strip).
-        rot = tk.Frame(bar, bg=BAR)
+        rot = self._tw(tk.Frame(bar), bg="bar")
         rot.place(relx=0.5, rely=0.5, anchor="center")
         for icon_name, command, tip in [
             ("rotate-ccw", self.rotate_left, t("Rotate left")),
@@ -92,14 +100,17 @@ class BrowserMixin:
 
     def _build_zoom_controls(self, bar):
         "Quick-size chips + −/% /+ stepper, packed at the left of the bottom bar."
-        zone = tk.Frame(bar, bg=BAR)
+        zone = self._tw(tk.Frame(bar), bg="bar")
         zone.pack(side="left", padx=10)
 
-        # Quick-size preset chips: Fit · 50% · 100% · 200%.
+        # Quick-size preset chips: Fit · 50% · 100% · 200%. Their fg is state-driven
+        # (accent when active, fg_dim otherwise, fg on hover) — owned by
+        # _update_zoom_readout / _chip_hover — so `_tw` threads only the bg here.
         self.zoom_presets = []
         for label, scale in self.ZOOM_PRESETS:
-            chip = tk.Label(zone, text=label, bg=BAR, fg=FG_DIM, cursor="hand2",
-                            font=("Segoe UI", 8, "bold"), padx=6, pady=2)
+            chip = self._tw(
+                tk.Label(zone, text=label, fg=self.theme["fg_dim"], cursor="hand2",
+                         font=("Segoe UI", 8, "bold"), padx=6, pady=2), bg="bar")
             chip._scale = scale
             if scale is None:
                 chip.bind("<Button-1>", lambda e: self.fit_view())
@@ -115,17 +126,21 @@ class BrowserMixin:
         # Stepper: − [ 49% ] +  (zoom-out / readout / zoom-in).
         self._tool_button(zone, "zoom-out", self.zoom_out,
                           t("Zoom out")).pack(side="left", padx=2)
-        self.lbl_zoom = tk.Label(zone, text="—", bg=BAR, fg=FG, width=6,
-                                 font=("Segoe UI", 9, "bold"))
+        self.lbl_zoom = self._tw(
+            tk.Label(zone, text="—", width=6, font=("Segoe UI", 9, "bold")),
+            bg="bar", fg="fg")
         self.lbl_zoom.pack(side="left")
         self._tool_button(zone, "zoom-in", self.zoom_in,
                           t("Zoom in")).pack(side="left", padx=2)
+        # Recolour the chips (accent/fg_dim) + the readout on a dark<->light switch.
+        self.theme.subscribe(
+            lambda: self._update_zoom_readout(getattr(self, "_zoom_scale", None)))
 
     def _chip_hover(self, chip, entering):
         "Brighten a quick-size chip on hover; the active one stays accent-colored."
         if self._chip_active(chip):
             return
-        chip.configure(fg=FG if entering else FG_DIM)
+        chip.configure(fg=self.theme["fg"] if entering else self.theme["fg_dim"])
 
     # --- Folder + files -----------------------------------------------------
 
@@ -502,26 +517,26 @@ class BrowserMixin:
         "Build one minimalist folder cell (glyph + name, hover, click to open). It is"
         " placed into the 1- or 2-column grid later by _place_folder_rows."
         img = self._folder_glyph()
-        row = tk.Frame(self.folder_holder, bg=SIDEBAR, cursor="hand2")
+        row = self._tw(tk.Frame(self.folder_holder, cursor="hand2"), bg="sidebar")
         if img is not None:
-            icon = tk.Label(row, image=img, bg=SIDEBAR)
+            icon = self._tw(tk.Label(row, image=img), bg="sidebar")
         else:
-            icon = tk.Label(row, text="📁", bg=SIDEBAR, fg=FG_DIM,
-                            font=("Segoe UI", 9))
+            icon = self._tw(tk.Label(row, text="📁", font=("Segoe UI", 9)),
+                            bg="sidebar", fg="fg_dim")
         icon.pack(side="left", padx=(10, 6), pady=3)
-        lbl = tk.Label(row, text=self._fit_folder(name), bg=SIDEBAR, fg=FG,
-                       anchor="w", font=("Segoe UI", 9))
+        lbl = self._tw(tk.Label(row, text=self._fit_folder(name), anchor="w",
+                                font=("Segoe UI", 9)), bg="sidebar", fg="fg")
         lbl.pack(side="left", fill="x", expand=True, pady=3)
         self._folder_name_labels.append((lbl, name))
         cells = (row, icon, lbl)
 
         def enter(_e):
             for w in cells:
-                w.configure(bg=HOVER)
+                w.configure(bg=self.theme["hover"])
 
         def leave(_e):
             for w in cells:
-                w.configure(bg=SIDEBAR)
+                w.configure(bg=self.theme["sidebar"])
         for w in cells:
             w.bind("<Enter>", enter)
             w.bind("<Leave>", leave)
@@ -542,17 +557,18 @@ class BrowserMixin:
         "A placeholder grid cell: a fixed square image box (bordered for selection)"
         " + its one-line name. The image lands later, filled in by the decode poll."
         sel = (i == self.index)
-        cell = tk.Frame(self.thumb_holder, bg=SIDEBAR)
+        cell = self._tw(tk.Frame(self.thumb_holder), bg="sidebar")
         box = max(1, self.thumb_size)
-        holder = tk.Frame(cell, bg=SIDEBAR, highlightthickness=2,
-                          highlightbackground=ACCENT if sel else SIDEBAR,
-                          width=box, height=box)
+        holder = self._tw(
+            tk.Frame(cell, highlightthickness=2, width=box, height=box,
+                     highlightbackground=self.theme["accent"] if sel
+                     else self.theme["sidebar"]), bg="sidebar")
         holder.pack_propagate(False)     # fixed square box → uniform rows for windowing
         holder.pack(pady=(2, 0))
-        lbl = tk.Label(holder, bg=SIDEBAR, cursor="hand2")
+        lbl = self._tw(tk.Label(holder, cursor="hand2"), bg="sidebar")
         lbl.place(relx=0.5, rely=0.5, anchor="center")   # center the image in the box
-        name = tk.Label(cell, text=self._short_name(file), bg=SIDEBAR,
-                        fg=FG_DIM, font=("Segoe UI", 7))
+        name = self._tw(tk.Label(cell, text=self._short_name(file),
+                                 font=("Segoe UI", 7)), bg="sidebar", fg="fg_dim")
         name.pack()
         cell._holder = holder            # the bordered frame we recolor to select
         cell._img_lbl = lbl              # the label the decode poll fills with the thumb
@@ -565,22 +581,24 @@ class BrowserMixin:
     def _make_list_cell(self, i, file):
         "A placeholder list row: a fixed tiny preview box + the (ellipsized) filename."
         sel = (i == self.index)
-        cell = tk.Frame(self.thumb_holder, bg=SIDEBAR)
-        holder = tk.Frame(cell, bg=SIDEBAR,
-                          highlightthickness=2,
-                          highlightbackground=ACCENT if sel else SIDEBAR)
+        cell = self._tw(tk.Frame(self.thumb_holder), bg="sidebar")
+        holder = self._tw(
+            tk.Frame(cell, highlightthickness=2,
+                     highlightbackground=self.theme["accent"] if sel
+                     else self.theme["sidebar"]), bg="sidebar")
         holder.pack(fill="both", expand=True)
-        box = tk.Frame(holder, bg=SIDEBAR, width=self.LIST_THUMB,
-                       height=self.LIST_THUMB)
+        box = self._tw(tk.Frame(holder, width=self.LIST_THUMB,
+                                height=self.LIST_THUMB), bg="sidebar")
         box.pack_propagate(False)
         box.pack(side="left", padx=(4, 8), pady=2)
-        lbl = tk.Label(box, bg=SIDEBAR, cursor="hand2")
+        lbl = self._tw(tk.Label(box, cursor="hand2"), bg="sidebar")
         lbl.place(relx=0.5, rely=0.5, anchor="center")
         # The name is ellipsized to the current column width so a long filename fits
         # the row instead of spilling past the right edge (re-fitted by
         # _reflow_list_names on resize). anchor="w" keeps it left-aligned.
-        name = tk.Label(holder, text=self._fit_name(file), bg=SIDEBAR, fg=FG,
-                        anchor="w", cursor="hand2", font=("Segoe UI", 9))
+        name = self._tw(tk.Label(holder, text=self._fit_name(file), anchor="w",
+                                 cursor="hand2", font=("Segoe UI", 9)),
+                        bg="sidebar", fg="fg")
         name.pack(side="left", fill="x", expand=True)
         cell._holder = holder            # the bordered frame we recolor to select
         cell._img_lbl = lbl
@@ -598,8 +616,13 @@ class BrowserMixin:
         "Right-click a thumbnail: reveal it in Explorer, duplicate it, or delete it."
         if not (0 <= idx < len(self.files)):
             return
-        menu = tk.Menu(self.root, tearoff=0, bg=BAR, fg=FG, bd=0,
-                       activebackground=ACCENT, activeforeground=FG,
+        # Transient popup menu: read the live theme once at build time. The active
+        # item sits on the accent fill, so its text uses on_accent (light in both
+        # schemes) rather than fg (which is dark in light mode).
+        menu = tk.Menu(self.root, tearoff=0, bg=self.theme["bar"],
+                       fg=self.theme["fg"], bd=0,
+                       activebackground=self.theme["accent"],
+                       activeforeground=self.theme["on_accent"],
                        font=("Segoe UI", 9))
         menu.add_command(label=t("Open in folder"),
                          command=lambda: self._reveal_in_explorer(idx))
@@ -760,7 +783,8 @@ class BrowserMixin:
         for i, cell in self._cells.items():
             try:
                 cell._holder.configure(
-                    highlightbackground=ACCENT if i == self.index else SIDEBAR)
+                    highlightbackground=self.theme["accent"] if i == self.index
+                    else self.theme["sidebar"])
             except tk.TclError:
                 pass
 

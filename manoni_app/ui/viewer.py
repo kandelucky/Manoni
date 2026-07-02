@@ -13,7 +13,10 @@ import threading
 
 from PIL import Image, ImageTk
 
-from ..config import ACCENT, FG_DIM, BG, BAR
+# FG_DIM/BG/BAR are used only by the preview-canvas draws (letterbox, rulers,
+# placeholder) which stay dark in light mode; the zoom-chip / info-bar colours
+# now come from self.theme.
+from ..config import FG_DIM, BG, BAR
 from .. import imaging
 from ..i18n import t
 
@@ -786,11 +789,13 @@ class ViewerMixin:
 
     def _update_zoom_readout(self, scale):
         "Refresh the '%' label and highlight the matching quick-size chip."
+        self._zoom_scale = scale          # remembered so a theme switch can restyle
         if not hasattr(self, "lbl_zoom"):
             return
         self.lbl_zoom.configure(text="—" if scale is None else f"{round(scale * 100)}%")
         for chip in self.zoom_presets:
-            chip.configure(fg=ACCENT if self._chip_active(chip) else FG_DIM)
+            chip.configure(fg=self.theme["accent"] if self._chip_active(chip)
+                           else self.theme["fg_dim"])
 
     def _chip_active(self, chip):
         "True if this quick-size chip matches the current zoom state."
