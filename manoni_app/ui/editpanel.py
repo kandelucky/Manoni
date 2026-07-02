@@ -429,27 +429,16 @@ class EditPanelMixin:
 
     def _wide_action(self, parent, icon_name, label, command, accent=False, tip=None):
         "One full-width panel action button (icon left of label). accent = primary."
-        bg, hov, fg = ((ACCENT, ACCENT_HOVER, ON_ACCENT) if accent
-                       else (CHIP_BG, HOVER, FG))
-        btn = tk.Frame(parent, bg=bg, cursor="hand2")
-        btn.pack(side="top", fill="x")
-        inner = tk.Frame(btn, bg=bg)          # centers the icon + label
-        inner.pack(pady=9)
-        parts = [btn, inner]
-        img = self.icon(icon_name, size=16)
-        if img is not None:
-            ic = tk.Label(inner, image=img, bg=bg)
-            ic.pack(side="left", padx=(0, 7))
-            parts.append(ic)
-        tx = tk.Label(inner, text=label, bg=bg, fg=fg, font=("Segoe UI", 9, "bold"))
-        tx.pack(side="left")
-        parts.append(tx)
-        for w in parts:
-            w.bind("<Button-1>", lambda e: command())
-            w.bind("<Enter>", lambda e: [p.configure(bg=hov) for p in parts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=bg) for p in parts])
+        # Two-button panel foot (UI standard #3): the Save is the primary filled
+        # action; Restore is the outline secondary.
+        btn = tintkit.Button(
+            parent, self.theme, label, icon=icon_name, command=command,
+            stretch=True, bg="bar",
+            role="primary" if accent else "neutral",
+            variant="filled" if accent else "outline")
+        btn.pack(side="top", fill="x", pady=(0, 2))
         if tip:
-            btn._tip = Tooltip(btn, tip)
+            tintkit.HoverTip(btn.canvas, self.theme, tip)
         return btn
 
     def _set_panel(self, open_):
