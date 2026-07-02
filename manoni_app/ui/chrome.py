@@ -15,8 +15,11 @@ import tkinter.filedialog as tkfd
 
 from PIL import Image, ImageTk
 
-from ..config import (BG, BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM, ICON_SIZE,
-                      ICON_DIR, CHIP_BG, BORDER)
+# Live theming: chrome now reads colours from self.theme (dark<->light) via the
+# `_tw` helper, so only the peek button (floats over the always-dark preview) and
+# the preview canvas / rulers keep fixed config colours. BG = preview letterbox
+# (stays dark); CHIP_BG/ACCENT/HOVER/FG = the peek button.
+from ..config import BG, HOVER, ACCENT, FG, ICON_SIZE, ICON_DIR, CHIP_BG
 from ..widgets import Tooltip
 from .. import i18n
 from ..i18n import t
@@ -97,12 +100,15 @@ class ChromeMixin:
         "A flat icon button with hover effect (falls back to text if no icon)."
         img = self.icon(icon_name, size, color)
         if img is not None:
-            btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+            btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
+            self._tw(btn, bg="bar")
         else:
-            btn = tk.Label(parent, text=tooltip or "?", bg=BAR, fg=FG,
-                           cursor="hand2", font=("Segoe UI", 10))
-        btn.bind("<Enter>", lambda e: btn.configure(bg=HOVER))
-        btn.bind("<Leave>", lambda e: btn.configure(bg=BAR))
+            btn = tk.Label(parent, text=tooltip or "?", bg=self.theme["bar"],
+                           fg=self.theme["fg"], cursor="hand2",
+                           font=("Segoe UI", 10))
+            self._tw(btn, bg="bar", fg="fg")
+        btn.bind("<Enter>", lambda e: btn.configure(bg=self.theme["hover"]))
+        btn.bind("<Leave>", lambda e: btn.configure(bg=self.theme["bar"]))
         btn.bind("<Button-1>", lambda e: command())
         btn._tooltip = tooltip
         if tooltip:
@@ -123,18 +129,22 @@ class ChromeMixin:
                 ("Vertical.Scrollbar.thumb",
                  {"expand": "1", "sticky": "nswe"})]})])
         style.configure("Sidebar.Vertical.TScrollbar",
-                        troughcolor=SIDEBAR, background=BORDER,
-                        bordercolor=SIDEBAR, borderwidth=0, relief="flat",
-                        arrowcolor=SIDEBAR, width=10)
+                        troughcolor=self.theme["sidebar"],
+                        background=self.theme["border"],
+                        bordercolor=self.theme["sidebar"], borderwidth=0,
+                        relief="flat", arrowcolor=self.theme["sidebar"], width=10)
         style.map("Sidebar.Vertical.TScrollbar",
                   background=[("active", "#5a5a5a"), ("pressed", "#666666")])
 
     def _glyph_button(self, parent, glyph, command, tooltip=""):
         "A flat text-glyph button with hover (for nav controls lacking an icon)."
-        btn = tk.Label(parent, text=glyph, bg=BAR, fg=FG, cursor="hand2",
-                       font=("Segoe UI", 13), padx=4)
-        btn.bind("<Enter>", lambda e: btn.configure(bg=HOVER))
-        btn.bind("<Leave>", lambda e: btn.configure(bg=BAR))
+        # bg follows the theme; fg is managed by the caller (see _update_breadcrumbs,
+        # which switches btn_up between the active and disabled fg).
+        btn = tk.Label(parent, text=glyph, bg=self.theme["bar"], fg=self.theme["fg"],
+                       cursor="hand2", font=("Segoe UI", 13), padx=4)
+        self._tw(btn, bg="bar")
+        btn.bind("<Enter>", lambda e: btn.configure(bg=self.theme["hover"]))
+        btn.bind("<Leave>", lambda e: btn.configure(bg=self.theme["bar"]))
         btn.bind("<Button-1>", lambda e: command())
         if tooltip:
             btn._tip = Tooltip(btn, tooltip)
@@ -142,7 +152,7 @@ class ChromeMixin:
 
     def _sep(self, parent):
         "Vertical separator in a bar."
-        return tk.Frame(parent, bg=BORDER, width=1)
+        return self._tw(tk.Frame(parent, width=1), bg="border")
 
     # --- Hand (pan) tool toggle ---------------------------------------------
 
@@ -150,15 +160,18 @@ class ChromeMixin:
         "A toggle icon button for the hand (pan) tool — accent-filled while active."
         img = self.icon("hand")
         if img is not None:
-            btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+            btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
         else:
-            btn = tk.Label(parent, text="✋", bg=BAR, fg=FG, cursor="hand2",
+            btn = tk.Label(parent, text="✋", bg=self.theme["bar"],
+                           fg=self.theme["fg"], cursor="hand2",
                            font=("Segoe UI", 11))
         btn.bind("<Enter>", lambda e: self._hand_btn_paint(hover=True))
         btn.bind("<Leave>", lambda e: self._hand_btn_paint(hover=False))
         btn.bind("<Button-1>", lambda e: self.toggle_hand_tool())
         btn._tip = Tooltip(btn, t("Hand tool — drag to pan the photo"))
         self.btn_hand = btn
+        # Its resting/active fill is theme-dependent, so repaint on dark<->light.
+        self.theme.subscribe(self._hand_btn_paint)
         return btn
 
     def _hand_btn_paint(self, hover=False):
@@ -166,9 +179,10 @@ class ChromeMixin:
         if not hasattr(self, "btn_hand"):
             return
         if self.hand_tool:
-            self.btn_hand.configure(bg=ACCENT)
+            self.btn_hand.configure(bg=self.theme["accent"])
         else:
-            self.btn_hand.configure(bg=HOVER if hover else BAR)
+            self.btn_hand.configure(
+                bg=self.theme["hover"] if hover else self.theme["bar"])
 
     def _set_hand_tool(self, on):
         "Turn the hand (pan) tool on/off: repaint the toggle + set the canvas cursor."
@@ -193,9 +207,10 @@ class ChromeMixin:
         " press-and-hold peeks the full original, releasing back to the edit."
         img = self.icon("square-split-horizontal")
         if img is not None:
-            btn = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+            btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
         else:
-            btn = tk.Label(parent, text="◧", bg=BAR, fg=FG, cursor="hand2",
+            btn = tk.Label(parent, text="◧", bg=self.theme["bar"],
+                           fg=self.theme["fg"], cursor="hand2",
                            font=("Segoe UI", 11))
         btn.bind("<Enter>", lambda e: self._compare_btn_paint(hover=True))
         btn.bind("<Leave>", lambda e: self._compare_btn_paint(hover=False))
@@ -206,6 +221,8 @@ class ChromeMixin:
         btn._tip = Tooltip(btn, t("Compare before / after — click to split, "
                                   "hold to see the original"))
         self.btn_compare = btn
+        # Its resting/active fill is theme-dependent, so repaint on dark<->light.
+        self.theme.subscribe(self._compare_btn_paint)
         return btn
 
     def _compare_btn_paint(self, hover=False):
@@ -213,9 +230,10 @@ class ChromeMixin:
         if not hasattr(self, "btn_compare"):
             return
         if self.compare_mode:
-            self.btn_compare.configure(bg=ACCENT)
+            self.btn_compare.configure(bg=self.theme["accent"])
         else:
-            self.btn_compare.configure(bg=HOVER if hover else BAR)
+            self.btn_compare.configure(
+                bg=self.theme["hover"] if hover else self.theme["bar"])
 
     def _compare_btn_press(self, event):
         "Button pressed: peek the full original and start timing the hold."
@@ -304,11 +322,12 @@ class ChromeMixin:
         # Status bar pinned to the very bottom of the window (root row 3, below
         # the editor body). A 1px hairline along its top edge separates it from
         # the body and spans the full window width.
-        self.infobar = tk.Frame(self.root, bg=BAR, height=30)
+        self.infobar = self._tw(tk.Frame(self.root, height=30), bg="bar")
         self.infobar.grid(row=3, column=0, sticky="ew")
         self.infobar.grid_propagate(False)
 
-        tk.Frame(self.infobar, bg=BORDER, height=1).pack(side="top", fill="x")
+        self._tw(tk.Frame(self.infobar, height=1), bg="border").pack(
+            side="top", fill="x")
 
         # Photo info button: pops a window with the current photo's metadata
         # (colour profile, camera, capture settings, GPS) — the same data the
@@ -320,12 +339,14 @@ class ChromeMixin:
 
         # Labels ~30% smaller than the old 9pt, and clickable: clicking either
         # opens the same metadata window as the info button.
-        self.lbl_name = tk.Label(self.infobar, text="Manoni", bg=BAR, fg=FG,
-                                 font=("Segoe UI", 8), cursor="hand2")
+        self.lbl_name = self._tw(
+            tk.Label(self.infobar, text="Manoni", font=("Segoe UI", 8),
+                     cursor="hand2"), bg="bar", fg="fg")
         self.lbl_name.pack(side="left", padx=12)
 
-        self.lbl_info = tk.Label(self.infobar, text="", bg=BAR, fg=FG_DIM,
-                                 font=("Segoe UI", 7), cursor="hand2")
+        self.lbl_info = self._tw(
+            tk.Label(self.infobar, text="", font=("Segoe UI", 7),
+                     cursor="hand2"), bg="bar", fg="fg_dim")
         self.lbl_info.pack(side="left", padx=8)
 
         for _lbl in (self.lbl_name, self.lbl_info):
@@ -336,7 +357,7 @@ class ChromeMixin:
 
     def _build_toolbar(self):
         "Three-zone bar: file + history (left) · viewport tools (center) · menu (right)."
-        bar = tk.Frame(self.root, bg=BAR, height=46)
+        bar = self._tw(tk.Frame(self.root, height=46), bg="bar")
         bar.grid(row=1, column=0, sticky="ew")
         bar.grid_propagate(False)
 
@@ -344,7 +365,7 @@ class ChromeMixin:
         # read left-to-right as one "file & history" cluster. Photo navigation
         # (prev/next/first/last) lives on the bottom strip, next to the position
         # counter — not repeated here.
-        left = tk.Frame(bar, bg=BAR)
+        left = self._tw(tk.Frame(bar), bg="bar")
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
                           t("Open folder")).pack(side="left", padx=4, pady=8)
@@ -365,7 +386,7 @@ class ChromeMixin:
         # CENTER zone: viewport tools. The hand (pan) and before/after compare
         # both act on the preview, so they sit centred over it. Placed (not
         # packed) so the left/right zones don't shift them off-centre.
-        center = tk.Frame(bar, bg=BAR)
+        center = self._tw(tk.Frame(bar), bg="bar")
         center.place(relx=0.5, rely=0.5, anchor="center")
         # Hand (pan) tool: a toggle — while on, dragging with the left button
         # moves the photo on the canvas (like Photoshop's hand).
@@ -378,7 +399,7 @@ class ChromeMixin:
         # duplicated ☰ → Settings, and the culling "?" was stranded up here while
         # culling itself moved to the bottom nav strip — both are now folded into
         # the ☰ menu, leaving the right side to one clean control.
-        right = tk.Frame(bar, bg=BAR)
+        right = self._tw(tk.Frame(bar), bg="bar")
         right.pack(side="right", padx=8)
         self.btn_menu = self._tool_button(right, "menu", self.open_menu, t("Menu"))
         self.btn_menu.pack(side="right", padx=4, pady=8)   # anchor for the dropdown
@@ -416,31 +437,35 @@ class ChromeMixin:
         "Build the borderless dark popup under the ☰ button. Each spec is either"
         " ('sep',) for a hairline divider or (icon_name, label, command) for a"
         " clickable row. Tracked in self._menu_popup so a re-open toggles it."
+        # A transient popup: read the live theme once at build time (it can't
+        # outlive a dark<->light switch — it closes on FocusOut), so no subscribe.
+        bar, border, fg, hover = (self.theme["bar"], self.theme["border"],
+                                   self.theme["fg"], self.theme["hover"])
         pop = tk.Toplevel(self.root)
         pop.overrideredirect(True)                 # borderless: a real popup menu
-        pop.configure(bg=BORDER)                # 1px hairline border via inset
+        pop.configure(bg=border)                # 1px hairline border via inset
         self._menu_popup = pop
-        inner = tk.Frame(pop, bg=BAR)
+        inner = tk.Frame(pop, bg=bar)
         inner.pack(padx=1, pady=1)
 
         def add_row(icon_name, label, command):
-            r = tk.Frame(inner, bg=BAR, cursor="hand2")
+            r = tk.Frame(inner, bg=bar, cursor="hand2")
             r.pack(fill="x")
             img = self.icon(icon_name)
             if img is not None:
-                tk.Label(r, image=img, bg=BAR).pack(side="left", padx=(10, 8), pady=7)
-            lab = tk.Label(r, text=label, bg=BAR, fg=FG, anchor="w",
+                tk.Label(r, image=img, bg=bar).pack(side="left", padx=(10, 8), pady=7)
+            lab = tk.Label(r, text=label, bg=bar, fg=fg, anchor="w",
                            font=("Segoe UI", 9))
             lab.pack(side="left", padx=(0, 18), pady=7)
             cells = (r, lab)
 
             def enter(_e):
                 for w in cells:
-                    w.configure(bg=HOVER)
+                    w.configure(bg=hover)
 
             def leave(_e):
                 for w in cells:
-                    w.configure(bg=BAR)
+                    w.configure(bg=bar)
 
             def click(_e):
                 self._close_menu()
@@ -452,7 +477,7 @@ class ChromeMixin:
 
         for spec in specs:
             if spec[0] == "sep":
-                tk.Frame(inner, bg=BORDER, height=1).pack(fill="x")
+                tk.Frame(inner, bg=border, height=1).pack(fill="x")
             else:
                 add_row(*spec)
 
@@ -506,21 +531,22 @@ class ChromeMixin:
     def _language_studio(self):
         "A window to add a UI language: generate a template, import a finished"
         " translation, or export an installed language to share."
+        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Add your language"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("Add your language"), bg=BG, fg=FG,
+        tk.Label(wrap, text=t("Add your language"), bg=bg, fg=fg,
                  font=("Segoe UI", 13, "bold")).pack(anchor="w")
         steps = t("Manoni can speak any language. Here's how:\n"
                   "1. Generate a template file — it lists every English text.\n"
                   "2. Open it in any text editor and fill in your translations.\n"
                   "3. Import the finished file — your language appears in the menu.")
-        tk.Label(wrap, text=steps, bg=BG, fg=FG_DIM, justify="left", anchor="w",
+        tk.Label(wrap, text=steps, bg=bg, fg=fg_dim, justify="left", anchor="w",
                  font=("Segoe UI", 9), wraplength=self._edit_dpi_w(380)) \
             .pack(anchor="w", pady=(8, 16))
 
@@ -637,7 +663,7 @@ class ChromeMixin:
     # --- Body: sidebar + preview -------------------------------------------
 
     def _build_body(self):
-        body = tk.Frame(self.root, bg=BG)
+        body = self._tw(tk.Frame(self.root), bg="bg")
         body.grid(row=2, column=0, sticky="nsew")
         self.body = body
         body.rowconfigure(0, weight=1)      # preview row expands
@@ -650,7 +676,7 @@ class ChromeMixin:
         body.columnconfigure(4, weight=0)   # Fotor-style icon rail fixed
 
         # Sidebar (scrollable thumbnail grid) — full height, left of the bottom strips
-        side = tk.Frame(body, bg=SIDEBAR, width=self.sidebar_width)
+        side = self._tw(tk.Frame(body, width=self.sidebar_width), bg="sidebar")
         side.grid(row=0, column=0, rowspan=3, sticky="ns")
         side.pack_propagate(False)   # honor our width; children are packed, not gridded
         self.sidebar = side
@@ -667,13 +693,13 @@ class ChromeMixin:
         # Packed (side="bottom") before the canvas so the grid fills above it.
         self._build_sidebar_footer(side)
 
-        self.canvas = tk.Canvas(side, bg=SIDEBAR, highlightthickness=0)
+        self.canvas = self._tw(tk.Canvas(side, highlightthickness=0), bg="sidebar")
         # The scrollbar drives a wrapper, not canvas.yview directly, so dragging it
         # also realizes the newly-visible cells (the strip is virtualized).
         sb = ttk.Scrollbar(side, orient="vertical", command=self._thumb_yview,
                            style="Sidebar.Vertical.TScrollbar")
         self._thumb_scrollbar = sb     # folder list packs just above this
-        self.thumb_holder = tk.Frame(self.canvas, bg=SIDEBAR)
+        self.thumb_holder = self._tw(tk.Frame(self.canvas), bg="sidebar")
         self.thumb_holder.bind(
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
@@ -690,20 +716,25 @@ class ChromeMixin:
         # Drag-sash between the sidebar and the preview (horizontal resize). A
         # centred vertical grip nub mirrors the folder divider so both clearly
         # read as draggable; the strip lightens and the nub turns accent on hover.
-        sash = tk.Frame(body, bg=BAR, width=8, cursor="sb_h_double_arrow")
+        sash = self._tw(tk.Frame(body, width=8, cursor="sb_h_double_arrow"),
+                        bg="bar")
         sash.grid(row=0, column=1, rowspan=3, sticky="ns")
-        grip = tk.Frame(sash, bg=FG_DIM)
+        grip = self._tw(tk.Frame(sash), bg="fg_dim")
         grip.place(relx=0.5, rely=0.5, anchor="center", width=4, height=40)
         self.sash, self.sash_grip = sash, grip
         for w in (sash, grip):
             w.bind("<Button-1>", self._sash_press)
             w.bind("<B1-Motion>", self._sash_drag)
             w.bind("<Enter>",
-                   lambda e: (sash.configure(bg=HOVER), grip.configure(bg=ACCENT)))
+                   lambda e: (sash.configure(bg=self.theme["hover"]),
+                              grip.configure(bg=self.theme["accent"])))
             w.bind("<Leave>",
-                   lambda e: (sash.configure(bg=BAR), grip.configure(bg=FG_DIM)))
+                   lambda e: (sash.configure(bg=self.theme["bar"]),
+                              grip.configure(bg=self.theme["fg_dim"])))
 
-        # Big preview fills the center (Canvas so it can zoom + pan)
+        # Big preview fills the center (Canvas so it can zoom + pan). Its
+        # letterbox stays the dark BG even in light mode — the photo is judged
+        # against a neutral dark surround (like Lightroom / Photoshop).
         self.preview = tk.Canvas(body, bg=BG, highlightthickness=0)
         self.preview.grid(row=0, column=2, sticky="nsew")
         # Wheel = zoom at the cursor (or resize the heal brush); middle-button
@@ -752,30 +783,31 @@ class ChromeMixin:
         are filled in by browser._build_folder_list, which also shows/hides this
         whole panel depending on whether the folder has any sub-folders. A 1px
         divider at its foot separates the list from the thumbnail grid below."""
-        self.folder_panel = tk.Frame(side, bg=SIDEBAR)   # packed on demand
+        self.folder_panel = self._tw(tk.Frame(side), bg="sidebar")  # packed on demand
         # A draggable divider at the foot separates the list from the grid below and
         # lets the user set the list's height (drag up/down). It's a slim grab strip
         # with a centred 1px line — packed first so it always spans the full width
         # under the canvas + scrollbar. See _folder_sash_drag.
-        sash = tk.Frame(self.folder_panel, bg=SIDEBAR, height=11,
-                        cursor="sb_v_double_arrow")
+        sash = self._tw(tk.Frame(self.folder_panel, height=11,
+                                 cursor="sb_v_double_arrow"), bg="sidebar")
         sash.pack(side="bottom", fill="x")
         sash.pack_propagate(False)
         # Faint full-width hairline marks the boundary; the centred grip nub on top
         # of it says "drag me" (turns accent on hover). Same idiom as the side sash.
-        line = tk.Frame(sash, bg=BORDER)
+        line = self._tw(tk.Frame(sash), bg="border")
         line.place(relx=0.0, rely=0.5, relwidth=1.0, height=1, anchor="w")
-        grip = tk.Frame(sash, bg=FG_DIM)
+        grip = self._tw(tk.Frame(sash), bg="fg_dim")
         grip.place(relx=0.5, rely=0.5, anchor="center", width=40, height=4)
         self.folder_sash, self.folder_sash_grip = sash, grip
         for w in (sash, line, grip):
-            w.bind("<Enter>", lambda e: grip.configure(bg=ACCENT))
-            w.bind("<Leave>", lambda e: grip.configure(bg=FG_DIM))
+            w.bind("<Enter>", lambda e: grip.configure(bg=self.theme["accent"]))
+            w.bind("<Leave>", lambda e: grip.configure(bg=self.theme["fg_dim"]))
             w.bind("<Button-1>", self._folder_sash_press)
             w.bind("<B1-Motion>", self._folder_sash_drag)
             w.bind("<ButtonRelease-1>", self._folder_sash_release)
-        self.folder_canvas = tk.Canvas(self.folder_panel, bg=SIDEBAR,
-                                       highlightthickness=0, height=1)
+        self.folder_canvas = self._tw(
+            tk.Canvas(self.folder_panel, highlightthickness=0, height=1),
+            bg="sidebar")
         # A slim scrollbar, shown only while the sub-folder list overflows its cap
         # (so a folder with many sub-folders is fully reachable, not just by wheel).
         self.folder_scrollbar = ttk.Scrollbar(
@@ -783,7 +815,7 @@ class ChromeMixin:
             style="Sidebar.Vertical.TScrollbar")
         self.folder_canvas.configure(yscrollcommand=self.folder_scrollbar.set)
         self.folder_canvas.pack(side="left", fill="both", expand=True)
-        self.folder_holder = tk.Frame(self.folder_canvas, bg=SIDEBAR)
+        self.folder_holder = self._tw(tk.Frame(self.folder_canvas), bg="sidebar")
         self._folder_window = self.folder_canvas.create_window(
             (0, 0), window=self.folder_holder, anchor="nw")
         self.folder_holder.bind("<Configure>", self._on_folder_holder_configure)
@@ -906,11 +938,11 @@ class ChromeMixin:
         view-mode picker moved to the sidebar footer (_build_sidebar_footer), so
         this header is a clean, single-line address bar. A 1px divider below it
         makes it read as a header above the thumbnail grid."""
-        hero = tk.Frame(side, bg=BAR)
+        hero = self._tw(tk.Frame(side), bg="bar")
         hero.pack(side="top", fill="x")
 
         # A single address row: up-a-folder (left) + clickable breadcrumb.
-        row = tk.Frame(hero, bg=BAR)
+        row = self._tw(tk.Frame(hero), bg="bar")
         row.pack(side="top", fill="x", padx=6, pady=5)
 
         self.btn_up = self._glyph_button(row, "↑", self.go_up_folder,
@@ -918,12 +950,16 @@ class ChromeMixin:
         self.btn_up.pack(side="left", padx=(0, 2))
 
         # Click an ancestor crumb to navigate there; the leaf is the open folder.
-        self.crumbs = tk.Frame(row, bg=BAR)
+        self.crumbs = self._tw(tk.Frame(row), bg="bar")
         self.crumbs.pack(side="left", fill="x", expand=True)
 
         # A clearly-visible header divider (the old #3a3a3a line was too faint).
+        # This deliberately-strong #555555 has no theme token — kept fixed for now;
+        # revisit its light-mode value when the dark/light toggle is built.
         tk.Frame(side, bg="#555555", height=1).pack(side="top", fill="x")
         self._update_breadcrumbs()
+        # The crumbs are rebuilt from theme colours; repaint them on dark<->light.
+        self.theme.subscribe(self._update_breadcrumbs)
 
     def _path_segments(self, path):
         "Split a folder path into [(label, fullpath), ...] from root to leaf."
@@ -946,11 +982,11 @@ class ChromeMixin:
         for w in self.crumbs.winfo_children():
             w.destroy()
         if not self.folder:
-            tk.Label(self.crumbs, text=t("No folder open"), bg=BAR,
-                     fg=FG_DIM, font=("Segoe UI", 8)).pack(side="left")
+            tk.Label(self.crumbs, text=t("No folder open"), bg=self.theme["bar"],
+                     fg=self.theme["fg_dim"], font=("Segoe UI", 8)).pack(side="left")
             self.btn_up.configure(fg="#5a5a5a")   # nothing to go up to
             return
-        self.btn_up.configure(fg=FG)
+        self.btn_up.configure(fg=self.theme["fg"])
         segs = self._path_segments(self.folder)
         truncated = len(segs) > self.MAX_CRUMBS
         shown = segs[-self.MAX_CRUMBS:]
@@ -958,21 +994,21 @@ class ChromeMixin:
             self._crumb_label("…", segs[-self.MAX_CRUMBS - 1][1], leaf=False)
         for i, (label, full) in enumerate(shown):
             if i > 0 or truncated:
-                tk.Label(self.crumbs, text="›", bg=BAR, fg=FG_DIM,
-                         font=("Segoe UI", 8)).pack(side="left")
+                tk.Label(self.crumbs, text="›", bg=self.theme["bar"],
+                         fg=self.theme["fg_dim"], font=("Segoe UI", 8)).pack(side="left")
             self._crumb_label(label, full, leaf=(i == len(shown) - 1))
 
     def _crumb_label(self, text, full, leaf):
         "One breadcrumb: the leaf (current folder) is bright + inert; ancestors"
         " are dim and clickable to navigate into that folder."
-        lbl = tk.Label(self.crumbs, text=text, bg=BAR,
-                       fg=FG if leaf else FG_DIM,
+        lbl = tk.Label(self.crumbs, text=text, bg=self.theme["bar"],
+                       fg=self.theme["fg"] if leaf else self.theme["fg_dim"],
                        font=("Segoe UI", 8, "bold" if leaf else "normal"),
                        cursor="arrow" if leaf else "hand2")
         lbl.pack(side="left")
         if not leaf:
-            lbl.bind("<Enter>", lambda e: lbl.configure(fg=ACCENT))
-            lbl.bind("<Leave>", lambda e: lbl.configure(fg=FG_DIM))
+            lbl.bind("<Enter>", lambda e: lbl.configure(fg=self.theme["accent"]))
+            lbl.bind("<Leave>", lambda e: lbl.configure(fg=self.theme["fg_dim"]))
             lbl.bind("<Button-1>", lambda e, p=full: self._navigate_to(p))
         if full != text:
             lbl._tip = Tooltip(lbl, full)
@@ -999,14 +1035,15 @@ class ChromeMixin:
         list); the dropdown's size presets are the thumbnail-size control, so the
         separate −/+ zoom buttons are gone. Packed at the very bottom so the
         thumbnail grid fills the space above it."""
-        foot = tk.Frame(side, bg=BAR)
+        foot = self._tw(tk.Frame(side), bg="bar")
         foot.pack(side="bottom", fill="x")
         self.sidebar_footer = foot
 
         # A 1px divider on top so the footer reads as a strip below the grid.
+        # (Fixed strong #555555 — see the note in _build_sidebar_hero.)
         tk.Frame(foot, bg="#555555", height=1).pack(side="top", fill="x")
 
-        row = tk.Frame(foot, bg=BAR)
+        row = self._tw(tk.Frame(foot), bg="bar")
         row.pack(side="top", fill="x", padx=6, pady=4)
 
         # The view-mode dropdown (large icons / small / list …) — the whole footer.
@@ -1014,10 +1051,12 @@ class ChromeMixin:
 
     def _build_view_button(self, parent):
         "A flat dropdown button (current view label + ▾) that opens the view menu."
-        btn = tk.Frame(parent, bg=BAR, cursor="hand2")
-        label = tk.Label(btn, text="", bg=BAR, fg=FG, font=("Segoe UI", 9))
+        btn = self._tw(tk.Frame(parent, cursor="hand2"), bg="bar")
+        label = self._tw(tk.Label(btn, text="", font=("Segoe UI", 9)),
+                         bg="bar", fg="fg")
         label.pack(side="left", padx=(6, 0), pady=3)
-        chev = tk.Label(btn, text="▾", bg=BAR, fg=FG_DIM, font=("Segoe UI", 8))
+        chev = self._tw(tk.Label(btn, text="▾", font=("Segoe UI", 8)),
+                        bg="bar", fg="fg_dim")
         chev.pack(side="left", padx=(4, 6))
         self.btn_view = btn
         self.view_btn_label = label
@@ -1025,11 +1064,11 @@ class ChromeMixin:
 
         def enter(_e):
             for w in cells:
-                w.configure(bg=HOVER)
+                w.configure(bg=self.theme["hover"])
 
         def leave(_e):
             for w in cells:
-                w.configure(bg=BAR)
+                w.configure(bg=self.theme["bar"])
         for w in cells:
             w.bind("<Enter>", enter)
             w.bind("<Leave>", leave)
@@ -1064,9 +1103,9 @@ class ChromeMixin:
             return
         pop = tk.Toplevel(self.root)
         pop.overrideredirect(True)                 # borderless: a real popup menu
-        pop.configure(bg=BORDER)                # 1px hairline border via inset
+        pop.configure(bg=self.theme["border"])  # 1px hairline border via inset
         self._view_popup = pop
-        inner = tk.Frame(pop, bg=BAR)
+        inner = tk.Frame(pop, bg=self.theme["bar"])
         inner.pack(padx=1, pady=1)
         active = self._active_view()
         for key, label, _size in self.VIEW_MENU:
@@ -1096,23 +1135,25 @@ class ChromeMixin:
     def _view_menu_row(self, parent, key, label, active_key):
         "One row in the view dropdown; the active view is checked + accent-colored."
         is_active = (key == active_key)
-        r = tk.Frame(parent, bg=BAR, cursor="hand2")
+        bar, hover, accent, fg = (self.theme["bar"], self.theme["hover"],
+                                  self.theme["accent"], self.theme["fg"])
+        r = tk.Frame(parent, bg=bar, cursor="hand2")
         r.pack(fill="x")
-        mark = tk.Label(r, text="✓" if is_active else "", bg=BAR, fg=ACCENT,
+        mark = tk.Label(r, text="✓" if is_active else "", bg=bar, fg=accent,
                         width=2, font=("Segoe UI", 9))
         mark.pack(side="left", padx=(8, 2), pady=6)
-        lab = tk.Label(r, text=t(label), bg=BAR, anchor="w",
-                       fg=ACCENT if is_active else FG, font=("Segoe UI", 9))
+        lab = tk.Label(r, text=t(label), bg=bar, anchor="w",
+                       fg=accent if is_active else fg, font=("Segoe UI", 9))
         lab.pack(side="left", padx=(0, 20), pady=6)
         cells = (r, mark, lab)
 
         def enter(_e):
             for w in cells:
-                w.configure(bg=HOVER)
+                w.configure(bg=hover)
 
         def leave(_e):
             for w in cells:
-                w.configure(bg=BAR)
+                w.configure(bg=bar)
 
         def click(_e):
             self._close_view_menu()

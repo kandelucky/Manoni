@@ -399,6 +399,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._edit_before = None  # edit-state snapshot taken when a drag begins
 
         self._init_scrollbar_style()
+        # The ttk scrollbar style is global (not per-widget), so re-run it on a
+        # dark<->light switch to recolour the sidebar / folder / section scrollbars.
+        self.theme.subscribe(self._init_scrollbar_style)
         self._build_infobar()
         self._build_toolbar()
         self._build_body()

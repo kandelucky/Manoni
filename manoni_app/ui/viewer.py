@@ -812,8 +812,8 @@ class ViewerMixin:
             # when the pointer leaves (they borrow the same info bar).
             self._info_text = (f"{self.index+1}/{len(self.files)}   ·   {w}×{h}"
                                f"   ·   {size_txt}   ·   {date_txt}   ·   {folder}")
-            self.lbl_info.configure(text=self._info_text, fg=FG_DIM)
+            self.lbl_info.configure(text=self._info_text, fg=self.theme["fg_dim"])
         except Exception:
             self.lbl_name.configure(text=file)
             self._info_text = ""
-            self.lbl_info.configure(text="", fg=FG_DIM)
+            self.lbl_info.configure(text="", fg=self.theme["fg_dim"])
