@@ -11,7 +11,6 @@ Mixin on the Manoni window — uses the shared `self`, like the other ui mixins.
 import webbrowser
 import tkinter as tk
 
-from ..config import BG, BAR, HOVER, ACCENT, FG, FG_DIM
 from ..i18n import t
 
 
@@ -47,30 +46,30 @@ class AboutMixin:
         "Show the About / Authors modal (centered, dismiss with Esc / Close)."
         dlg = tk.Toplevel(self.root)
         dlg.title(t("About Manoni"))
-        dlg.configure(bg=BG)
+        self._tw(dlg, bg="bg")
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        wrap = tk.Frame(dlg, bg=BG, padx=28, pady=22)
+        wrap = self._tw(tk.Frame(dlg, padx=28, pady=22), bg="bg")
         wrap.pack(fill="both", expand=True)
 
         # --- Header: name · version · description · author ------------------
-        tk.Label(wrap, text="Manoni", bg=BG, fg=FG,
-                 font=("Segoe UI", 17, "bold")).pack()
-        tk.Label(wrap, text="v" + APP_VERSION, bg=BG, fg=FG_DIM,
-                 font=("Segoe UI", 9)).pack(pady=(2, 0))
-        tk.Label(wrap, text=t("A fast, simple dark photo browser and culler."),
-                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9),
-                 justify="center", wraplength=360).pack(pady=(8, 0))
+        self._tw(tk.Label(wrap, text="Manoni",
+                 font=("Segoe UI", 17, "bold")), bg="bg", fg="fg").pack()
+        self._tw(tk.Label(wrap, text="v" + APP_VERSION,
+                 font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(pady=(2, 0))
+        self._tw(tk.Label(wrap, text=t("A fast, simple dark photo browser and culler."),
+                 font=("Segoe UI", 9),
+                 justify="center", wraplength=360), bg="bg", fg="fg_dim").pack(pady=(8, 0))
 
         author = "{label}: {name} · {handle}".format(
             label=t("Author"), name=AUTHOR_NAME, handle=AUTHOR_HANDLE)
-        tk.Label(wrap, text=author, bg=BG, fg=FG, font=("Segoe UI", 9)).pack(
-            pady=(10, 0))
+        self._tw(tk.Label(wrap, text=author, font=("Segoe UI", 9)),
+                 bg="bg", fg="fg").pack(pady=(10, 0))
 
         # A simple, link-free mention of the language it's written in.
-        tk.Label(wrap, text=t("Written in Python"), bg=BG, fg=FG_DIM,
-                 font=("Segoe UI", 9)).pack(pady=(2, 0))
+        self._tw(tk.Label(wrap, text=t("Written in Python"),
+                 font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(pady=(2, 0))
 
         self._about_sep(wrap)
 
@@ -87,7 +86,7 @@ class AboutMixin:
             self._about_link_row(wrap, label, url)
 
         # --- Buy me a coffee ------------------------------------------------
-        tk.Frame(wrap, bg=BG, height=18).pack()
+        self._tw(tk.Frame(wrap, height=18), bg="bg").pack()
         bmc = tk.Label(wrap, text=t("Buy me a coffee"), bg=BMC_BG, fg=BMC_FG,
                        font=("Segoe UI", 10, "bold"), padx=20, pady=8,
                        cursor="hand2")
@@ -97,12 +96,12 @@ class AboutMixin:
         bmc.bind("<Button-1>", lambda e: webbrowser.open(BMC_URL))
 
         # --- Close ----------------------------------------------------------
-        tk.Frame(wrap, bg=BG, height=10).pack()
-        close = tk.Label(wrap, text=t("Close"), bg=BAR, fg=FG, cursor="hand2",
-                         padx=22, pady=7, font=("Segoe UI", 9))
+        self._tw(tk.Frame(wrap, height=10), bg="bg").pack()
+        close = self._tw(tk.Label(wrap, text=t("Close"), cursor="hand2",
+                         padx=22, pady=7, font=("Segoe UI", 9)), bg="bar", fg="fg")
         close.pack()
-        close.bind("<Enter>", lambda e: close.configure(bg=HOVER))
-        close.bind("<Leave>", lambda e: close.configure(bg=BAR))
+        close.bind("<Enter>", lambda e: close.configure(bg=self.theme["hover"]))
+        close.bind("<Leave>", lambda e: close.configure(bg=self.theme["bar"]))
         close.bind("<Button-1>", lambda e: dlg.destroy())
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
@@ -117,23 +116,24 @@ class AboutMixin:
 
     def _about_sep(self, parent):
         "A faint full-width divider between sections."
-        tk.Frame(parent, bg=HOVER, height=1).pack(fill="x", pady=14)
+        self._tw(tk.Frame(parent, height=1), bg="divider").pack(fill="x", pady=14)
 
     def _about_heading(self, parent, text):
         "A bold left-aligned section heading."
-        tk.Label(parent, text=text, bg=BG, fg=FG, anchor="w",
-                 font=("Segoe UI", 9, "bold")).pack(fill="x", pady=(0, 6))
+        self._tw(tk.Label(parent, text=text, anchor="w",
+                 font=("Segoe UI", 9, "bold")), bg="bg", fg="fg").pack(
+                     fill="x", pady=(0, 6))
 
     def _about_link_row(self, parent, label, url, lic=None):
         "One row: a name, the clickable underlined URL, and an optional license."
-        row = tk.Frame(parent, bg=BG)
+        row = self._tw(tk.Frame(parent), bg="bg")
         row.pack(fill="x", pady=1)
-        tk.Label(row, text=label + "  ", bg=BG, fg=FG, anchor="w",
-                 font=("Segoe UI", 9)).pack(side="left")
-        link = tk.Label(row, text=url, bg=BG, fg=ACCENT, cursor="hand2",
-                        font=("Segoe UI", 9, "underline"))
+        self._tw(tk.Label(row, text=label + "  ", anchor="w",
+                 font=("Segoe UI", 9)), bg="bg", fg="fg").pack(side="left")
+        link = self._tw(tk.Label(row, text=url, cursor="hand2",
+                        font=("Segoe UI", 9, "underline")), bg="bg", fg="accent")
         link.pack(side="left")
         link.bind("<Button-1>", lambda e, u=url: webbrowser.open(u))
         if lic:
-            tk.Label(row, text="  (" + lic + ")", bg=BG, fg=FG_DIM,
-                     font=("Segoe UI", 8)).pack(side="left")
+            self._tw(tk.Label(row, text="  (" + lic + ")",
+                     font=("Segoe UI", 8)), bg="bg", fg="fg_dim").pack(side="left")
