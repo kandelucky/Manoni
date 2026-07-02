@@ -24,18 +24,17 @@ import tkinter.filedialog as tkfd
 
 import tintkit
 
-from ..config import (BG, BAR, SIDEBAR, HOVER, ACCENT, FG, FG_DIM,
-                      CHIP_BG, BORDER, DIVIDER)
 from .. import i18n
 from ..i18n import t
 from .about import (APP_VERSION, AUTHOR_NAME, AUTHOR_HANDLE, BUILT_WITH,
                     PROJECT_LINKS, BMC_URL, BMC_BG, BMC_BG_HOVER, BMC_FG)
 
-SEL_BG = "#2a2f37"          # selected tab-rail row (a faint blue-grey tint)
-
 # The window's controls (toggle / segmented / slider / dropdown / buttons) are
-# stock TintKit widgets reading self.theme; only the window chrome (tab rail,
-# scroll pane, About links, Buy-me-a-coffee) stays hand-built below.
+# stock TintKit widgets reading self.theme; the window chrome (tab rail, scroll
+# pane, headers, path labels, About links) is plain tk threaded onto self.theme
+# via chrome's _tw so the whole window switches dark<->light live. The rail's
+# selected-row tint has no theme token, so it's mixed live from sidebar+accent.
+# Buy-me-a-coffee keeps its brand colours (not theme tokens).
 
 
 # --- tab spec: (key, label-source, icon, builder-method-name) ----------------
@@ -63,9 +62,8 @@ class SettingsMixin:
             except tk.TclError:
                 self._settings_win = None
 
-        dlg = tk.Toplevel(self.root)
+        dlg = self._tw(tk.Toplevel(self.root), bg="bg")
         dlg.title(t("Settings"))
-        dlg.configure(bg=BG)
         dlg.transient(self.root)
         self._settings_win = dlg
         self._set_active = "general"
@@ -77,6 +75,14 @@ class SettingsMixin:
         self._set_build_header(dlg)
         self._set_build_body(dlg)
         self._set_build_footer(dlg)
+
+        # The window is non-modal (kept in self._settings_win), so it can outlive a
+        # dark<->light switch. The rail rows are bespoke active-state controls built
+        # once here → subscribe their repaint and drop it when the window closes.
+        self.theme.subscribe(self._set_paint_rail)
+        dlg.bind("<Destroy>",
+                 lambda e: e.widget is dlg and self.theme.unsubscribe(self._set_paint_rail),
+                 add="+")
 
         def close():
             self._settings_win = None
@@ -97,40 +103,42 @@ class SettingsMixin:
         dlg.focus_force()
 
     def _set_build_header(self, dlg):
-        bar = tk.Frame(dlg, bg=BAR, height=self._edit_dpi_w(52))
+        bar = self._tw(tk.Frame(dlg, height=self._edit_dpi_w(52)), bg="bar")
         bar.grid(row=0, column=0, sticky="ew")
         bar.grid_propagate(False)
         im = self.icon("settings", size=20)
         if im is not None:
-            tk.Label(bar, image=im, bg=BAR).pack(side="left", padx=(16, 10))
-        tk.Label(bar, text=t("Settings"), bg=BAR, fg=FG,
-                 font=("Segoe UI", 13, "bold")).pack(side="left")
-        tk.Frame(dlg, bg=BORDER, height=1).grid(row=0, column=0, sticky="sew")
+            self._tw(tk.Label(bar, image=im), bg="bar").pack(side="left", padx=(16, 10))
+        self._tw(tk.Label(bar, text=t("Settings"),
+                 font=("Segoe UI", 13, "bold")), bg="bar", fg="fg").pack(side="left")
+        self._tw(tk.Frame(dlg, height=1), bg="border").grid(
+            row=0, column=0, sticky="sew")
 
     def _set_build_body(self, dlg):
-        body = tk.Frame(dlg, bg=BG)
+        body = self._tw(tk.Frame(dlg), bg="bg")
         body.grid(row=1, column=0, sticky="nsew")
         body.rowconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
 
         # LEFT: vertical tab rail.
-        rail = tk.Frame(body, bg=SIDEBAR, width=self._edit_dpi_w(180))
+        rail = self._tw(tk.Frame(body, width=self._edit_dpi_w(180)), bg="sidebar")
         rail.grid(row=0, column=0, sticky="ns")
         rail.grid_propagate(False)
-        tk.Frame(rail, bg=BG, height=self._edit_dpi_w(8)).pack(fill="x")
+        self._tw(tk.Frame(rail, height=self._edit_dpi_w(8)), bg="bg").pack(fill="x")
         for key, label, icon, _m in _TABS:
             self._set_rail_row(rail, key, t(label), icon)
-        tk.Frame(body, bg=BORDER, width=1).grid(row=0, column=0, sticky="nse")
+        self._tw(tk.Frame(body, width=1), bg="border").grid(
+            row=0, column=0, sticky="nse")
 
         # RIGHT: a scrollable content pane.
-        right = tk.Frame(body, bg=BG)
+        right = self._tw(tk.Frame(body), bg="bg")
         right.grid(row=0, column=1, sticky="nsew")
-        self._set_canvas = tk.Canvas(right, bg=BG, highlightthickness=0)
+        self._set_canvas = self._tw(tk.Canvas(right, highlightthickness=0), bg="bg")
         sb = self._make_scrollbar(right, self._set_canvas)
         self._set_canvas.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
         self._set_canvas.pack(side="left", fill="both", expand=True)
-        self._set_body = tk.Frame(self._set_canvas, bg=BG)
+        self._set_body = self._tw(tk.Frame(self._set_canvas), bg="bg")
         self._set_win = self._set_canvas.create_window(
             (0, 0), window=self._set_body, anchor="nw")
         self._set_body.bind(
@@ -143,15 +151,19 @@ class SettingsMixin:
                                                      width=e.width))
 
     def _set_rail_row(self, parent, key, label, icon):
-        row = tk.Frame(parent, bg=SIDEBAR, cursor="hand2")
+        # Bespoke active-state row (like crop's chips): built once, its resting /
+        # hover / active look comes from _set_paint_rail + _set_rail_hover reading
+        # self.theme live, so a dark<->light switch (subscribed) repaints it.
+        side = self.theme["sidebar"]
+        row = tk.Frame(parent, bg=side, cursor="hand2")
         row.pack(fill="x")
-        bar = tk.Frame(row, bg=SIDEBAR, width=3)      # accent bar when active
+        bar = tk.Frame(row, bg=side, width=3)      # accent bar when active
         bar.pack(side="left", fill="y")
         im = self.icon(icon, size=17)
-        ic = (tk.Label(row, image=im, bg=SIDEBAR) if im is not None
-              else tk.Label(row, text="•", bg=SIDEBAR, fg=FG))
+        ic = (tk.Label(row, image=im, bg=side) if im is not None
+              else tk.Label(row, text="•", bg=side, fg=self.theme["fg"]))
         ic.pack(side="left", padx=(13, 10), pady=10)
-        lab = tk.Label(row, text=label, bg=SIDEBAR, fg=FG, anchor="w",
+        lab = tk.Label(row, text=label, bg=side, fg=self.theme["fg"], anchor="w",
                        font=("Segoe UI", 10))
         lab.pack(side="left")
         self._set_rail_rows[key] = (row, bar, ic, lab)
@@ -164,18 +176,22 @@ class SettingsMixin:
         if key == self._set_active:
             return
         row, bar, ic, lab = self._set_rail_rows[key]
-        bg = HOVER if on else SIDEBAR
+        bg = self.theme["hover"] if on else self.theme["sidebar"]
         for w in (row, bar, ic, lab):
             w.configure(bg=bg)
 
     def _set_paint_rail(self):
+        side = self.theme["sidebar"]
+        # No theme token for the faint selected-row tint → mix sidebar toward accent.
+        sel = tintkit.mix(side, self.theme["accent"], 0.12)
         for key, (row, bar, ic, lab) in self._set_rail_rows.items():
             act = (key == self._set_active)
-            bg = SEL_BG if act else SIDEBAR
-            bar.configure(bg=ACCENT if act else SIDEBAR)
+            bg = sel if act else side
+            bar.configure(bg=self.theme["accent"] if act else side)
             for w in (row, ic, lab):
                 w.configure(bg=bg)
-            lab.configure(font=("Segoe UI", 10, "bold" if act else "normal"))
+            lab.configure(fg=self.theme["fg"],
+                          font=("Segoe UI", 10, "bold" if act else "normal"))
 
     def _set_show_tab(self, key):
         "Switch tabs: repaint the rail, rebuild the content pane, scroll to top."
@@ -183,18 +199,19 @@ class SettingsMixin:
         self._set_paint_rail()
         for w in self._set_body.winfo_children():
             w.destroy()
-        pad = tk.Frame(self._set_body, bg=BG)
+        pad = self._tw(tk.Frame(self._set_body), bg="bg")
         pad.pack(fill="both", expand=True, padx=26, pady=(4, 24))
         method = next(m for k, _l, _i, m in _TABS if k == key)
         getattr(self, method)(pad)
         self._set_canvas.yview_moveto(0.0)
 
     def _set_build_footer(self, dlg):
-        tk.Frame(dlg, bg=BORDER, height=1).grid(row=2, column=0, sticky="new")
-        foot = tk.Frame(dlg, bg=BAR, height=self._edit_dpi_w(58))
+        self._tw(tk.Frame(dlg, height=1), bg="border").grid(
+            row=2, column=0, sticky="new")
+        foot = self._tw(tk.Frame(dlg, height=self._edit_dpi_w(58)), bg="bar")
         foot.grid(row=2, column=0, sticky="ew")
         foot.grid_propagate(False)
-        inner = tk.Frame(foot, bg=BAR)
+        inner = self._tw(tk.Frame(foot), bg="bar")
         inner.pack(fill="x", padx=16, pady=11)
         tintkit.Button(inner, self.theme, t("Restore defaults"), role="neutral",
                        variant="outline", bg="bar",
@@ -214,32 +231,32 @@ class SettingsMixin:
 
     def _set_group(self, parent, title):
         "A thin divider + small bold caption titling a block of settings."
-        tk.Frame(parent, bg=DIVIDER, height=1).pack(fill="x", pady=(20, 0))
-        tk.Label(parent, text=title.upper(), bg=BG, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(fill="x", pady=(8, 4))
+        self._tw(tk.Frame(parent, height=1), bg="divider").pack(fill="x", pady=(20, 0))
+        self._tw(tk.Label(parent, text=title.upper(), anchor="w",
+                 font=("Segoe UI", 8, "bold")), bg="bg", fg="fg_dim").pack(
+            fill="x", pady=(8, 4))
 
     def _set_row(self, parent, title, desc=None):
         "One setting line: title (+ optional description) left, control frame right."
-        row = tk.Frame(parent, bg=BG)
+        row = self._tw(tk.Frame(parent), bg="bg")
         row.pack(fill="x", pady=6)
-        left = tk.Frame(row, bg=BG)
+        left = self._tw(tk.Frame(row), bg="bg")
         left.pack(side="left", fill="x", expand=True)
-        tk.Label(left, text=title, bg=BG, fg=FG, anchor="w",
-                 font=("Segoe UI", 10)).pack(anchor="w")
+        self._tw(tk.Label(left, text=title, anchor="w",
+                 font=("Segoe UI", 10)), bg="bg", fg="fg").pack(anchor="w")
         if desc:
-            tk.Label(left, text=desc, bg=BG, fg=FG_DIM, anchor="w",
-                     justify="left", font=("Segoe UI", 8),
-                     wraplength=self._edit_dpi_w(330)).pack(anchor="w",
-                                                            pady=(2, 0))
-        right = tk.Frame(row, bg=BG)
+            self._tw(tk.Label(left, text=desc, anchor="w", justify="left",
+                     font=("Segoe UI", 8), wraplength=self._edit_dpi_w(330)),
+                     bg="bg", fg="fg_dim").pack(anchor="w", pady=(2, 0))
+        right = self._tw(tk.Frame(row), bg="bg")
         right.pack(side="right", padx=(16, 0))
         return right
 
     def _set_note(self, parent, text):
         "A small dim explanatory line under a block."
-        tk.Label(parent, text=text, bg=BG, fg=FG_DIM, anchor="w",
-                 justify="left", font=("Segoe UI", 8),
-                 wraplength=self._edit_dpi_w(440)).pack(fill="x", pady=(10, 0))
+        self._tw(tk.Label(parent, text=text, anchor="w", justify="left",
+                 font=("Segoe UI", 8), wraplength=self._edit_dpi_w(440)),
+                 bg="bg", fg="fg_dim").pack(fill="x", pady=(10, 0))
 
     # --- General tab --------------------------------------------------------
 
@@ -425,9 +442,8 @@ class SettingsMixin:
         right = self._set_row(parent, t("Subfolder name"),
                               t("Created next to each photo (e.g. folder/_edited)."))
         var = tk.StringVar(value=self.export_subfolder or "_edited")
-        ent = tk.Entry(right, textvariable=var, bg=CHIP_BG, fg=FG,
-                       insertbackground=FG, relief="flat", width=16,
-                       font=("Segoe UI", 9))
+        ent = self._tw(tk.Entry(right, textvariable=var, relief="flat", width=16,
+                       font=("Segoe UI", 9)), bg="chip", fg="fg", insert="fg")
         ent.pack(side="left", ipady=4, ipadx=6)
 
         def commit(_e=None):
@@ -444,10 +460,10 @@ class SettingsMixin:
         "Pick one fixed output folder for every export (mode “fixed”)."
         right = self._set_row(parent, t("Folder"))
         cur = self.export_fixed_dir
-        lbl = tk.Label(right,
+        lbl = self._tw(tk.Label(right,
                        text=self._set_short_path(cur) if cur else t("Not set"),
-                       bg=CHIP_BG, fg=FG if cur else FG_DIM,
-                       font=("Segoe UI", 9), anchor="e", padx=10, pady=5)
+                       font=("Segoe UI", 9), anchor="e", padx=10, pady=5),
+                       bg="chip", fg="fg" if cur else "fg_dim")
         lbl.pack(side="left", padx=(0, 8))
 
         def change():
@@ -458,7 +474,7 @@ class SettingsMixin:
                 return
             self.export_fixed_dir = d
             self._save_state()
-            lbl.configure(text=self._set_short_path(d), fg=FG)
+            self._set_show_tab(self._set_active)   # rebuild → label re-threaded fg="fg"
         tintkit.Button(right, self.theme, t("Change…"), role="neutral",
                        variant="outline", bg="bg", command=change).pack(side="left")
 
@@ -491,9 +507,10 @@ class SettingsMixin:
     def _set_cull_row(self, parent, title, which):
         right = self._set_row(parent, title)
         cur = self.cull_keep if which == "keep" else self.cull_reject
-        lbl = tk.Label(right, text=self._set_short_path(cur) if cur else t("Not set"),
-                       bg=CHIP_BG, fg=FG if cur else FG_DIM, font=("Segoe UI", 9),
-                       anchor="e", padx=10, pady=5)
+        lbl = self._tw(tk.Label(right,
+                       text=self._set_short_path(cur) if cur else t("Not set"),
+                       font=("Segoe UI", 9), anchor="e", padx=10, pady=5),
+                       bg="chip", fg="fg" if cur else "fg_dim")
         lbl.pack(side="left", padx=(0, 8))
 
         def change():
@@ -507,7 +524,7 @@ class SettingsMixin:
             else:
                 self.cull_reject = d
             self._save_state()
-            lbl.configure(text=self._set_short_path(d), fg=FG)
+            self._set_show_tab(self._set_active)   # rebuild → label re-threaded fg="fg"
         tintkit.Button(right, self.theme, t("Change…"), role="neutral",
                        variant="outline", bg="bg", command=change).pack(side="left")
 
@@ -524,19 +541,20 @@ class SettingsMixin:
     # --- About tab ----------------------------------------------------------
 
     def _set_tab_about(self, p):
-        box = tk.Frame(p, bg=BG)
+        box = self._tw(tk.Frame(p), bg="bg")
         box.pack(fill="x", pady=(16, 0))
-        tk.Label(box, text="Manoni", bg=BG, fg=FG,
-                 font=("Segoe UI", 17, "bold")).pack(anchor="w")
-        tk.Label(box, text="v" + APP_VERSION + "  ·  " +
+        self._tw(tk.Label(box, text="Manoni", font=("Segoe UI", 17, "bold")),
+                 bg="bg", fg="fg").pack(anchor="w")
+        self._tw(tk.Label(box, text="v" + APP_VERSION + "  ·  " +
                  t("a fast, simple dark photo browser and culler"),
-                 bg=BG, fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w",
-                                                              pady=(2, 0))
-        tk.Label(box, text="{label}: {name} · {handle}".format(
+                 font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(
+            anchor="w", pady=(2, 0))
+        self._tw(tk.Label(box, text="{label}: {name} · {handle}".format(
             label=t("Author"), name=AUTHOR_NAME, handle=AUTHOR_HANDLE),
-            bg=BG, fg=FG, font=("Segoe UI", 9)).pack(anchor="w", pady=(12, 0))
-        tk.Label(box, text=t("Written in Python"), bg=BG, fg=FG_DIM,
-                 font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
+            font=("Segoe UI", 9)), bg="bg", fg="fg").pack(anchor="w", pady=(12, 0))
+        self._tw(tk.Label(box, text=t("Written in Python"),
+                 font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(
+            anchor="w", pady=(2, 0))
 
         self._set_group(p, t("Built with"))
         for name, url, lic in BUILT_WITH:
@@ -546,7 +564,8 @@ class SettingsMixin:
         for label, url in PROJECT_LINKS:
             self._set_link_row(p, label, url)
 
-        tk.Frame(p, bg=BG, height=16).pack()
+        self._tw(tk.Frame(p, height=16), bg="bg").pack()
+        # Buy-me-a-coffee keeps its brand colours (not theme tokens) in both schemes.
         bmc = tk.Label(p, text=t("Buy me a coffee"), bg=BMC_BG, fg=BMC_FG,
                        font=("Segoe UI", 10, "bold"), padx=20, pady=8,
                        cursor="hand2")
@@ -556,17 +575,17 @@ class SettingsMixin:
         bmc.bind("<Button-1>", lambda e: webbrowser.open(BMC_URL))
 
     def _set_link_row(self, parent, label, url, lic=None):
-        row = tk.Frame(parent, bg=BG)
+        row = self._tw(tk.Frame(parent), bg="bg")
         row.pack(fill="x", pady=1)
-        tk.Label(row, text=label + "  ", bg=BG, fg=FG, anchor="w",
-                 font=("Segoe UI", 9)).pack(side="left")
-        link = tk.Label(row, text=url, bg=BG, fg=ACCENT, cursor="hand2",
-                        font=("Segoe UI", 9, "underline"))
+        self._tw(tk.Label(row, text=label + "  ", anchor="w",
+                 font=("Segoe UI", 9)), bg="bg", fg="fg").pack(side="left")
+        link = self._tw(tk.Label(row, text=url, cursor="hand2",
+                        font=("Segoe UI", 9, "underline")), bg="bg", fg="accent")
         link.pack(side="left")
         link.bind("<Button-1>", lambda e, u=url: webbrowser.open(u))
         if lic:
-            tk.Label(row, text="  (" + lic + ")", bg=BG, fg=FG_DIM,
-                     font=("Segoe UI", 8)).pack(side="left")
+            self._tw(tk.Label(row, text="  (" + lic + ")",
+                     font=("Segoe UI", 8)), bg="bg", fg="fg_dim").pack(side="left")
 
     # --- Restore defaults ---------------------------------------------------
 
