@@ -49,9 +49,13 @@ DIVIDER   = "#333333"   # thin divider lines inside panels
 
 # Cull buttons (keep / reject) — near-white with just a hint of colour so they
 # read at a glance without shouting: a greenish-white keep (folder-up) and a
-# reddish-white reject (folder-down).
-CULL_KEEP_TINT   = "#cfe9cf"   # greenish white — keep / keeper
-CULL_REJECT_TINT = "#edcfcf"   # reddish white — reject / discard
+# reddish-white reject (folder-down). Those near-white tints only read on the
+# DARK chrome; the light scheme uses a saturated green/red so the same icons +
+# their info-line text stay legible on a light background (see _cull_tint).
+CULL_KEEP_TINT   = "#cfe9cf"   # dark scheme: greenish white — keep / keeper
+CULL_REJECT_TINT = "#edcfcf"   # dark scheme: reddish white — reject / discard
+CULL_KEEP_TINT_LIGHT   = "#2e7d32"   # light scheme: readable green
+CULL_REJECT_TINT_LIGHT = "#c62828"   # light scheme: readable red
 
 # TintKit theme tokens = Manoni's dark palette, so a panel migrated onto TintKit
 # widgets matches the rest of the app exactly (same bg / bar / fg / border …).

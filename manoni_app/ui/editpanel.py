@@ -384,6 +384,9 @@ class EditPanelMixin:
 
         self._update_rail()
         self.theme.subscribe(self._update_rail)   # repaint the rail on dark<->light
+        # The chevron's direction is dynamic (open/closed), so restore it after a
+        # switch too (its _tool_button restyle only knows the build-time icon).
+        self.theme.subscribe(self._update_chevron)
         self._update_chevron()
 
     def _build_save_button(self, rail):
@@ -397,12 +400,9 @@ class EditPanelMixin:
 
         btn = self._tw(tk.Frame(wrap, cursor="hand2"), bg="accent")
         btn.pack(side="top", fill="x")
-        img = self.icon("save")
-        if img is not None:
-            ic = self._tw(tk.Label(btn, image=img), bg="accent")
-        else:
-            ic = self._tw(tk.Label(btn, text="💾", font=("Segoe UI", 14)),
-                          bg="accent", fg="on_accent")
+        # Icon sits on the accent fill → tinted on_accent (light) in both schemes.
+        ic = self._icon_label(btn, "save", token="on_accent", bg="accent",
+                              fallback="💾", font=("Segoe UI", 14))
         ic.pack(pady=(8, 2))
         tx = self._tw(tk.Label(btn, text=t("Save"),
                       font=("Segoe UI", 8, "bold")), bg="accent", fg="on_accent")
@@ -486,6 +486,10 @@ class EditPanelMixin:
                       fg=self.theme["fg_dim"], font=("Segoe UI", 8))
         tx.pack(pady=(0, 8))
         cell._widgets = (ic, tx)
+        # The rail icon re-tints with state (see _update_rail): on_accent while the
+        # cell is the active section, fg otherwise — so it flips dark<->light too.
+        cell._icon_name = icon_name
+        cell._icon_has = img is not None
 
         def on_click(_e=None):
             if key is not None:
@@ -559,6 +563,15 @@ class EditPanelMixin:
             cell.configure(bg=bg)
             ic.configure(bg=bg)
             tx.configure(bg=bg, fg=fg)
+            # Icon: light on the accent fill, theme fg when resting.
+            itok = "on_accent" if active else "fg"
+            if getattr(cell, "_icon_has", False):
+                im = self.icon(cell._icon_name, color=self.theme[itok])
+                if im is not None:
+                    ic.configure(image=im)
+                    ic._icon_ref = im
+            else:
+                ic.configure(fg=self.theme[itok])
 
     def _slider(self, parent, label, attr, lo=0, hi=200, neutral=100):
         "A labeled live TitledSlider bound to an attribute, with its own reset icon."
@@ -590,11 +603,9 @@ class EditPanelMixin:
         inner = self._tw(tk.Frame(btn), bg="chip")   # centers the icon + label
         inner.pack(pady=7)
         parts = [btn, inner]
-        img = self.icon("rotate-ccw", size=16)
-        if img is not None:
-            ic = self._tw(tk.Label(inner, image=img), bg="chip")
-            ic.pack(side="left", padx=(0, 6))
-            parts.append(ic)
+        ic = self._icon_label(inner, "rotate-ccw", size=16, token="fg", bg="chip")
+        ic.pack(side="left", padx=(0, 6))
+        parts.append(ic)
         tx = self._tw(tk.Label(inner, text=t("Clear all"),
                       font=("Segoe UI", 9, "bold")), bg="chip", fg="fg")
         tx.pack(side="left")

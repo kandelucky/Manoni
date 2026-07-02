@@ -119,10 +119,9 @@ class CropMixin:
         "A small icon + dim bold caption that titles a group in the crop panel."
         row = self._tw(tk.Frame(parent), bg="bar")
         row.pack(fill="x", padx=EDIT_PAD, pady=(13, 6))
-        img = self.icon(icon_name, size=12)
-        if img is not None:
-            ic = self._tw(tk.Label(row, image=img), bg="bar")
-            ic.pack(side="left", padx=(0, 6))
+        if self.icon(icon_name, size=12) is not None:
+            self._icon_label(row, icon_name, size=12, token="fg_dim",
+                             bg="bar").pack(side="left", padx=(0, 6))
         self._tw(tk.Label(row, text=text, anchor="w",
                  font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
 
@@ -142,8 +141,11 @@ class CropMixin:
         cell = tk.Frame(track, bg=self.theme["bg"], cursor="hand2")
         cell.pack(side="left", fill="both", expand=True, padx=2, pady=2)
         img = self.icon(icon_name, size=15)
-        ic = (tk.Label(cell, image=img, bg=self.theme["bg"]) if img is not None
-              else tk.Label(cell, text="□", bg=self.theme["bg"], fg=self.theme["fg"]))
+        if img is not None:
+            ic = tk.Label(cell, image=img, bg=self.theme["bg"])
+            self._reg_icon(ic, icon_name, size=15, token="fg")   # bg = segment paint's
+        else:
+            ic = tk.Label(cell, text="□", bg=self.theme["bg"], fg=self.theme["fg"])
         ic.pack(pady=(6, 1))
         tx = tk.Label(cell, text=label, bg=self.theme["bg"], fg=self.theme["fg_dim"],
                       font=("Segoe UI", 8))
@@ -507,9 +509,12 @@ class CropMixin:
         " theme token its hover tints toward, e.g. 'accent' / 'danger')."
         img = self.icon(icon_name, size=13)
         chip = self.theme["chip"]
-        b = (tk.Label(parent, image=img, bg=chip, cursor="hand2") if img
-             is not None else tk.Label(parent, text="·", bg=chip,
-                                       fg=self.theme["fg_dim"], cursor="hand2"))
+        if img is not None:
+            b = tk.Label(parent, image=img, bg=chip, cursor="hand2")
+            self._reg_icon(b, icon_name, size=13, token="fg")   # bg = row paint's
+        else:
+            b = tk.Label(parent, text="·", bg=chip, fg=self.theme["fg_dim"],
+                         cursor="hand2")
         b.bind("<Button-1>", lambda e: command())
         b.bind("<Enter>", lambda e: b.configure(
             bg=tintkit.mix(self.theme["chip"], self.theme[tint], 0.35)))

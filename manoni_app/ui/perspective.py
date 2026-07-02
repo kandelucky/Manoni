@@ -49,9 +49,9 @@ class PerspectiveMixin:
         "A small icon + dim caption titling a slider in the perspective panel."
         row = self._tw(tk.Frame(parent), bg="bar")
         row.pack(fill="x", padx=EDIT_PAD, pady=(12, 4))
-        img = self.icon(icon_name, size=12)
-        if img is not None:
-            self._tw(tk.Label(row, image=img), bg="bar").pack(side="left", padx=(0, 6))
+        if self.icon(icon_name, size=12) is not None:
+            self._icon_label(row, icon_name, size=12, token="fg_dim",
+                             bg="bar").pack(side="left", padx=(0, 6))
         self._tw(tk.Label(row, text=text, anchor="w",
                           font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
 

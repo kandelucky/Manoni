@@ -18,9 +18,8 @@ from PIL import Image, ImageTk
 # Chrome + sidebar cells now read colours from self.theme (via chrome's `_tw`);
 # HOVER/ACCENT/FG/FG_DIM stay imported only for the loading overlay, which is a
 # deliberate near-black blackout (LOADING_BG) that keeps its fixed colours in
-# both schemes. CULL_KEEP_TINT/REJECT_TINT are scheme-independent icon tints.
-from ..config import (HOVER, ACCENT, FG, FG_DIM, SUPPORTED,
-                      ICON_DIR, CULL_KEEP_TINT, CULL_REJECT_TINT)
+# both schemes. The keep/reject tints are now scheme-aware via self._cull_tint.
+from ..config import HOVER, ACCENT, FG, FG_DIM, SUPPORTED, ICON_DIR
 from ..i18n import t
 from ..storage import unique_path
 # The thumbnail workers call _decode_thumb; it is the disk-cached version, so the
@@ -56,15 +55,17 @@ class BrowserMixin:
         # no folder is set yet), evaluated fresh so it tracks Settings.
         nav = self._tw(tk.Frame(bar), bg="bar")
         nav.pack(side="right", padx=8)
-        for icon_name, command, tip, color, hint, sub in [
+        # `cull` = "keep"/"reject" (a scheme-aware green/red tint) or None (plain
+        # nav button, theme fg). The tint is resolved live so it follows the switch.
+        for icon_name, command, tip, cull, hint, sub in [
             ("chevrons-left", self._nav_click_first, t("First"), None,
              t("Jump to the first photo of this folder"), None),
             ("chevron-left", self._nav_click_prev, t("Previous"), None,
              t("Go to the previous photo  ·  ← key"), None),
-            ("folder-up", self.move_to_folder, t("Keep (keeper)"), CULL_KEEP_TINT,
+            ("folder-up", self.move_to_folder, t("Keep (keeper)"), "keep",
              t("Keep — move this photo to the keeper folder  ·  ↑ key"),
              lambda: self._cull_hint_line(self.cull_keep)),
-            ("folder-down", self.delete, t("Reject"), CULL_REJECT_TINT,
+            ("folder-down", self.delete, t("Reject"), "reject",
              t("Reject — move this photo to the discard folder  ·  ↓ key"),
              lambda: self._cull_hint_line(self.cull_reject)),
             ("chevron-right", self._nav_click_next, t("Next"), None,
@@ -72,10 +73,12 @@ class BrowserMixin:
             ("chevrons-right", self._nav_click_last, t("Last"), None,
              t("Jump to the last photo of this folder"), None),
         ]:
+            color = (lambda w=cull: self._cull_tint(w)) if cull else None
             btn = self._tool_button(nav, icon_name, command, tip, color=color)
             btn.bind("<Enter>",
-                     lambda e, h=hint, s=sub, c=color: self._nav_hint(
-                         h, s() if callable(s) else "", c), add="+")
+                     lambda e, h=hint, s=sub, w=cull: self._nav_hint(
+                         h, s() if callable(s) else "",
+                         self._cull_tint(w) if w else None), add="+")
             btn.bind("<Leave>", lambda e: self._nav_hint_clear(), add="+")
             btn.pack(side="left", padx=4, pady=4)
         self.lbl_pos = self._tw(

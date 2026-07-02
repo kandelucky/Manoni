@@ -16,7 +16,7 @@ import tintkit
 # nav's dialogs are transient modals — they read live theme colours at build time
 # (they can't outlive a dark<->light switch). Only the scheme-independent cull
 # icon tints + SUPPORTED stay as config constants.
-from ..config import SUPPORTED, CULL_KEEP_TINT, CULL_REJECT_TINT
+from ..config import SUPPORTED
 from ..i18n import t
 from .dialogs import center_over
 
@@ -619,9 +619,9 @@ class NavMixin:
 
         rows = [
             ("folder-up", "Keep (keeper)",
-             "Moves the current photo to the keep folder.", CULL_KEEP_TINT),
+             "Moves the current photo to the keep folder.", self._cull_tint("keep")),
             ("folder-down", "Reject",
-             "Moves the current photo to the discard folder.", CULL_REJECT_TINT),
+             "Moves the current photo to the discard folder.", self._cull_tint("reject")),
             ("settings", "Settings",
              "Set these two folders — until you do, the buttons don't work.", None),
         ]

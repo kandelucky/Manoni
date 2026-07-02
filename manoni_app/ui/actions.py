@@ -564,8 +564,11 @@ class ActionsMixin:
         row = self._tw(tk.Frame(self._actions_list, cursor="hand2"), bg="chip")
         row.pack(fill="x", pady=2)
         pimg = self.icon("circle-play", size=16)
-        pic = (self._tw(tk.Label(row, image=pimg), bg="chip") if pimg is not None
-               else self._tw(tk.Label(row, text="▶"), bg="chip", fg="accent"))
+        if pimg is not None:
+            pic = self._tw(tk.Label(row, image=pimg), bg="chip")   # bg follows theme
+            self._reg_icon(pic, "circle-play", size=16, token="fg")  # image re-tints
+        else:
+            pic = self._tw(tk.Label(row, text="▶"), bg="chip", fg="accent")
         pic.pack(side="left", padx=(8, 8), pady=7)
         nm = self._tw(tk.Label(row, text=act["name"], anchor="w",
                       font=("Segoe UI", 9)), bg="chip", fg="fg")

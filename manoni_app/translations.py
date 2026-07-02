@@ -457,6 +457,9 @@ CATALOG_KA = {
         "თავში აბრუნებს; „მომდევნო ფოლდერი“ შემდეგ ფოლდერს ხსნის, რომელშიც ფოტოა.",
     # General toggles (settings.py · General tab)
     "Interface": "ინტერფეისი",
+    "Light mode": "ღია თემა",
+    "Switch between the dark and light interface.":
+        "გადართე მუქ და ღია ინტერფეისს შორის.",
     "Show filter strip": "ფილტრების ზოლის ჩვენება",
     "The row of filter previews under the photo.":
         "ფილტრების გადახედვების ზოლი ფოტოს ქვეშ.",

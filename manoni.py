@@ -166,7 +166,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                 self.root.iconphoto(True, tk.PhotoImage(file=png, master=self.root))
         except Exception:
             pass
-        self.root.configure(bg=BG)
+        self._tw(self.root, bg="bg")   # outermost surface follows dark<->light too
         self._center_window(1280, 800)
 
         self.folder = None
@@ -511,6 +511,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "restore_photo": self.restore_photo,
                  "confirm_reject": self.confirm_reject,
                  "warn_unsaved": self.warn_unsaved,
+                 "scheme": self.theme.scheme,   # dark / light interface theme
                  "language": i18n.get_language()}
         if self.folder_list_height is not None:
             state["folder_list_height"] = self.folder_list_height
@@ -570,6 +571,12 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         sr = state.get("show_rulers")
         if isinstance(sr, bool):
             self.show_rulers = sr
+        # Interface theme (dark / light). Applied to the live Theme BEFORE the UI
+        # builds (this runs at line ~383, the chrome builds at ~405), so the whole
+        # window comes up in the saved scheme with no dark→light flash.
+        scheme = state.get("scheme")
+        if scheme in ("dark", "light") and scheme != self.theme.scheme:
+            self.theme.set(scheme=scheme)
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "show_filter_strip", "show_histogram",

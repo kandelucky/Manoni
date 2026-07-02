@@ -19,7 +19,9 @@ from PIL import Image, ImageTk
 # `_tw` helper, so only the peek button (floats over the always-dark preview) and
 # the preview canvas / rulers keep fixed config colours. BG = preview letterbox
 # (stays dark); CHIP_BG/ACCENT/HOVER/FG = the peek button.
-from ..config import BG, HOVER, ACCENT, FG, ICON_SIZE, ICON_DIR, CHIP_BG
+from ..config import (BG, HOVER, ACCENT, FG, ICON_SIZE, ICON_DIR, CHIP_BG,
+                      CULL_KEEP_TINT, CULL_REJECT_TINT,
+                      CULL_KEEP_TINT_LIGHT, CULL_REJECT_TINT_LIGHT)
 from ..widgets import Tooltip
 from .. import i18n
 from ..i18n import t
@@ -30,15 +32,18 @@ class ChromeMixin:
 
     def icon(self, name, size=None, color=None):
         "Load a Lucide icon scaled to `size` logical px (default ICON_SIZE),"
-        " cached. White by default; `color` (a hex string) recolors the strokes"
-        " — used for the tinted keep/reject buttons. None if missing."
-        # Cache per (name, size, color): the bare name keeps the default-size key
-        # so existing callers are unaffected; a custom size / color gets its own.
+        " cached. Tinted to the theme foreground by default so icons follow the"
+        " dark<->light switch; pass an explicit `color` (hex) to override — e.g."
+        " the scheme-independent keep/reject tints or the always-light peek eye."
+        " None if the PNG is missing."
+        # None → the live theme foreground, so a light switch flips the strokes.
+        if color is None:
+            color = self.theme["fg"]
+        # Cache per (name, size, resolved colour) so dark + light tints coexist.
         key = name
         if size is not None:
             key += f"@{size}"
-        if color is not None:
-            key += f"#{color}"
+        key += f"#{color}"
         if key in self.icons:
             return self.icons[key]
         path = os.path.join(ICON_DIR, name + ".png")
@@ -95,18 +100,93 @@ class ChromeMixin:
         restyle()
         return w
 
+    def _icon_label(self, parent, name, size=None, token="fg", bg="bar",
+                    fallback="", **kw):
+        "A tk.Label holding a Lucide icon tinted to theme[`token`], re-tinted on"
+        " every dark<->light switch — the icon analogue of _tw (plain Manoni"
+        " icons don't follow the theme on their own). Falls back to `fallback`"
+        " text if the PNG is missing. Pass bg=<token> to also thread the label"
+        " bg, or bg=None to leave it to the caller (bespoke hover / active rows"
+        " that paint their own bg)."
+        lbl = tk.Label(parent, **kw)
+        has_img = self.icon(name, size, self.theme[token]) is not None
+
+        def restyle():
+            try:
+                if has_img:
+                    im = self.icon(name, size, self.theme[token])
+                    lbl.configure(image=im)
+                    lbl._icon_ref = im            # keep a hard ref alive
+                else:
+                    lbl.configure(text=fallback, fg=self.theme[token])
+                if bg is not None:
+                    lbl.configure(bg=self.theme[bg])
+            except tk.TclError:                   # widget destroyed
+                self.theme.unsubscribe(restyle)
+
+        self.theme.subscribe(restyle)
+        lbl.bind("<Destroy>",
+                 lambda e: e.widget is lbl and self.theme.unsubscribe(restyle),
+                 add="+")
+        restyle()
+        return lbl
+
+    def _reg_icon(self, label, name, size=None, token="fg"):
+        "Re-tint an ALREADY-created icon label's image on every theme switch — the"
+        " bg stays the caller's to manage (for bespoke hover / active rows that"
+        " paint their own bg, so _icon_label's bg handling would fight them)."
+        def restyle():
+            try:
+                im = self.icon(name, size, self.theme[token])
+                if im is not None:
+                    label.configure(image=im)
+                    label._icon_ref = im
+            except tk.TclError:
+                self.theme.unsubscribe(restyle)
+        self.theme.subscribe(restyle)
+        label.bind("<Destroy>",
+                   lambda e: e.widget is label and self.theme.unsubscribe(restyle),
+                   add="+")
+        restyle()
+        return label
+
+    def _cull_tint(self, which):
+        "The keep/reject accent for the active scheme: near-white on the dark"
+        " chrome, a saturated green/red on light so the icon + its info-line text"
+        " stay legible. `which` is 'keep' or 'reject'."
+        light = self.theme.scheme == "light"
+        if which == "keep":
+            return CULL_KEEP_TINT_LIGHT if light else CULL_KEEP_TINT
+        return CULL_REJECT_TINT_LIGHT if light else CULL_REJECT_TINT
+
     def _tool_button(self, parent, icon_name, command, tooltip="", size=None,
                      color=None):
         "A flat icon button with hover effect (falls back to text if no icon)."
-        img = self.icon(icon_name, size, color)
-        if img is not None:
-            btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
-            self._tw(btn, bg="bar")
-        else:
-            btn = tk.Label(parent, text=tooltip or "?", bg=self.theme["bar"],
-                           fg=self.theme["fg"], cursor="hand2",
-                           font=("Segoe UI", 10))
-            self._tw(btn, bg="bar", fg="fg")
+        " `color` may be a hex string (fixed) or a zero-arg callable resolved on"
+        " each repaint — the keep/reject buttons pass a callable so their tint"
+        " follows the dark<->light switch; a plain icon defaults to the theme fg."
+        btn = tk.Label(parent, bg=self.theme["bar"], cursor="hand2")
+        resolve = (lambda: color()) if callable(color) else (lambda: color)
+        has_img = self.icon(icon_name, size, resolve()) is not None
+
+        def restyle():
+            try:
+                if has_img:
+                    im = self.icon(icon_name, size, resolve())
+                    btn.configure(image=im)
+                    btn._icon_ref = im
+                else:
+                    btn.configure(text=tooltip or "?", fg=self.theme["fg"],
+                                  font=("Segoe UI", 10))
+                btn.configure(bg=self.theme["bar"])
+            except tk.TclError:
+                self.theme.unsubscribe(restyle)
+
+        self.theme.subscribe(restyle)
+        btn.bind("<Destroy>",
+                 lambda e: e.widget is btn and self.theme.unsubscribe(restyle),
+                 add="+")
+        restyle()
         btn.bind("<Enter>", lambda e: btn.configure(bg=self.theme["hover"]))
         btn.bind("<Leave>", lambda e: btn.configure(bg=self.theme["bar"]))
         btn.bind("<Button-1>", lambda e: command())
@@ -161,6 +241,7 @@ class ChromeMixin:
         img = self.icon("hand")
         if img is not None:
             btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
+            btn._icon = "hand"
         else:
             btn = tk.Label(parent, text="✋", bg=self.theme["bar"],
                            fg=self.theme["fg"], cursor="hand2",
@@ -178,11 +259,24 @@ class ChromeMixin:
         "Repaint the hand toggle: accent fill while active, hover tint otherwise."
         if not hasattr(self, "btn_hand"):
             return
-        if self.hand_tool:
+        active = self.hand_tool
+        if active:
             self.btn_hand.configure(bg=self.theme["accent"])
         else:
             self.btn_hand.configure(
                 bg=self.theme["hover"] if hover else self.theme["bar"])
+        self._retint_toggle_icon(self.btn_hand, active)
+
+    def _retint_toggle_icon(self, btn, active):
+        "Re-tint a toolbar toggle's icon: on_accent while accent-filled, else fg."
+        name = getattr(btn, "_icon", None)
+        if name is None:                          # text-glyph fallback (no PNG)
+            btn.configure(fg=self.theme["on_accent"] if active else self.theme["fg"])
+            return
+        im = self.icon(name, color=self.theme["on_accent" if active else "fg"])
+        if im is not None:
+            btn.configure(image=im)
+            btn._icon_ref = im
 
     def _set_hand_tool(self, on):
         "Turn the hand (pan) tool on/off: repaint the toggle + set the canvas cursor."
@@ -208,6 +302,7 @@ class ChromeMixin:
         img = self.icon("square-split-horizontal")
         if img is not None:
             btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
+            btn._icon = "square-split-horizontal"
         else:
             btn = tk.Label(parent, text="◧", bg=self.theme["bar"],
                            fg=self.theme["fg"], cursor="hand2",
@@ -229,11 +324,13 @@ class ChromeMixin:
         "Repaint the compare toggle: accent fill while split is on, else hover tint."
         if not hasattr(self, "btn_compare"):
             return
-        if self.compare_mode:
+        active = self.compare_mode
+        if active:
             self.btn_compare.configure(bg=self.theme["accent"])
         else:
             self.btn_compare.configure(
                 bg=self.theme["hover"] if hover else self.theme["bar"])
+        self._retint_toggle_icon(self.btn_compare, active)
 
     def _compare_btn_press(self, event):
         "Button pressed: peek the full original and start timing the hold."
@@ -268,7 +365,9 @@ class ChromeMixin:
 
     def _build_peek_button(self):
         "A small always-on button pinned to the preview's corner: hold = იყო, release = არის."
-        img = self.icon("eye")
+        # The peek button is deliberately kept dark in both schemes (it floats over
+        # the always-dark preview), so its eye stays a fixed light — never theme fg.
+        img = self.icon("eye", color=FG)
         if img is not None:
             btn = tk.Label(self.preview, image=img, bg=self.PEEK_BG, cursor="hand2",
                            padx=5, pady=5)

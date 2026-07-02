@@ -106,9 +106,9 @@ class SettingsMixin:
         bar = self._tw(tk.Frame(dlg, height=self._edit_dpi_w(52)), bg="bar")
         bar.grid(row=0, column=0, sticky="ew")
         bar.grid_propagate(False)
-        im = self.icon("settings", size=20)
-        if im is not None:
-            self._tw(tk.Label(bar, image=im), bg="bar").pack(side="left", padx=(16, 10))
+        if self.icon("settings", size=20) is not None:
+            self._icon_label(bar, "settings", size=20, token="fg",
+                             bg="bar").pack(side="left", padx=(16, 10))
         self._tw(tk.Label(bar, text=t("Settings"),
                  font=("Segoe UI", 13, "bold")), bg="bar", fg="fg").pack(side="left")
         self._tw(tk.Frame(dlg, height=1), bg="border").grid(
@@ -160,8 +160,11 @@ class SettingsMixin:
         bar = tk.Frame(row, bg=side, width=3)      # accent bar when active
         bar.pack(side="left", fill="y")
         im = self.icon(icon, size=17)
-        ic = (tk.Label(row, image=im, bg=side) if im is not None
-              else tk.Label(row, text="•", bg=side, fg=self.theme["fg"]))
+        if im is not None:
+            ic = tk.Label(row, image=im, bg=side)
+            self._reg_icon(ic, icon, size=17, token="fg")   # bg = rail paint's
+        else:
+            ic = tk.Label(row, text="•", bg=side, fg=self.theme["fg"])
         ic.pack(side="left", padx=(13, 10), pady=10)
         lab = tk.Label(row, text=label, bg=side, fg=self.theme["fg"], anchor="w",
                        font=("Segoe UI", 10))
@@ -289,6 +292,15 @@ class SettingsMixin:
                               command=lambda i, _l: pick_view(i)).pack()
 
         self._set_group(p, t("Interface"))
+        r = self._set_row(p, t("Light mode"),
+                          t("Switch between the dark and light interface."))
+
+        def pick_scheme(on):
+            self.theme.set(scheme="light" if on else "dark")  # repaints the app live
+            self._save_state()
+        tintkit.Toggle(r, self.theme, value=(self.theme.scheme == "light"),
+                       command=pick_scheme).pack()
+
         r = self._set_row(p, t("Show filter strip"),
                           t("The row of filter previews under the photo."))
 
