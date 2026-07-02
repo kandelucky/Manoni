@@ -32,7 +32,6 @@ from ..config import (BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD,
                       CHIP_BG, DIVIDER)
 from .. import imaging
 from ..i18n import t
-from .dialogs import make_chip, set_chip_active
 
 
 # Saved-action rows share the filters-manager row shade.
@@ -423,48 +422,43 @@ class ActionsMixin:
 
         frow = tk.Frame(wrap, bg=BG)
         frow.pack(fill="x")
-        self._dialog_btn(frow, t("Select"), pick_dir).pack(side="right", padx=(6, 0))
-        tk.Entry(frow, textvariable=dir_var, bg=BAR, fg=FG, insertbackground=FG,
-                 relief="flat", font=("Segoe UI", 9)).pack(
-                     side="left", fill="x", expand=True, ipady=5)
+        tintkit.Button(frow, self.theme, t("Select"), role="neutral",
+                       variant="outline", command=pick_dir, bg="bg").pack(
+                           side="right", padx=(6, 0))
+        dir_field = tintkit.TextField(frow, self.theme, bg="bg")
+        dir_field.entry.configure(textvariable=dir_var)
+        dir_field.pack(side="left", fill="x", expand=True)
 
         # Quality (lossy only) — built before format so format can show/hide it.
         q_opts = (80, 90, 95, 100)
         qbox = tk.Frame(wrap, bg=BG)
         tk.Label(qbox, text=t("Quality"), bg=BG, fg=FG_DIM,
                  font=("Segoe UI", 8)).pack(anchor="w", pady=(8, 2))
-        qrow = tk.Frame(qbox, bg=BG)
-        qrow.pack(anchor="w")
-        q_chips = {}
+        st["quality"] = min(q_opts, key=lambda q: abs(q - st["quality"]))
 
-        def pick_q(q):
-            st["quality"] = q
-            for k, w in q_chips.items():
-                set_chip_active(w, k == q)
-        for q in q_opts:
-            q_chips[q] = make_chip(qrow, str(q), lambda q=q: pick_q(q))
+        def pick_q(i, _label):
+            st["quality"] = q_opts[i]
+        tintkit.SegmentedTabs(qbox, self.theme, [str(q) for q in q_opts],
+                              selected=q_opts.index(st["quality"]),
+                              command=pick_q, bg="bg").pack(anchor="w")
 
-        # Format chips drive the quality visibility.
+        # Format drives the quality visibility.
         heading(t("Format"))
         fmt_row = tk.Frame(wrap, bg=BG)
         fmt_row.pack(anchor="w")
-        fmt_chips = {}
+        fmt_opts = ("JPEG", "PNG", "WEBP")
 
-        def pick_fmt(f):
+        def apply_fmt(f):
             st["fmt"] = f
-            for k, w in fmt_chips.items():
-                set_chip_active(w, k == f)
             if f == "PNG":
-                qbox.pack_forget()
+                qbox.pack_forget()             # PNG is lossless — no quality
             else:
                 qbox.pack(fill="x", anchor="w")
-        for f in ("JPEG", "PNG", "WEBP"):
-            fmt_chips[f] = make_chip(fmt_row, f, lambda f=f: pick_fmt(f))
-
-        pick_fmt(st["fmt"])
-        st["quality"] = min(q_opts, key=lambda q: abs(q - st["quality"]))
-        for k, w in q_chips.items():
-            set_chip_active(w, k == st["quality"])
+        tintkit.SegmentedTabs(fmt_row, self.theme, list(fmt_opts),
+                              selected=fmt_opts.index(st["fmt"]),
+                              command=lambda i, label: apply_fmt(label),
+                              bg="bg").pack(anchor="w")
+        apply_fmt(st["fmt"])                    # initial quality visibility
 
         def confirm():
             st["dir"] = dir_var.get().strip() or default_dir
@@ -473,8 +467,12 @@ class ActionsMixin:
 
         brow = tk.Frame(wrap, bg=BG)
         brow.pack(anchor="e", pady=(16, 0))
-        self._dialog_btn(brow, t("Cancel"), dlg.destroy).pack(side="right", padx=(8, 0))
-        self._dialog_btn(brow, t("Apply"), confirm, primary=True).pack(side="right")
+        tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=dlg.destroy, bg="bg").pack(
+                           side="right", padx=(8, 0))
+        tintkit.Button(brow, self.theme, t("Apply"), role="primary",
+                       variant="filled", command=confirm, bg="bg").pack(
+                           side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.bind("<Escape>", lambda e: dlg.destroy())
