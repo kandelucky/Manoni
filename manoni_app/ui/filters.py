@@ -23,12 +23,17 @@ import tkinter.filedialog as tkfd
 
 from PIL import Image, ImageTk
 
-from ..config import (BG, BAR, HOVER, ACCENT, FG, FG_DIM, EDIT_PAD,
-                      CHIP_BG, BORDER, DIVIDER)
+import tintkit
+
+# Colours now come from self.theme (dark<->light). The persistent panel + strip
+# scaffolding uses chrome's `_tw`; the heavily-rebuilt rows/cells read the live
+# theme at build time and are rebuilt on a switch (via _refresh_filter_strip,
+# subscribed). Only EDIT_PAD (a layout inset, not a colour) stays a config const.
+from ..config import EDIT_PAD
 from ..widgets import Tooltip
 from ..i18n import t
 from .. import imaging
-from .dialogs import make_dialog_button, center_over
+from .dialogs import center_over
 
 
 class FiltersMixin:
@@ -250,15 +255,16 @@ class FiltersMixin:
 
     def _build_filters_section(self, parent):
         "Filter MANAGER: create / edit / import / export. No filter list here."
-        f = tk.Frame(parent, bg=BAR)
+        f = self._tw(tk.Frame(parent), bg="bar")
 
-        tk.Label(f, text=t("Save the current edit as a filter, or add ready-made filters from a file."),
-                 bg=BAR, fg=FG_DIM, anchor="w", justify="left",
-                 font=("Segoe UI", 8), wraplength=self._edit_dpi_w(210)) \
+        self._tw(tk.Label(f, text=t("Save the current edit as a filter, or add ready-made filters from a file."),
+                          anchor="w", justify="left", font=("Segoe UI", 8),
+                          wraplength=self._edit_dpi_w(210)), bg="bar", fg="fg_dim") \
             .pack(fill="x", padx=EDIT_PAD, pady=(12, 2))
 
-        self.lbl_filter_count = tk.Label(f, text="", bg=BAR, fg=FG, anchor="w",
-                                         font=("Segoe UI", 8, "bold"))
+        self.lbl_filter_count = self._tw(
+            tk.Label(f, text="", anchor="w", font=("Segoe UI", 8, "bold")),
+            bg="bar", fg="fg")
         self.lbl_filter_count.pack(fill="x", padx=EDIT_PAD, pady=(2, 8))
 
         self._filter_action(f, "plus",         t("Create filter"),
@@ -268,8 +274,8 @@ class FiltersMixin:
                             self._filter_edit,
                             t("Rename / refresh / delete saved filters"))
 
-        tk.Frame(f, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
-                                                 pady=(8, 8))
+        self._tw(tk.Frame(f, height=1), bg="divider").pack(
+            fill="x", padx=EDIT_PAD, pady=(8, 8))
 
         self._filter_action(f, "folder-input", t("Import"),
                             self._filter_import,
@@ -278,8 +284,8 @@ class FiltersMixin:
                             self._filter_export,
                             t("Save filters to a .json file to share"))
 
-        tk.Frame(f, bg=DIVIDER, height=1).pack(fill="x", padx=EDIT_PAD,
-                                                 pady=(8, 6))
+        self._tw(tk.Frame(f, height=1), bg="divider").pack(
+            fill="x", padx=EDIT_PAD, pady=(8, 6))
         self._build_filter_list(f)
 
         self._refresh_filter_count()
@@ -287,25 +293,26 @@ class FiltersMixin:
 
     def _filter_action(self, parent, icon_name, label, command, tip):
         "One full-width filled action button (icon left, label) for the manager."
-        NORMAL = CHIP_BG
-        btn = tk.Frame(parent, bg=NORMAL, cursor="hand2")
+        btn = self._tw(tk.Frame(parent, cursor="hand2"), bg="chip")
         btn.pack(fill="x", padx=EDIT_PAD, pady=3)
-        inner = tk.Frame(btn, bg=NORMAL)
+        inner = self._tw(tk.Frame(btn), bg="chip")
         inner.pack(side="left", padx=12, pady=8)
         parts = [btn, inner]
         img = self.icon(icon_name, size=16)
         if img is not None:
-            ic = tk.Label(inner, image=img, bg=NORMAL)
+            ic = self._tw(tk.Label(inner, image=img), bg="chip")
             ic.pack(side="left", padx=(0, 8))
             parts.append(ic)
-        tx = tk.Label(inner, text=label, bg=NORMAL, fg=FG,
-                      font=("Segoe UI", 9, "bold"))
+        tx = self._tw(tk.Label(inner, text=label, font=("Segoe UI", 9, "bold")),
+                      bg="chip", fg="fg")
         tx.pack(side="left")
         parts.append(tx)
         for w in parts:
             w.bind("<Button-1>", lambda e: command())
-            w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in parts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=NORMAL) for p in parts])
+            w.bind("<Enter>",
+                   lambda e: [p.configure(bg=self.theme["hover"]) for p in parts])
+            w.bind("<Leave>",
+                   lambda e: [p.configure(bg=self.theme["chip"]) for p in parts])
         btn._tip = Tooltip(btn, tip)
         return btn
 
@@ -326,15 +333,15 @@ class FiltersMixin:
 
     def _build_filter_list(self, parent):
         "Scaffold the scrollable grouped list; rows are filled by _refresh_filter_list."
-        tk.Label(parent, text=t("All filters"), bg=BAR, fg=FG_DIM, anchor="w",
-                 font=("Segoe UI", 8, "bold")).pack(fill="x", padx=EDIT_PAD,
-                                                     pady=(0, 4))
-        wrap = tk.Frame(parent, bg=BAR)
+        self._tw(tk.Label(parent, text=t("All filters"), anchor="w",
+                          font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim") \
+            .pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        wrap = self._tw(tk.Frame(parent), bg="bar")
         wrap.pack(fill="both", expand=True, padx=(EDIT_PAD, 0), pady=(0, 8))
 
-        canvas = tk.Canvas(wrap, bg=BAR, highlightthickness=0)
+        canvas = self._tw(tk.Canvas(wrap, highlightthickness=0), bg="bar")
         sb = self._make_scrollbar(wrap, canvas)
-        holder = tk.Frame(canvas, bg=BAR)
+        holder = self._tw(tk.Frame(canvas), bg="bar")
         win = canvas.create_window((0, 0), window=holder, anchor="nw")
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
@@ -373,23 +380,24 @@ class FiltersMixin:
 
     def _add_flist_group(self, parent, grp):
         "A foldable caption (chevron + name + count); when open, its filter rows."
-        header = tk.Frame(parent, bg=BAR, cursor="hand2")
+        bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
+        header = tk.Frame(parent, bg=bar, cursor="hand2")
         header.pack(fill="x", pady=(6, 0))
         parts = [header]
         chev = self.icon("chevron-right" if grp["collapsed"] else "chevron-down",
                          size=12)
         if chev is not None:
-            ic = tk.Label(header, image=chev, bg=BAR)
+            ic = tk.Label(header, image=chev, bg=bar)
             ic.pack(side="left", padx=(2, 4))
             parts.append(ic)
         tx = tk.Label(header, text=f"{grp['label']}  ({len(grp['items'])})",
-                      bg=BAR, fg=FG_DIM, anchor="w", font=("Segoe UI", 8, "bold"))
+                      bg=bar, fg=fg_dim, anchor="w", font=("Segoe UI", 8, "bold"))
         tx.pack(side="left", fill="x", expand=True, pady=4)
         parts.append(tx)
         for w in parts:
             w.bind("<Button-1>", lambda e, gid=grp["id"]: self._toggle_group(gid))
-            w.bind("<Enter>", lambda e: tx.configure(fg=FG))
-            w.bind("<Leave>", lambda e: tx.configure(fg=FG_DIM))
+            w.bind("<Enter>", lambda e: tx.configure(fg=fg))
+            w.bind("<Leave>", lambda e: tx.configure(fg=fg_dim))
             w.bind("<MouseWheel>", self._flist_wheel)
         if not grp["collapsed"]:
             for label, vals in grp["items"]:
@@ -398,9 +406,11 @@ class FiltersMixin:
     def _add_flist_row(self, parent, label, vals):
         "One filter row: an indented name; click applies the look onto the photo."
         active = self._filter_active(vals)
-        row = tk.Frame(parent, bg=BAR, cursor="hand2")
+        bar = self.theme["bar"]
+        row = tk.Frame(parent, bg=bar, cursor="hand2")
         row.pack(fill="x")
-        tx = tk.Label(row, text=label, bg=BAR, fg=ACCENT if active else FG,
+        tx = tk.Label(row, text=label, bg=bar,
+                      fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
         tx.pack(side="left", fill="x", expand=True, padx=(26, 6), pady=4)
 
@@ -411,12 +421,12 @@ class FiltersMixin:
         def enter(_e=None):
             if not cell["active"]:
                 for w in parts:
-                    w.configure(bg=HOVER)
+                    w.configure(bg=self.theme["hover"])
 
         def leave(_e=None):
             if not cell["active"]:
                 for w in parts:
-                    w.configure(bg=BAR)
+                    w.configure(bg=self.theme["bar"])
         for w in parts:
             w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
             w.bind("<Enter>", enter)
@@ -433,23 +443,25 @@ class FiltersMixin:
 
     FILTER_THUMB_W = 68       # logical px: the cell image's width budget
     FILTER_THUMB_H = 50       # logical px: the cell image's height budget
-    FSTRIP_BORDER  = BORDER  # idle cell border (accent when that look is active)
+    # Idle cell border is the theme "border" token (accent when the look is
+    # active); read live in _add_filter_cell / _repaint_filter_strip.
 
     def _build_filter_strip(self, body):
         "Scaffold the strip (row 1, col 2). Cells are filled by _refresh_filter_strip."
-        strip = tk.Frame(body, bg=BAR)
+        strip = self._tw(tk.Frame(body), bg="bar")
         strip.grid(row=1, column=2, sticky="ew")
         strip.grid_propagate(False)
         strip.configure(height=round((self.FILTER_THUMB_H + 40) * self.dpi))
         # A 1px divider on top so the strip reads as a band below the canvas.
-        tk.Frame(strip, bg=DIVIDER, height=1).pack(side="top", fill="x")
+        self._tw(tk.Frame(strip, height=1), bg="divider").pack(side="top", fill="x")
         self.filter_strip = strip
 
         # Horizontal scroll area: a canvas holding a left-packed row of cells.
-        canvas = tk.Canvas(strip, bg=BAR, highlightthickness=0,
-                           height=round((self.FILTER_THUMB_H + 34) * self.dpi))
+        canvas = self._tw(
+            tk.Canvas(strip, highlightthickness=0,
+                      height=round((self.FILTER_THUMB_H + 34) * self.dpi)), bg="bar")
         canvas.pack(side="top", fill="both", expand=True)
-        holder = tk.Frame(canvas, bg=BAR)
+        holder = self._tw(tk.Frame(canvas), bg="bar")
         canvas.create_window((0, 0), window=holder, anchor="nw")
         holder.bind("<Configure>",
                     lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
@@ -465,6 +477,10 @@ class FiltersMixin:
         self._fstrip_base_key = None   # id(current_pil) the base was built from
 
         strip.grid_remove()            # hidden until there are filters + a photo
+        # The strip + panel-list cells read the live theme at build time; rebuild
+        # them (in the new scheme) on a dark<->light switch. One subscription
+        # covers both, since _refresh_filter_strip also refreshes the panel list.
+        self.theme.subscribe(self._refresh_filter_strip)
 
     def _refresh_filter_strip(self):
         "Rebuild the strip for the current photo: 'Original', then each non-empty"
@@ -528,7 +544,7 @@ class FiltersMixin:
 
     def _add_strip_separator(self, parent):
         "A thin vertical divider that sets one strip group off from the next."
-        sep = tk.Frame(parent, bg=DIVIDER, width=1)
+        sep = tk.Frame(parent, bg=self.theme["divider"], width=1)
         sep.pack(side="left", fill="y", padx=(8, 0), pady=10)
         sep.bind("<MouseWheel>", lambda e: self.filter_strip_canvas.xview_scroll(
             int(-e.delta / 120), "units"))
@@ -536,23 +552,24 @@ class FiltersMixin:
 
     def _add_group_caption(self, parent, grp):
         "A clickable caption (chevron + group name) that folds / unfolds the group."
-        frame = tk.Frame(parent, bg=BAR, cursor="hand2")
+        bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
+        frame = tk.Frame(parent, bg=bar, cursor="hand2")
         frame.pack(side="left", padx=(6, 2))     # pack centres it vertically
         img = self.icon("chevron-right" if grp["collapsed"] else "chevron-down",
                         size=12)
         parts = [frame]
         if img is not None:
-            ic = tk.Label(frame, image=img, bg=BAR)
+            ic = tk.Label(frame, image=img, bg=bar)
             ic.pack(side="left", padx=(0, 3))
             parts.append(ic)
-        tx = tk.Label(frame, text=grp["label"], bg=BAR, fg=FG_DIM,
+        tx = tk.Label(frame, text=grp["label"], bg=bar, fg=fg_dim,
                       font=("Segoe UI", 8, "bold"))
         tx.pack(side="left")
         parts.append(tx)
         for w in parts:
             w.bind("<Button-1>", lambda e, gid=grp["id"]: self._toggle_group(gid))
-            w.bind("<Enter>", lambda e: tx.configure(fg=FG))
-            w.bind("<Leave>", lambda e: tx.configure(fg=FG_DIM))
+            w.bind("<Enter>", lambda e: tx.configure(fg=fg))
+            w.bind("<Leave>", lambda e: tx.configure(fg=fg_dim))
             w.bind("<MouseWheel>", lambda e: self.filter_strip_canvas.xview_scroll(
                 int(-e.delta / 120), "units"))
         return frame
@@ -591,14 +608,16 @@ class FiltersMixin:
         photo = self._filter_thumb_image(self._fstrip_base, vals)
         self._filter_thumb_imgs.append(photo)
         active = self._filter_active(vals)
-        frame = tk.Frame(parent, bg=ACCENT if active else self.FSTRIP_BORDER,
+        bar, border = self.theme["bar"], self.theme["border"]
+        frame = tk.Frame(parent, bg=self.theme["accent"] if active else border,
                          cursor="hand2")
         frame.pack(side="left", padx=(8, 0), pady=7)
-        inner = tk.Frame(frame, bg=BAR)
+        inner = tk.Frame(frame, bg=bar)
         inner.pack(padx=2, pady=2)
-        pic = tk.Label(inner, image=photo, bg=BAR)
+        pic = tk.Label(inner, image=photo, bg=bar)
         pic.pack()
-        name = tk.Label(inner, text=label, bg=BAR, fg=ACCENT if active else FG_DIM,
+        name = tk.Label(inner, text=label, bg=bar,
+                        fg=self.theme["accent"] if active else self.theme["fg_dim"],
                         font=("Segoe UI", 8), anchor="center")
         name.pack(fill="x", pady=(2, 1))
 
@@ -608,13 +627,13 @@ class FiltersMixin:
 
         def enter(_e=None):
             if not cell["active"]:
-                frame.configure(bg=HOVER)
-                name.configure(fg=FG)
+                frame.configure(bg=self.theme["hover"])
+                name.configure(fg=self.theme["fg"])
 
         def leave(_e=None):
             if not cell["active"]:
-                frame.configure(bg=self.FSTRIP_BORDER)
-                name.configure(fg=FG_DIM)
+                frame.configure(bg=self.theme["border"])
+                name.configure(fg=self.theme["fg_dim"])
         for w in parts:
             w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
             w.bind("<Enter>", enter)
@@ -638,18 +657,19 @@ class FiltersMixin:
 
     def _repaint_filter_strip(self):
         "Recolor cells so the filter matching the live edit (if any) reads as active."
+        accent, fg_dim = self.theme["accent"], self.theme["fg_dim"]
+        border, bar, fg = self.theme["border"], self.theme["bar"], self.theme["fg"]
         for cell in getattr(self, "_filter_cells", []):
             active = self._filter_active(cell["vals"])
             cell["active"] = active
-            cell["frame"].configure(bg=ACCENT if active else self.FSTRIP_BORDER)
-            cell["name"].configure(fg=ACCENT if active else FG_DIM)
+            cell["frame"].configure(bg=accent if active else border)
+            cell["name"].configure(fg=accent if active else fg_dim)
         # Mirror the active look onto the vertical panel list (name in accent).
         for cell in getattr(self, "_filter_list_rows", []):
             active = self._filter_active(cell["vals"])
             cell["active"] = active
-            bg = BAR
-            cell["frame"].configure(bg=bg)
-            cell["label"].configure(bg=bg, fg=ACCENT if active else FG)
+            cell["frame"].configure(bg=bar)
+            cell["label"].configure(bg=bar, fg=accent if active else fg)
 
     def _apply_filter_values(self, vals):
         "Play a filter's factors (FILTER_KEYS + auto mode) onto the photo, undoably."
@@ -712,13 +732,22 @@ class FiltersMixin:
             # Top action: start a new (empty) group.
             self._filter_action_plain(body, "folder-plus", t("New group"),
                                       lambda: self._do_new_group(redraw))
-            tk.Frame(body, bg=DIVIDER, height=1).pack(fill="x", pady=(6, 2))
+            tk.Frame(body, bg=self.theme["divider"], height=1).pack(
+                fill="x", pady=(6, 2))
             # 'Standard' (built-ins, read-only) first, then the user's groups.
             self._manager_group(body, self.GROUP_STANDARD, redraw)
             for g in list(self.filter_groups):
                 self._manager_group(body, g["name"], redraw)
 
         redraw()
+        # The manager is MODELESS, so it can outlive a dark<->light switch —
+        # rebuild its rows in the new scheme, and stop listening once it closes.
+        self.theme.subscribe(redraw)
+
+        def _drop(e, d=dlg):
+            if e.widget is d:
+                self.theme.unsubscribe(redraw)
+        dlg.bind("<Destroy>", _drop, add="+")
         self._place_modeless(dlg)
 
     def _manager_group(self, parent, name, redraw):
@@ -731,19 +760,20 @@ class FiltersMixin:
             rows = [(fl["name"], fl) for fl in self.user_filters
                     if fl["group"] == name]
 
-        header = tk.Frame(parent, bg=BAR, cursor="hand2")
+        bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
+        header = tk.Frame(parent, bg=bar, cursor="hand2")
         header.pack(fill="x", pady=(8, 0))
         # The … menu sits at the right; pack it first so the title can expand.
         self._kebab(header, lambda anc, gn=name: self._group_menu(anc, gn, redraw))
         chev = self.icon("chevron-right" if collapsed else "chevron-down", size=13)
         hcells = [header]
         if chev is not None:
-            ic = tk.Label(header, image=chev, bg=BAR)
+            ic = tk.Label(header, image=chev, bg=bar)
             ic.pack(side="left", padx=(8, 4))
             hcells.append(ic)
         title = tk.Label(header,
                          text=f"{self._group_display(name)}  ({len(rows)})",
-                         bg=BAR, fg=FG, anchor="w", font=("Segoe UI", 9, "bold"))
+                         bg=bar, fg=fg, anchor="w", font=("Segoe UI", 9, "bold"))
         title.pack(side="left", fill="x", expand=True, pady=6)
         hcells.append(title)
         for w in hcells:
@@ -752,8 +782,8 @@ class FiltersMixin:
         if collapsed:
             return
         if not rows:
-            tk.Label(parent, text=t("No filters in this group"), bg=BAR,
-                     fg=FG_DIM, font=("Segoe UI", 8), anchor="w") \
+            tk.Label(parent, text=t("No filters in this group"), bg=bar,
+                     fg=fg_dim, font=("Segoe UI", 8), anchor="w") \
                 .pack(fill="x", padx=(32, 8), pady=(1, 1))
             return
         for label, fl in rows:
@@ -767,11 +797,12 @@ class FiltersMixin:
 
     def _manager_filter_row(self, parent, label, fl, redraw, builtin):
         "One filter row inside a group: indented name + (user filters) a … menu."
-        row = tk.Frame(parent, bg=BAR)
+        row = tk.Frame(parent, bg=self.theme["bar"])
         row.pack(fill="x")
         if not builtin:
             self._kebab(row, lambda anc, f=fl: self._filter_menu(anc, f, redraw))
-        tk.Label(row, text=label, bg=BAR, fg=FG if not builtin else FG_DIM,
+        tk.Label(row, text=label, bg=self.theme["bar"],
+                 fg=self.theme["fg"] if not builtin else self.theme["fg_dim"],
                  anchor="w", font=("Segoe UI", 9)).pack(
             side="left", fill="x", expand=True, padx=(32, 6), pady=5)
 
@@ -779,13 +810,14 @@ class FiltersMixin:
         "A small '…' button on the right of a row that opens its popup menu."
         img = self.icon("ellipsis", size=15)
         if img is not None:
-            b = tk.Label(parent, image=img, bg=BAR, cursor="hand2")
+            b = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
         else:
-            b = tk.Label(parent, text="⋯", bg=BAR, fg=FG, cursor="hand2",
+            b = tk.Label(parent, text="⋯", bg=self.theme["bar"],
+                         fg=self.theme["fg"], cursor="hand2",
                          font=("Segoe UI", 12, "bold"))
         b.pack(side="right", padx=(0, 8))
-        b.bind("<Enter>", lambda e: b.configure(bg=HOVER))
-        b.bind("<Leave>", lambda e: b.configure(bg=BAR))
+        b.bind("<Enter>", lambda e: b.configure(bg=self.theme["hover"]))
+        b.bind("<Leave>", lambda e: b.configure(bg=self.theme["bar"]))
         b.bind("<Button-1>", lambda e, w=b: open_menu(w))
         return b
 
@@ -934,36 +966,38 @@ class FiltersMixin:
         "A borderless dark dropdown under `anchor`. Each spec is ('sep',) or"
         " (icon_name|None, label, command). Closes on pick / Escape / focus-out."
         self._close_filter_popup()
+        bar, border, fg, hover = (self.theme["bar"], self.theme["border"],
+                                   self.theme["fg"], self.theme["hover"])
         pop = tk.Toplevel(self.root)
         pop.overrideredirect(True)
-        pop.configure(bg=BORDER)          # 1px hairline border via the inset
+        pop.configure(bg=border)          # 1px hairline border via the inset
         self._filter_popup = pop
-        inner = tk.Frame(pop, bg=BAR)
+        inner = tk.Frame(pop, bg=bar)
         inner.pack(padx=1, pady=1)
 
         def add_row(icon_name, label, command):
-            r = tk.Frame(inner, bg=BAR, cursor="hand2")
+            r = tk.Frame(inner, bg=bar, cursor="hand2")
             r.pack(fill="x")
             cells = [r]
             if icon_name:
                 img = self.icon(icon_name, size=14)
                 if img is not None:
-                    ic = tk.Label(r, image=img, bg=BAR)
+                    ic = tk.Label(r, image=img, bg=bar)
                     ic.pack(side="left", padx=(10, 8), pady=6)
                     cells.append(ic)
-            lab = tk.Label(r, text=label, bg=BAR, fg=FG, anchor="w",
+            lab = tk.Label(r, text=label, bg=bar, fg=fg, anchor="w",
                            font=("Segoe UI", 9))
             lab.pack(side="left", padx=((0 if icon_name else 12), 18), pady=6)
             cells.append(lab)
             for w in cells:
-                w.bind("<Enter>", lambda e: [c.configure(bg=HOVER) for c in cells])
-                w.bind("<Leave>", lambda e: [c.configure(bg=BAR) for c in cells])
+                w.bind("<Enter>", lambda e: [c.configure(bg=hover) for c in cells])
+                w.bind("<Leave>", lambda e: [c.configure(bg=bar) for c in cells])
                 w.bind("<Button-1>",
                        lambda e, c=command: (self._close_filter_popup(), c()))
 
         for spec in specs:
             if spec[0] == "sep":
-                tk.Frame(inner, bg=BORDER, height=1).pack(fill="x")
+                tk.Frame(inner, bg=border, height=1).pack(fill="x")
             else:
                 add_row(*spec)
 
@@ -988,21 +1022,22 @@ class FiltersMixin:
     def _confirm(self, message, ok_label=None):
         "A small modal yes/no over the main window. Returns True if confirmed."
         result = {"ok": False}
+        bg, fg = self.theme["bg"], self.theme["fg"]
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Please confirm"))
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=message, bg=BG, fg=FG, anchor="w", justify="left",
+        tk.Label(wrap, text=message, bg=bg, fg=fg, anchor="w", justify="left",
                  wraplength=self._edit_dpi_w(280),
                  font=("Segoe UI", 10)).pack(anchor="w")
 
         def ok():
             result["ok"] = True
             dlg.destroy()
-        btnrow = tk.Frame(wrap, bg=BG)
+        btnrow = tk.Frame(wrap, bg=bg)
         btnrow.pack(anchor="e", pady=(16, 0))
         self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(side="right",
                                                                   padx=(8, 0))
@@ -1065,7 +1100,8 @@ class FiltersMixin:
             self._filter_action_plain(
                 body, "folder-output", t("All in one file"),
                 lambda: (self._export_filters(self.user_filters), dlg.destroy()))
-            tk.Frame(body, bg=DIVIDER, height=1).pack(fill="x", pady=(6, 6))
+            tk.Frame(body, bg=self.theme["divider"], height=1).pack(
+                fill="x", pady=(6, 6))
 
         for fl in self.user_filters:
             self._filter_action_plain(
@@ -1099,22 +1135,25 @@ class FiltersMixin:
 
     def _filter_action_plain(self, parent, icon_name, label, command):
         "A flat full-width row (icon + label) used inside the export dialog."
-        row = tk.Frame(parent, bg=BAR, cursor="hand2")
+        bar = self.theme["bar"]
+        row = tk.Frame(parent, bg=bar, cursor="hand2")
         row.pack(fill="x", pady=2)
         parts = [row]
         img = self.icon(icon_name, size=15)
         if img is not None:
-            ic = tk.Label(row, image=img, bg=BAR)
+            ic = tk.Label(row, image=img, bg=bar)
             ic.pack(side="left", padx=(10, 8), pady=7)
             parts.append(ic)
-        tx = tk.Label(row, text=label, bg=BAR, fg=FG, anchor="w",
+        tx = tk.Label(row, text=label, bg=bar, fg=self.theme["fg"], anchor="w",
                       font=("Segoe UI", 9))
         tx.pack(side="left", fill="x", expand=True, pady=7)
         parts.append(tx)
         for w in parts:
             w.bind("<Button-1>", lambda e: command())
-            w.bind("<Enter>", lambda e: [p.configure(bg=HOVER) for p in parts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=BAR) for p in parts])
+            w.bind("<Enter>",
+                   lambda e: [p.configure(bg=self.theme["hover"]) for p in parts])
+            w.bind("<Leave>",
+                   lambda e: [p.configure(bg=self.theme["bar"]) for p in parts])
         return row
 
     # --- Shared dialog helpers ----------------------------------------------
@@ -1126,18 +1165,19 @@ class FiltersMixin:
     def _ask_text(self, title, label, default=""):
         "Modal dark text prompt (title + a labelled field). Trimmed text or None."
         result = {"val": None}
+        bg, fg, bar = self.theme["bg"], self.theme["fg"], self.theme["bar"]
         dlg = tk.Toplevel(self.root)
         dlg.title(title)
-        dlg.configure(bg=BG)
+        dlg.configure(bg=bg)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        wrap = tk.Frame(dlg, bg=BG, padx=22, pady=18)
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=label, bg=BG, fg=FG,
+        tk.Label(wrap, text=label, bg=bg, fg=fg,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 8))
 
-        e = tk.Entry(wrap, bg=BAR, fg=FG, insertbackground=FG, width=24,
+        e = tk.Entry(wrap, bg=bar, fg=fg, insertbackground=fg, width=24,
                      relief="flat", font=("Segoe UI", 11))
         e.insert(0, default)
         e.pack(anchor="w", ipady=5, fill="x")
@@ -1148,7 +1188,7 @@ class FiltersMixin:
                 result["val"] = txt
             dlg.destroy()
 
-        btnrow = tk.Frame(wrap, bg=BG)
+        btnrow = tk.Frame(wrap, bg=bg)
         btnrow.pack(anchor="e", pady=(16, 0))
         self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(side="right",
                                                                   padx=(8, 0))
@@ -1163,28 +1203,32 @@ class FiltersMixin:
         return result["val"]
 
     def _dialog_btn(self, parent, text, command, primary=False):
-        "Shared flat dialog button (see ui/dialogs.py); kept as a thin alias "
-        "because it's called as self._dialog_btn across several mixins."
-        return make_dialog_button(parent, text, command, primary)
+        "Shared dialog button — a tintkit.Button reading self.theme (primary = "
+        "filled accent, else neutral outline). Called as self._dialog_btn across "
+        "several mixins (chrome + filters dialogs)."
+        return tintkit.Button(parent, self.theme, text,
+                              role="primary" if primary else "neutral",
+                              variant="filled" if primary else "outline",
+                              command=command)
 
     def _filter_dialog(self, title):
         "A modal dark dialog with a scrollable body. Returns (dialog, body frame)."
-        dlg = tk.Toplevel(self.root)
+        dlg = self._tw(tk.Toplevel(self.root), bg="bg")
         dlg.title(title)
-        dlg.configure(bg=BG)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        wrap = tk.Frame(dlg, bg=BG, padx=16, pady=14)
+        wrap = self._tw(tk.Frame(dlg, padx=16, pady=14), bg="bg")
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=title, bg=BG, fg=FG,
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 10))
+        self._tw(tk.Label(wrap, text=title, font=("Segoe UI", 11, "bold")),
+                 bg="bg", fg="fg").pack(anchor="w", pady=(0, 10))
 
         # A fixed-height scroll area so a long list can't grow past the screen.
-        canvas = tk.Canvas(wrap, bg=BAR, highlightthickness=0,
-                           width=self._edit_dpi_w(300), height=self._edit_dpi_w(260))
+        canvas = self._tw(
+            tk.Canvas(wrap, highlightthickness=0, width=self._edit_dpi_w(300),
+                      height=self._edit_dpi_w(260)), bg="bar")
         sb = self._make_scrollbar(wrap, canvas)
-        body = tk.Frame(canvas, bg=BAR)
+        body = self._tw(tk.Frame(canvas), bg="bar")
         win = canvas.create_window((0, 0), window=body, anchor="nw")
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side="left", fill="both", expand=True)
