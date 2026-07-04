@@ -84,7 +84,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     LIST_THUMB = 36     # tiny preview beside the filename in list view
     LIST_NAME_PAD = 30  # px reserved beside a list name (thumb gaps + border + scrollbar)
     LIST_COL_MIN = 190  # min px per list column → list reflows to 2/3/4… cols when wide
-    FOLDER_NAME_PAD = 38  # px reserved beside a folder name (glyph + gaps) per column
 
     # Loading/rebuilding a strip with this many photos (or more) puts up a dark,
     # input-blocking "please wait" screen until the *visible* thumbnails finish, so
@@ -102,8 +101,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     FOLDER_LIST_MIN = 56   # but always tall enough for ~2 folder rows (px)
     FOLDER_CAP_FRACTION = 0.34  # auto height: at most this share of the sidebar height
     FOLDER_DRAG_MAX_FRACTION = 0.7  # but a manual drag may claim up to this share
-    FOLDER_COL_MIN = 120   # min px per folder column → 2 columns once the sidebar is wide
-    FOLDER_MAX_COLS = 2    # never more than two folder columns (keeps names readable)
+    # The top panel is now a real, nested folder TREE (tintkit.FolderTree) rooted
+    # at self.tree_root; rows lazily list expanded folders only. A non-empty filter
+    # scans the subtree for matches, bounded so a huge tree can't freeze the UI.
+    FOLDER_FILTER_BUDGET = 4000   # max directories a live folder-filter scan visits
 
     # A photo counts as edited when ANY live factor leaves its neutral, or it
     # has been rotated/cropped — see _has_unsaved_edits, which drives the
@@ -171,7 +172,14 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
         self.folder = None
         self.files = []          # image filenames in the folder
-        self.subfolders = []     # (name, fullpath) of sub-directories, listed at the sidebar top
+        # Sidebar folder TREE (tintkit.FolderTree): a fixed root, a set of expanded
+        # folders (lazy — only expanded folders are listed), the current folder
+        # highlighted, and a live name filter. See ui/browser.py.
+        self.tree_root = None       # fixed root of the folder tree (re-roots on leaving it)
+        self.folder_expanded = set()  # absolute paths currently expanded in the tree
+        self.folder_filter = ""     # live folder-name filter ("" = show the tree)
+        self._subdir_cache = {}     # path -> [(name, full)] sub-dirs, rebuilt each navigation
+        self.folder_tree = None     # the tintkit.FolderTree widget (built on first use)
         self.index = 0           # current image index
         self.current_pil = None  # PIL image currently shown (full res)
         self.brightness = 1.0    # live edit factors (1.0 = unchanged)
@@ -279,7 +287,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.export_dir_mode = "subfolder"
         self.export_subfolder = "_edited"   # subfolder name (mode "subfolder")
         self.export_fixed_dir = ""          # absolute folder (mode "fixed")
-        self._menu_popup = None       # the ☰ dropdown Toplevel while open, else None
         # Crop tool: a non-destructive selection drawn over the preview, stored in
         # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
         self.crop_rect = None         # [x0, y0, x1, y1] in source px, or None
@@ -360,8 +367,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                                   # freeze the window; persisted (Settings → General)
         self._message = None     # placeholder text shown when no photo is loaded
         self.icons = {}          # name -> PhotoImage (kept alive)
-        self._folder_imgs = {}   # cached small folder glyph for the list rows (kept alive)
-        self.folder_widgets = []  # sub-folder rows in the top folder list
         # Virtualized thumbnail strip: only the cells in (or near) the viewport are
         # ever realized, so a 50- or 5000-file folder opens equally fast. See
         # ui/browser.py — _render_window builds/destroys cells as you scroll.
@@ -379,7 +384,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.sidebar_width = THUMB_W + 30  # current sidebar width (px), drag-resizable
         self.folder_list_height = None  # user-dragged sub-folder list height (px); None = auto
         self._thumb_cols = 1            # columns in the thumbnail grid (recomputed)
-        self._folder_cols = 1          # columns in the top folder list (1 or 2, by width)
         self._load_prefs()             # restore remembered sidebar width + thumb size
         self._load_filters()           # restore the user's saved filters (presets)
         self._load_actions()           # restore the user's saved actions (macros)

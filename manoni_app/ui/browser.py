@@ -13,13 +13,15 @@ import tkinter.filedialog as tkfd
 import tkinter.font as tkfont
 from concurrent.futures import ThreadPoolExecutor
 
-from PIL import Image, ImageTk
+import tintkit
+
+from PIL import ImageTk
 
 # Chrome + sidebar cells now read colours from self.theme (via chrome's `_tw`);
 # HOVER/ACCENT/FG/FG_DIM stay imported only for the loading overlay, which is a
 # deliberate near-black blackout (LOADING_BG) that keeps its fixed colours in
 # both schemes. The keep/reject tints are now scheme-aware via self._cull_tint.
-from ..config import HOVER, ACCENT, FG, FG_DIM, SUPPORTED, ICON_DIR
+from ..config import HOVER, ACCENT, FG, FG_DIM, SUPPORTED
 from ..i18n import t
 from ..storage import unique_path
 # The thumbnail workers call _decode_thumb; it is the disk-cached version, so the
@@ -149,25 +151,29 @@ class BrowserMixin:
 
     def load_folder(self, folder, select=None):
         "Load all images in a folder and show the first one (or `select`, if given)."
+        folder = os.path.normpath(folder)
         self.folder = folder
+        self._subdir_cache = {}          # fresh sub-dir listings for this navigation
+        # The folder tree keeps a fixed root: navigating INSIDE it just moves the
+        # highlight (and expands down to the new folder); jumping OUTSIDE it (Open
+        # folder, a breadcrumb above the root, ↑ past the top) re-roots the tree.
+        if not self._within_tree_root(folder):
+            self.tree_root = folder
+            self.folder_expanded = set()
+        self.folder_expanded.add(folder)
+        self._expand_ancestors(folder)   # open every level from the root down to here
+        self.folder_filter = ""          # a fresh folder clears the live filter
         self._update_breadcrumbs()       # refresh the address bar to the new folder
         try:
             entries = sorted(os.listdir(folder), key=str.lower)
         except OSError:
             entries = []
-        # Sub-folders shown as tiles atop the grid so you can browse into them;
-        # hidden (dot-prefixed) folders are skipped.
-        self.subfolders = [
-            (name, os.path.join(folder, name))
-            for name in entries
-            if not name.startswith(".")
-            and os.path.isdir(os.path.join(folder, name))]
         self.files = [
             f for f in entries
             if os.path.splitext(f)[1].lower() in SUPPORTED
             and os.path.isfile(os.path.join(folder, f))]
         self.index = self.files.index(select) if select in self.files else 0
-        self._build_folder_list()        # top section: minimalist sub-folder list
+        self._refresh_folder_tree(rebuild=True)   # top section: the folder tree
         # A big folder covers the window with a dark, input-blocking "please wait"
         # screen so a stray slider drag or key press can't act on a half-painted
         # strip; it lifts once the visible thumbnails land (overlay=True).
@@ -276,8 +282,8 @@ class BrowserMixin:
         self._decode_tsize = self.LIST_THUMB if self.view_mode == "list" \
             else self.thumb_size
         self._thumb_cols = self._calc_cols()
-        # Sub-folders are NOT in this strip — they live in the auto-height list above
-        # it (_build_folder_list), so the strip is pure photos.
+        # Sub-folders are NOT in this strip — they live in the folder tree above
+        # it (_refresh_folder_tree), so the strip is pure photos.
         self._layout_strip()            # size the canvas content so the scrollbar is right
         if not self.files:
             self._overlay_active = False
@@ -482,70 +488,165 @@ class BrowserMixin:
         self._decode_futures = {}
         pool.shutdown(wait=False)
 
-    def _build_folder_list(self):
-        "Fill the top folder section with one compact row per sub-folder; hide it"
-        " entirely when the open folder has none (see chrome._build_folder_panel)."
-        for w in self.folder_holder.winfo_children():
-            w.destroy()
-        self.folder_widgets = []
-        self._folder_name_labels = []        # (name Label, full name) for width-reflow
-        if not self.subfolders:
+    # --- Folder tree (tintkit.FolderTree in the top sidebar panel) ----------
+
+    def _within_tree_root(self, folder):
+        "True when `folder` is the tree root or lives inside it (so the root stays put)."
+        r = self.tree_root
+        if not r:
+            return False
+        r, folder = os.path.normpath(r), os.path.normpath(folder)
+        if folder == r:
+            return True
+        try:                             # commonpath handles drive roots / trailing seps
+            return os.path.commonpath([r, folder]) == r
+        except ValueError:               # different drives (Windows) → not inside
+            return False
+
+    def _expand_ancestors(self, folder):
+        "Expand every folder from the tree root down to `folder`, so it's on screen."
+        r = self.tree_root
+        if not r:
+            return
+        r, p = os.path.normpath(r), os.path.normpath(folder)
+        self.folder_expanded.add(r)
+        while p != r:                    # walk up to the root (stops at a drive root)
+            self.folder_expanded.add(p)
+            parent = os.path.dirname(p)
+            if parent == p:
+                break
+            p = parent
+
+    def _list_subdirs(self, path):
+        "Immediate, non-hidden sub-directories of `path` as (name, full); cached per load."
+        hit = self._subdir_cache.get(path)
+        if hit is not None:
+            return hit
+        try:
+            entries = sorted(os.listdir(path), key=str.lower)
+        except OSError:
+            entries = []
+        subs = [(n, os.path.join(path, n)) for n in entries
+                if not n.startswith(".")
+                and os.path.isdir(os.path.join(path, n))]
+        self._subdir_cache[path] = subs
+        return subs
+
+    def _folder_tree_rows(self):
+        "Rows for tintkit.FolderTree: (depth, name, kind, is_current, fullpath)."
+        root = self.tree_root
+        rows = []
+        if not root or not os.path.isdir(root):
+            return rows
+        root = os.path.normpath(root)
+        nm = lambda p: os.path.basename(p) or p
+        flt = self.folder_filter.strip().lower()
+        if flt:
+            # Filter mode: bounded scan for matches; keep matches + their ancestors
+            # so the surviving folders stay connected to the root.
+            keep, budget = set(), [self.FOLDER_FILTER_BUDGET]
+
+            def scan(path, chain):
+                if budget[0] <= 0:
+                    return
+                budget[0] -= 1
+                if flt in nm(path).lower():
+                    keep.update(chain)
+                    keep.add(path)
+                for _n, full in self._list_subdirs(path):
+                    scan(full, chain + [path])
+            scan(root, [])
+
+            def emit(path, depth):
+                shown = [full for _n, full in self._list_subdirs(path)
+                         if full in keep]
+                kind = "open" if shown else "leaf"
+                rows.append((depth, nm(path), kind, path == self.folder, path))
+                for full in shown:
+                    emit(full, depth + 1)
+            emit(root, 0)               # root always shown, for context
+        else:
+            def emit(path, depth):
+                kids = self._list_subdirs(path)
+                if kids:
+                    kind = "open" if path in self.folder_expanded else "closed"
+                else:
+                    kind = "leaf"
+                rows.append((depth, nm(path), kind, path == self.folder, path))
+                if kids and path in self.folder_expanded:
+                    for _n, full in kids:
+                        emit(full, depth + 1)
+            emit(root, 0)
+        return rows
+
+    def _refresh_folder_tree(self, rebuild=False):
+        "(Re)render the folder tree; hide the whole panel only when the root has no sub-folders."
+        rows = self._folder_tree_rows()
+        # Show the panel whenever the root actually HAS sub-folders — even when the
+        # root row itself is collapsed (then just that one row shows, so it can be
+        # re-expanded). Hide only when there's genuinely nothing to browse (and no
+        # active filter, which stays on screen so 'no matches' can be cleared).
+        root_has_subs = bool(self.tree_root and self._list_subdirs(self.tree_root))
+        if not (root_has_subs or self.folder_filter.strip()):
+            if rebuild:
+                self._destroy_folder_tree()
             self.folder_panel.pack_forget()
             return
-        for name, full in self.subfolders:
-            self._add_folder_row(name, full)
-        self._folder_cols = self._calc_folder_cols()
-        self._place_folder_rows()            # 1 or 2 columns, by sidebar width
+        if rebuild:                     # fresh navigation → reset the filter box
+            self._destroy_folder_tree()
+        if self.folder_tree is None:
+            self.folder_tree = tintkit.FolderTree(
+                self.folder_holder, self.theme, filter_text=t("Filter folders…"),
+                on_row=self._tree_open, on_toggle=self._tree_toggle,
+                on_filter=self._tree_filter_changed)
+            self.folder_tree.pack(fill="x")
+        self.folder_tree.set_rows(rows)
+        self._bind_folder_tree_wheel()       # rows are rebuilt → re-arm wheel scroll
         self.folder_panel.pack(side="top", fill="x", before=self._thumb_scrollbar)
         self.folder_holder.update_idletasks()
         self._on_folder_holder_configure()   # size the list to its content (capped)
-        self._fit_folder_names()             # ellipsize names to the column width
 
-    def _folder_glyph(self):
-        "A small white folder glyph for a list row (cached; falls back to an emoji)."
-        if "list" in self._folder_imgs:
-            return self._folder_imgs["list"]
-        img = None
-        path = os.path.join(ICON_DIR, "folder.png")
-        if os.path.exists(path):
+    def _bind_folder_tree_wheel(self):
+        "Route the mouse wheel over any tree widget (rows included) to the list scroller."
+        if self.folder_tree is None:
+            return
+
+        def walk(w):
             try:
-                im = Image.open(path).convert("RGBA").resize((14, 14), Image.LANCZOS)
-                img = ImageTk.PhotoImage(im)
-            except Exception:
-                img = None
-        self._folder_imgs["list"] = img
-        return img
+                w.bind("<MouseWheel>", self._on_folder_wheel)
+            except tk.TclError:
+                pass
+            for c in w.winfo_children():
+                walk(c)
+        walk(self.folder_tree.box.widget)
 
-    def _add_folder_row(self, name, fullpath):
-        "Build one minimalist folder cell (glyph + name, hover, click to open). It is"
-        " placed into the 1- or 2-column grid later by _place_folder_rows."
-        img = self._folder_glyph()
-        row = self._tw(tk.Frame(self.folder_holder, cursor="hand2"), bg="sidebar")
-        if img is not None:
-            icon = self._tw(tk.Label(row, image=img), bg="sidebar")
+    def _destroy_folder_tree(self):
+        "Tear down the FolderTree widget (used on navigation so the filter box resets)."
+        for w in self.folder_holder.winfo_children():
+            w.destroy()
+        self.folder_tree = None
+
+    def _tree_open(self, path):
+        "Click a folder's name: load its photos and select it (the tree stays rooted)."
+        if path and os.path.isdir(path):
+            self.load_folder(path)
+
+    def _tree_toggle(self, path):
+        "Click a row's chevron: expand / collapse it without changing the open folder."
+        if path in self.folder_expanded:
+            self.folder_expanded.discard(path)
         else:
-            icon = self._tw(tk.Label(row, text="📁", font=("Segoe UI", 9)),
-                            bg="sidebar", fg="fg_dim")
-        icon.pack(side="left", padx=(10, 6), pady=3)
-        lbl = self._tw(tk.Label(row, text=self._fit_folder(name), anchor="w",
-                                font=("Segoe UI", 9)), bg="sidebar", fg="fg")
-        lbl.pack(side="left", fill="x", expand=True, pady=3)
-        self._folder_name_labels.append((lbl, name))
-        cells = (row, icon, lbl)
+            self.folder_expanded.add(path)
+        self._refresh_folder_tree()
 
-        def enter(_e):
-            for w in cells:
-                w.configure(bg=self.theme["hover"])
-
-        def leave(_e):
-            for w in cells:
-                w.configure(bg=self.theme["sidebar"])
-        for w in cells:
-            w.bind("<Enter>", enter)
-            w.bind("<Leave>", leave)
-            w.bind("<Button-1>", lambda e, p=fullpath: self._navigate_to(p))
-            w.bind("<MouseWheel>", self._on_folder_wheel)
-        self.folder_widgets.append(row)
+    def _tree_filter_changed(self, text):
+        "Live folder filter: re-render only the rows (the filter box keeps its focus)."
+        self.folder_filter = text or ""
+        if self.folder_tree is not None:
+            self.folder_tree.set_rows(self._folder_tree_rows())
+            self._bind_folder_tree_wheel()   # new rows → re-arm wheel scroll
+            self.folder_holder.update_idletasks()
+            self._on_folder_holder_configure()
 
     def _short_name(self, name):
         "Truncate a filename (keeping its extension) to fit roughly under the thumbnail."
@@ -755,29 +856,6 @@ class BrowserMixin:
                 continue
             try:
                 lbl.configure(text=self._ellipsize(cell._file, font, avail))
-            except tk.TclError:
-                pass
-
-    # --- Folder-name fitting (truncate sub-folder names to the column width) ---
-
-    def _folder_name_avail(self):
-        "Pixels available for a folder name: the canvas width per column minus the glyph."
-        cols = max(1, getattr(self, "_folder_cols", 1))
-        return int(self.folder_canvas.winfo_width() / cols) - self.FOLDER_NAME_PAD
-
-    def _fit_folder(self, name):
-        "Shorten a sub-folder `name` with a trailing '…' so it fits its column width."
-        return self._ellipsize(name, self._list_font(), self._folder_name_avail())
-
-    def _fit_folder_names(self):
-        "Re-fit every sub-folder name to the current column width (after resize/reflow)."
-        if not getattr(self, "_folder_name_labels", None):
-            return
-        avail = self._folder_name_avail()
-        font = self._list_font()
-        for lbl, full in self._folder_name_labels:
-            try:
-                lbl.configure(text=self._ellipsize(full, font, avail))
             except tk.TclError:
                 pass
 

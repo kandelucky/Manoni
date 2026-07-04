@@ -493,112 +493,22 @@ class ChromeMixin:
         # Before/after compare: a split line you drag, or hold to peek the original.
         self._build_compare_button(center).pack(side="left", padx=4, pady=8)
 
-        # RIGHT zone: a single ☰ menu holding the rarely-used app-level actions
-        # (Settings · Language · Culling help · About). The old standalone ⚙ gear
-        # duplicated ☰ → Settings, and the culling "?" was stranded up here while
-        # culling itself moved to the bottom nav strip — both are now folded into
-        # the ☰ menu, leaving the right side to one clean control.
+        # RIGHT zone: two app-level controls — a ⚙ gear opening the tabbed
+        # Settings window, and a "?" opening the culling help. These replace the
+        # old single ☰ menu: its other entries (Language · About) now live inside
+        # Settings, so no dropdown is needed here anymore.
         right = self._tw(tk.Frame(bar), bg="bar")
         right.pack(side="right", padx=8)
-        self.btn_menu = self._tool_button(right, "menu", self.open_menu, t("Menu"))
-        self.btn_menu.pack(side="right", padx=4, pady=8)   # anchor for the dropdown
+        # Pack help first so it sits rightmost, gear to its left → reads ⚙ ?.
+        self.btn_help = self._tool_button(right, "circle-help",
+                                          self._cull_help_dialog, t("Culling — Help"))
+        self.btn_help.pack(side="right", padx=4, pady=8)
+        self.btn_settings = self._tool_button(right, "settings",
+                                              self._settings_dialog, t("Settings"))
+        self.btn_settings.pack(side="right", padx=4, pady=8)
 
         # The edit panel's open/close lives on the always-visible icon rail
         # (a collapse chevron), not here — see _build_tool_rail / toggle_panel.
-
-    # --- ☰ Menu (dark dropdown under the toolbar button) --------------------
-
-    def open_menu(self):
-        "Toggle a small dark dropdown under the ☰ button with app-level actions."
-        if getattr(self, "_menu_popup", None) is not None:
-            self._close_menu()
-            return
-        self._open_dropdown([
-            ("settings",    t("Settings"),        self._settings_dialog),
-            ("languages",   t("Language"),        self._open_language_menu),
-            ("circle-help", t("Culling — Help"),  self._cull_help_dialog),
-            ("sep",),
-            ("info",        t("About Manoni"),    self._about_dialog),
-        ])
-
-    def _open_language_menu(self):
-        "The Language sub-dropdown: 'Add your language' first, then each language"
-        " (✓ on the active one). Choosing one relaunches the app."
-        specs = [("plus", t("Add your language"), self._language_studio), ("sep",)]
-        current = i18n.get_language()
-        for code, native in i18n.available():
-            mark = "   ✓" if code == current else ""
-            specs.append(("languages", native + mark,
-                          lambda c=code: self.switch_language(c)))
-        self._open_dropdown(specs)
-
-    def _open_dropdown(self, specs):
-        "Build the borderless dark popup under the ☰ button. Each spec is either"
-        " ('sep',) for a hairline divider or (icon_name, label, command) for a"
-        " clickable row. Tracked in self._menu_popup so a re-open toggles it."
-        # A transient popup: read the live theme once at build time (it can't
-        # outlive a dark<->light switch — it closes on FocusOut), so no subscribe.
-        bar, border, fg, hover = (self.theme["bar"], self.theme["border"],
-                                   self.theme["fg"], self.theme["hover"])
-        pop = tk.Toplevel(self.root)
-        pop.overrideredirect(True)                 # borderless: a real popup menu
-        pop.configure(bg=border)                # 1px hairline border via inset
-        self._menu_popup = pop
-        inner = tk.Frame(pop, bg=bar)
-        inner.pack(padx=1, pady=1)
-
-        def add_row(icon_name, label, command):
-            r = tk.Frame(inner, bg=bar, cursor="hand2")
-            r.pack(fill="x")
-            img = self.icon(icon_name)
-            if img is not None:
-                tk.Label(r, image=img, bg=bar).pack(side="left", padx=(10, 8), pady=7)
-            lab = tk.Label(r, text=label, bg=bar, fg=fg, anchor="w",
-                           font=("Segoe UI", 9))
-            lab.pack(side="left", padx=(0, 18), pady=7)
-            cells = (r, lab)
-
-            def enter(_e):
-                for w in cells:
-                    w.configure(bg=hover)
-
-            def leave(_e):
-                for w in cells:
-                    w.configure(bg=bar)
-
-            def click(_e):
-                self._close_menu()
-                command()
-            for w in cells:
-                w.bind("<Enter>", enter)
-                w.bind("<Leave>", leave)
-                w.bind("<Button-1>", click)
-
-        for spec in specs:
-            if spec[0] == "sep":
-                tk.Frame(inner, bg=border, height=1).pack(fill="x")
-            else:
-                add_row(*spec)
-
-        # Position the popup under the ☰ button, right edges aligned.
-        pop.update_idletasks()
-        bx = self.btn_menu.winfo_rootx()
-        by = self.btn_menu.winfo_rooty() + self.btn_menu.winfo_height() + 2
-        x = bx + self.btn_menu.winfo_width() - pop.winfo_width()
-        pop.geometry(f"+{max(0, x)}+{by}")
-        pop.bind("<Escape>", lambda e: self._close_menu())
-        pop.bind("<FocusOut>", lambda e: self._close_menu())
-        pop.focus_force()                          # so clicking elsewhere closes it
-
-    def _close_menu(self):
-        "Tear down the ☰ dropdown if it is open."
-        pop = getattr(self, "_menu_popup", None)
-        if pop is not None:
-            self._menu_popup = None
-            try:
-                pop.destroy()
-            except tk.TclError:
-                pass
 
     # --- Language ----------------------------------------------------------
 
@@ -784,8 +694,8 @@ class ChromeMixin:
         # thumbnail-size zoom. (Replaces the old bottom footer strip.)
         self._build_sidebar_hero(side)
 
-        # Top section: a minimalist, auto-height list of the folder's sub-folders
-        # (filled by browser._build_folder_list). Sits above the thumbnail grid.
+        # Top section: an auto-height, nested folder tree (tintkit.FolderTree,
+        # filled by browser._refresh_folder_tree). Sits above the thumbnail grid.
         self._build_folder_panel(side)
 
         # Bottom strip of the sidebar: view-mode picker + thumbnail-size zoom.
@@ -877,11 +787,11 @@ class ChromeMixin:
     # --- Sidebar top section: the auto-height sub-folder list ---------------
 
     def _build_folder_panel(self, side):
-        """Scaffold the sidebar's top section: a sub-folder list whose height
-        tracks its content (capped at FOLDER_LIST_MAX, then it scrolls). The rows
-        are filled in by browser._build_folder_list, which also shows/hides this
-        whole panel depending on whether the folder has any sub-folders. A 1px
-        divider at its foot separates the list from the thumbnail grid below."""
+        """Scaffold the sidebar's top section: a folder tree whose height tracks
+        its content (capped at FOLDER_LIST_MAX, then it scrolls). The tree is
+        filled in by browser._refresh_folder_tree, which also shows/hides this
+        whole panel depending on whether the root has any sub-folders. A 1px
+        divider at its foot separates the tree from the thumbnail grid below."""
         self.folder_panel = self._tw(tk.Frame(side), bg="sidebar")  # packed on demand
         # A draggable divider at the foot separates the list from the grid below and
         # lets the user set the list's height (drag up/down). It's a slim grab strip
@@ -992,35 +902,8 @@ class ChromeMixin:
             self._save_state()
 
     def _on_folder_canvas_configure(self, event):
-        "Match the inner frame to the viewport, and reflow to 1/2 columns on width change."
+        "Match the inner tree frame width to the folder canvas viewport."
         self.folder_canvas.itemconfigure(self._folder_window, width=event.width)
-        cols = self._calc_folder_cols(event.width)
-        if cols != self._folder_cols and self.folder_widgets:
-            self._folder_cols = cols
-            self._place_folder_rows()
-        self._fit_folder_names()         # re-fit names to the new column width
-
-    def _calc_folder_cols(self, width=None):
-        "How many folder columns fit the sidebar width — 1 when narrow, up to 2 when wide."
-        if width is None:
-            width = self.folder_canvas.winfo_width()
-        return max(1, min(self.FOLDER_MAX_COLS,
-                          int(max(width, 1) // self.FOLDER_COL_MIN)))
-
-    def _place_folder_rows(self):
-        "Grid the folder cells into self._folder_cols equal columns (left-to-right)."
-        cols = self._folder_cols
-        for c in range(self.FOLDER_MAX_COLS):
-            # Only the USED columns share the 'folders' uniform group. Leaving an
-            # unused column in the group makes the grid reserve a phantom column
-            # (doubling its requested width); when the sidebar is narrow (1 column)
-            # that overflowed the forced canvas width and the rows never mapped —
-            # the folder list looked blank. Excluding it keeps the list visible.
-            used = c < cols
-            self.folder_holder.grid_columnconfigure(
-                c, weight=1 if used else 0, uniform="folders" if used else "")
-        for i, row in enumerate(self.folder_widgets):
-            row.grid(row=i // cols, column=i % cols, sticky="ew")
 
     def _on_folder_wheel(self, event):
         "Scroll the folder list (a no-op until it overflows its height cap)."
@@ -1321,13 +1204,27 @@ class ChromeMixin:
         return max(1, int(max(width, 1) // cell_w))
 
     def _on_sidebar_configure(self, event):
-        "On a sidebar resize: re-size the scroll content, then re-realize the window."
-        " A changed column count (or list view, whose cell width tracks the panel)"
-        " needs every live cell re-placed, so clear and let _render_window rebuild."
-        # The sidebar's height changed too (window resize): re-evaluate the folder
-        # cap so it keeps its fair share of the height.
+        "On a sidebar resize: keep the folder cap in sync, then re-realize the strip."
+        # The folder cap tracks the sidebar height — cheap, so keep it per-event so
+        # the folder list follows smoothly while you drag its sash / the window.
         self._on_folder_holder_configure()
-        cols = self._calc_cols(event.width)
+        # The thumbnail re-realize is the EXPENSIVE part. A resize DRAG (sidebar
+        # width, OR the folder sash — which resizes the strip below it) fires a
+        # <Configure> per pixel; rebuilding the visible cells each one flickers and
+        # janks. Throttle it to ~25 fps — the last event still lands the final size.
+        self._schedule_strip_relayout()
+
+    def _schedule_strip_relayout(self):
+        "Coalesce a burst of resize events into one thumbnail relayout (~40 ms)."
+        if getattr(self, "_strip_relayout_job", None) is not None:
+            return                            # one already pending → it reads live size
+        self._strip_relayout_job = self.root.after(40, self._do_strip_relayout)
+
+    def _do_strip_relayout(self):
+        "Re-realize the thumbnail strip for the current sidebar width (throttled)."
+        self._strip_relayout_job = None
+        width = self.canvas.winfo_width()
+        cols = self._calc_cols(width)
         changed = cols != getattr(self, "_thumb_cols", 0)
         self._thumb_cols = cols
         self._layout_strip()                  # content height + holder width for the new size
