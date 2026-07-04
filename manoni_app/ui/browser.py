@@ -160,7 +160,7 @@ class BrowserMixin:
         # highlight (and expands down to the new folder); jumping OUTSIDE it (Open
         # folder, a breadcrumb above the root, ↑ past the top) re-roots the tree.
         if not self._within_tree_root(folder):
-            self.tree_root = folder
+            self.tree_root = self._tree_root_for(folder)
             self.folder_expanded = set()
         self.folder_expanded.add(folder)
         self._expand_ancestors(folder)   # open every level from the root down to here
@@ -196,8 +196,11 @@ class BrowserMixin:
     def open_folder(self):
         folder = tkfd.askdirectory(parent=self.root,
                                    initialdir=self.folder or os.path.expanduser("~"))
-        if folder:
-            self.load_folder(folder)
+        if not folder:
+            return
+        if not self._maybe_prompt_save():   # honour unsaved edits before switching folders
+            return
+        self.load_folder(folder)
 
     # --- Loading overlay ("please wait" while a big folder builds) ----------
 
@@ -550,6 +553,17 @@ class BrowserMixin:
         pool.shutdown(wait=False)
 
     # --- Folder tree (tintkit.FolderTree in the top sidebar panel) ----------
+
+    def _tree_root_for(self, folder):
+        "Root for a fresh navigation: the parent when `folder` has no sub-folders "
+        "of its own, so the tree stays browsable (its siblings show) instead of "
+        "vanishing; otherwise `folder` itself."
+        if self._list_subdirs(folder):
+            return folder
+        parent = os.path.dirname(folder)
+        if parent and parent != folder and os.path.isdir(parent):
+            return parent
+        return folder
 
     def _within_tree_root(self, folder):
         "True when `folder` is the tree root or lives inside it (so the root stays put)."

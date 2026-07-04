@@ -235,3 +235,69 @@ class Tooltip:
                 return True
             under = getattr(under, "master", None)
         return False
+
+
+# ----------------------------------------------------------------------------
+# Keyboard navigation for dialog buttons
+# ----------------------------------------------------------------------------
+def _walk(widget):
+    "Yield ``widget`` and every descendant (depth-first)."
+    for child in widget.winfo_children():
+        yield child
+        yield from _walk(child)
+
+
+def _has_text_input(dlg):
+    "True if the dialog has a text field the user is expected to type into."
+    return any(isinstance(w, (tk.Entry, tk.Text, tk.Spinbox)) for w in _walk(dlg))
+
+
+def enable_dialog_button_nav(dlg):
+    """Arrow-key + Enter navigation across a dialog's tintkit buttons.
+
+    Auto-discovers the keyboard-focusable buttons in ``dlg`` (any tintkit
+    control whose canvas we made ``takefocus``), lets ← / ↑ and → / ↓ move the
+    focus ring between them, and — for pure choice dialogs (no text field) —
+    focuses the primary/confirm button on open. Enter / Space fire the focused
+    button; that is handled by the button widget itself.
+
+    Called from ``center_over``, so every centred dialog gets this for free.
+    A no-op on dialogs with no such buttons.
+    """
+    def wire():
+        try:
+            btns = [w for w in _walk(dlg)
+                    if getattr(w, "tk_control", None) is not None
+                    and str(w.cget("takefocus")) not in ("", "0")]
+            if not btns:
+                return
+            # Reading order: top-to-bottom, then left-to-right.
+            btns.sort(key=lambda w: (round(w.winfo_rooty() / 6), w.winfo_rootx()))
+
+            def move(cur, delta):
+                try:
+                    i = btns.index(cur)
+                except ValueError:
+                    i = 0
+                btns[(i + delta) % len(btns)].focus_set()
+                return "break"
+
+            for w in btns:
+                w.bind("<Right>", lambda e: move(e.widget, +1))
+                w.bind("<Down>", lambda e: move(e.widget, +1))
+                w.bind("<Left>", lambda e: move(e.widget, -1))
+                w.bind("<Up>", lambda e: move(e.widget, -1))
+
+            # Leave focus in the text field where the user is meant to type;
+            # otherwise land on the confirm button (a filled button, bottom-most).
+            if _has_text_input(dlg):
+                return
+            filled = [w for w in btns
+                      if getattr(w.tk_control, "variant", None) == "filled"]
+            (filled[-1] if filled else btns[-1]).focus_set()
+        except tk.TclError:                     # dialog closed before we wired it
+            pass
+
+    # Deferred: run after the caller's own grab_set() / focus_set() and after the
+    # window maps, so our focus wins and the geometry is final.
+    dlg.after(1, wire)

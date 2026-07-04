@@ -220,7 +220,7 @@ class HelpMixin:
 
         win.group(t("Faster with keys"))
         self._help_key_row(win, "↑  /  ↓",
-                           "Keep / reject the current photo (edit panel closed).")
+                           "Keep / reject the current photo.")
         self._help_key_row(win, "Ctrl + Z", "Undo the last move.")
         win.note(t("At the end of a folder Manoni can loop back to the first "
                    "photo or open the next folder — set this in "
@@ -229,11 +229,16 @@ class HelpMixin:
     # --- Keyboard tab -------------------------------------------------------
 
     def _help_tab_keys(self, win):
-        win.group(t("Browsing  (edit panel closed)"))
+        win.group(t("Browsing"))
         self._help_key_row(win, "←  /  →", "Previous / next photo.")
         self._help_key_row(win, "↑  /  ↓", "Keep / reject the current photo.")
+        win.note(t("These work whether the edit panel is open or closed; if the "
+                   "photo has unsaved edits, Manoni offers to save first."))
 
         win.group(t("Anytime"))
+        self._help_key_row(win, "Ctrl + O", "Open a folder of photos.")
+        self._help_key_row(win, "Ctrl + S",
+                           "Quick-save an edited copy  (Save-as the first time).")
         self._help_key_row(win, "Ctrl + Z", "Undo.")
         self._help_key_row(win, "Ctrl + Y", "Redo  (or Ctrl + Shift + Z).")
         self._help_key_row(win, "Ctrl + R", "Show / hide the pixel rulers.")

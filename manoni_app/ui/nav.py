@@ -257,10 +257,12 @@ class NavMixin:
     # --- Arrow-key browse shortcuts (only while the edit panel is closed) ----
 
     def _browse_keys_active(self):
-        """True when the arrow shortcuts may act: a photo is shown, the edit
-        panel is closed, and no text field is focused. (Modal dialogs grab the
-        keyboard, so an open dialog never reaches these handlers anyway.)"""
-        if self.panel_open or not self.files:
+        """True when the arrow shortcuts may act: a photo is shown and no text
+        field is focused. Works whether or not the edit panel is open — leaving
+        an edited photo (←/→ and ↑/↓ alike) is guarded by the unsaved-edit
+        prompt. (Modal dialogs grab the keyboard, so an open dialog never
+        reaches these handlers anyway.)"""
+        if not self.files:
             return False
         focused = self.root.focus_get()
         if isinstance(focused, (tk.Entry, tk.Text)):
@@ -497,6 +499,8 @@ class NavMixin:
         "Keep: move the current photo into the configured ✓ keeper folder."
         if not self._require_cull():
             return
+        if not self._maybe_prompt_save():    # moving the original: honour unsaved edits
+            return
         os.makedirs(self.cull_keep, exist_ok=True)
         if self._move_current_to(self.cull_keep):
             self.toast(t("Kept → {name}  ·  Ctrl+Z").format(
@@ -509,6 +513,8 @@ class NavMixin:
         if self.confirm_reject and not self._confirm(
                 t("Move this photo to the Reject folder?"), ok_label=t("Reject")):
             return                       # asked to confirm and the user backed out
+        if not self._maybe_prompt_save():    # moving the original: honour unsaved edits
+            return
         os.makedirs(self.cull_reject, exist_ok=True)
         if self._move_current_to(self.cull_reject):
             self.toast(t("Rejected → {name}  ·  Ctrl+Z").format(

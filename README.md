@@ -125,12 +125,17 @@ stripped per your choice, and the original is **never touched**.
 
 | Keys | Action |
 |---|---|
-| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next photo *(edit panel closed)* |
+| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next photo |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Keep / reject the current photo |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a folder of photos |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Quick-save an edited copy *(Save-as the first time)* |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo *(or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>)* |
 | <kbd>Ctrl</kbd>+<kbd>R</kbd> | Show / hide the pixel rulers |
 | <kbd>[</kbd> / <kbd>]</kbd> | Shrink / grow the heal brush |
+
+The arrow keys work whether the edit panel is open or closed; leaving a photo
+with unsaved edits prompts you to save first.
 
 The <img src="assets/readme/circle-help.png" width="16" alt=""> **Help** button in
 the top bar opens a tabbed guide covering all of the above.

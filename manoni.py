@@ -457,15 +457,16 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # like <Control-z> never match. The handlers below match the keysym OR
         # the Windows virtual-key code (event.keycode), which stays put across
         # layouts. See _on_ctrl_shortcut / _on_plain_key.
-        #   Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo, Ctrl+R toggle rulers.
+        #   Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo, Ctrl+R toggle rulers,
+        #   Ctrl+S quick save, Ctrl+O open folder.
         self.root.bind("<Control-KeyPress>", self._on_ctrl_shortcut)
         #   [ / ] resize the heal brush (Photoshop-style), only while it is open.
         self.root.bind("<KeyPress>", self._on_plain_key)
 
-        # Browse-mode arrow keys (only while the edit panel is closed — an open
-        # panel keeps the arrows for its own controls). ←/→ step between photos
-        # (no wrap: they stop at the folder edges); ↑/↓ sort the current photo
-        # into the keep / reject folders. See nav.py.
+        # Browse-mode arrow keys (active whether or not the edit panel is open;
+        # leaving an edited photo is guarded by the unsaved-edit prompt). ←/→
+        # step between photos (no wrap: they stop at the folder edges); ↑/↓ sort
+        # the current photo into the keep / reject folders. See nav.py.
         self.root.bind("<Left>",  lambda e: self._arrow_prev())
         self.root.bind("<Right>", lambda e: self._arrow_next())
         self.root.bind("<Up>",    lambda e: self._arrow_keep())
@@ -489,7 +490,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # Windows virtual-key codes for the shortcut keys. On Windows Tk puts the
     # VK code in event.keycode and it does NOT change with the keyboard layout,
     # so we use it as a fallback when a non-Latin layout hides the keysym.
-    _VK_Z, _VK_Y, _VK_R = 90, 89, 82
+    _VK_Z, _VK_Y, _VK_R, _VK_S, _VK_O = 90, 89, 82, 83, 79
     _VK_LBRACKET, _VK_RBRACKET = 219, 221
 
     def _on_ctrl_shortcut(self, event):
@@ -505,6 +506,12 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             return "break"
         if ks == "r" or kc == self._VK_R:
             self.toggle_rulers()
+            return "break"
+        if ks == "s" or kc == self._VK_S:
+            self.quick_save()               # silent quick save (Save-as if unarmed)
+            return "break"
+        if ks == "o" or kc == self._VK_O:
+            self.open_folder()              # native folder picker
             return "break"
         # Leave every other Ctrl combo (copy / paste / select-all, ...) alone.
         return None

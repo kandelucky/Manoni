@@ -748,13 +748,15 @@ CATALOG_KA = {
     "Share with others": "გააზიარე სხვებთან",
     "Export your edits": "შენი ედიტების ექსპორტი",
     "Anytime": "ნებისმიერ დროს",
-    "Browsing  (edit panel closed)": "დათვალიერება  (რედაქტირების პანელი დახურულია)",
+    "Browsing": "დათვალიერება",
     "On the photo  (mouse)": "ფოტოზე  (თაგვი)",
     "Faster with keys": "უფრო სწრაფად ღილაკებით",
 
     # --- Help window: explanatory sentences (help.py) ---------------------
     "You browse the photos and sort each into a keep folder and a discard folder — nothing is deleted, only moved.":
         "ათვალიერებ ფოტოებს და თითოეულს ანაწილებ დასატოვებელ და გადასაგდებ ფოლდერში — არაფერი იშლება, მხოლოდ გადააქვს.",
+    "These work whether the edit panel is open or closed; if the photo has unsaved edits, Manoni offers to save first.":
+        "ეს მუშაობს რედაქტირების პანელი ღიაა თუ დახურული; თუ ფოტოს შეუნახავი ცვლილებები აქვს, Manoni ჯერ შენახვას შემოგთავაზებს.",
     "The keep / reject buttons (and the ↑ / ↓ keys) move the current photo into these folders. Ctrl+Z undoes the last move.":
         "შენახვის / გადაგდების ღილაკები (და ↑ / ↓ ღილაკები) მიმდინარე ფოტოს ამ ფოლდერებში გადააქვს. Ctrl+Z ბოლო გადატანას აუქმებს.",
     "At the end of a folder Manoni can loop back to the first photo or open the next folder — set this in Settings → Culling.":
