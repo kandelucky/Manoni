@@ -153,13 +153,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.root.tk.call("encoding", "system", "utf-8")
         except tk.TclError:
             pass
-        # DISABLED 2026-07-04: win_unicode_keys.py (a WH_KEYBOARD hook meant to
-        # fix typed, not just programmatic, Georgian text) crashed live typing
-        # twice despite a first fix — pulled out until it can be debugged
-        # against real hardware input, since a crash is worse than the "?" it
-        # was trying to fix. See win_unicode_keys.py's docstring for the story.
-        # from manoni_app import win_unicode_keys
-        # win_unicode_keys.install(self.root)
+        # (A WH_KEYBOARD hook to fix *typed* Georgian was tried and dropped —
+        # it crashed live typing, and a crash is worse than the "?" it fixed.
+        # The encoding call above is the whole fix; don't re-add a keyboard hook.)
         # Give TintKit Manoni's own palette + icon set BEFORE the Theme is built,
         # so any panel migrated onto TintKit widgets matches the rest of the app
         # exactly (same colours) and finds the same Lucide icons.
