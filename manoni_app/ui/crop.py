@@ -36,7 +36,9 @@ class CropMixin:
     ]
 
     def _build_crop_section(self, parent):
-        "Crop panel: form segment + ratio cards + social rows + saved sizes + apply."
+        "Crop's scrollable content: form segment + ratio cards + orientation +"
+        " foldable social/saved-size presets. Crop/Cancel are a separate pinned"
+        " footer — see _build_crop_footer."
         f = self._tw(tk.Frame(parent), bg="bar")
         # Every selectable element registers a (widget, paint) pair so one of them
         # can be shown active at a time. Fixed selectors (segment/cards/social) are
@@ -66,8 +68,9 @@ class CropMixin:
                                    self._build_social_rows)
         self._build_foldable_group(f, t("My sizes"), "_crop_sizes_open",
                                    self._build_my_sizes)
-
-        self._build_crop_actions(f)
+        # Crop/Cancel are NOT built here — they're a pinned footer (see
+        # _build_crop_footer) so folding Social/My sizes open can't push them
+        # out of view.
         return f
 
     # --- Active-state registry ----------------------------------------------
@@ -669,21 +672,36 @@ class CropMixin:
         if self.current_pil is not None:
             self._set_crop_ratio(sz["w"] / sz["h"])
 
-    # --- Bottom actions: apply + cancel -------------------------------------
+    # --- Pinned footer: Crop + Cancel ----------------------------------------
+    # Crop/Cancel used to live inline at the bottom of the scrollable section
+    # content, so opening the (now-foldable) Social networks / My sizes groups
+    # pushed them down out of view. Same fix as the Filters manager's pinned
+    # Create/Undo footer: built once in editpanel._build_edit_panel, OUTSIDE the
+    # scroll canvas (before=self._sec_host), pinned just above the panel's
+    # universal View original/Restore/Save footer, and shown only while the
+    # crop tool is open (see _enter_crop / editpanel.set_section).
 
-    def _build_crop_actions(self, parent):
-        "Crop (primary) and Cancel (outline), each its own full-width row."
+    def _build_crop_footer(self, panel):
+        "Scaffold the pinned Crop/Cancel row; hidden until the crop tool opens."
+        wrap = self._tw(tk.Frame(panel), bg="bar")
+        wrap.pack(side="bottom", fill="x", before=self._sec_host)
+        self._tw(tk.Frame(wrap, height=1), bg="divider").pack(side="top", fill="x")
+
         apply_btn = tintkit.Button(
-            parent, self.theme, t("Crop"), role="primary", variant="filled",
+            wrap, self.theme, t("Crop"), role="primary", variant="filled",
             stretch=True, bg="bar", command=self.apply_crop)
-        apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(14, 8))
+        apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
         cancel = tintkit.Button(
-            parent, self.theme, t("Cancel"), role="neutral", variant="outline",
+            wrap, self.theme, t("Cancel"), role="neutral", variant="outline",
             icon="x", stretch=True, bg="bar", command=self._reset_crop)
-        cancel.pack(fill="x", padx=EDIT_PAD, pady=(0, 10))
+        cancel.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
         tintkit.HoverTip(cancel.canvas, self.theme,
                          t("Reset the selection to the whole image"))
+
+        self._crop_footer = wrap
+        wrap.pack_forget()
+        return wrap
 
     # --- Create / edit "Your size" dialog (same window for both) ------------
 
@@ -851,6 +869,7 @@ class CropMixin:
 
     def _enter_crop(self):
         "Open the crop tool: start a full-image box and fit the photo to see it all."
+        self._crop_footer.pack(side="bottom", fill="x", before=self._sec_host)
         if self.current_pil is None:
             self._render_preview()
             return
