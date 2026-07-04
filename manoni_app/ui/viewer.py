@@ -42,6 +42,7 @@ class ViewerMixin:
         self._before_base_key = None
         self._reset_sliders()
         self._rotated = False    # fresh photo → no edits yet, nothing to save
+        self._mirrored = False
         self._cropped = False
         self._resized = False
         self._perspd = False     # fresh photo → no pending keystone correction
@@ -260,7 +261,7 @@ class ViewerMixin:
         self._compare_peek = False
         self._render_preview()
 
-    # --- Rotation -----------------------------------------------------------
+    # --- Rotation + mirror --------------------------------------------------
 
     def rotate_left(self):
         "Rotate the current photo 90° counter-clockwise (preview; saved on Save)."
@@ -270,7 +271,15 @@ class ViewerMixin:
         "Rotate the current photo 90° clockwise (preview; saved on Save)."
         self._rotate(Image.ROTATE_270)
 
-    def _rotate(self, transpose_op):
+    def mirror_horizontal(self):
+        "Mirror the current photo left↔right (preview; saved on Save)."
+        self._rotate(Image.FLIP_LEFT_RIGHT, mirror=True)
+
+    def mirror_vertical(self):
+        "Mirror the current photo top↔bottom (preview; saved on Save)."
+        self._rotate(Image.FLIP_TOP_BOTTOM, mirror=True)
+
+    def _rotate(self, transpose_op, mirror=False):
         "Losslessly transpose current_pil, refit the view, and refresh the info bar."
         if self.current_pil is None:
             return
@@ -279,13 +288,17 @@ class ViewerMixin:
             self._before_pil = self._before_pil.transpose(transpose_op)
             self._before_base_key = None
         self._reset_straighten()        # a 90° turn invalidates any pending tilt
-        self._rotated = True            # rotation is an edit worth offering to save
+        if mirror:
+            self._mirrored = True       # mirroring is an edit worth offering to save
+        else:
+            self._rotated = True        # rotation is an edit worth offering to save
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a rotate
         self._clear_text_for_geometry()   # …and the source-px text position no longer maps
         self._edits_saved = False
-        self.fit_mode = True            # aspect ratio swapped → refit to window
-        self.pan_x = self.pan_y = 0.0
-        self._view_key = None           # size changed → drop the cached scaled view
+        if not mirror:                  # a 90° turn swaps the aspect ratio; a mirror doesn't
+            self.fit_mode = True
+            self.pan_x = self.pan_y = 0.0
+        self._view_key = None           # pixels changed → drop the cached scaled view
         self._render_preview()
         self._refresh_filter_strip()    # the rotated photo needs fresh thumbnails
         self._update_info(os.path.join(self.folder, self.files[self.index]))

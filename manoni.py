@@ -263,6 +263,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.auto_mode = None
         self._auto_luts = None
         self._rotated = False    # has the current photo been rotated since loaded?
+        self._mirrored = False   # has the current photo been mirrored since loaded?
         self._cropped = False    # has the current photo been cropped since loaded?
         self._resized = False    # has the current photo been resized since loaded?
         self._perspd = False     # has the current photo been keystone-corrected?

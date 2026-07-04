@@ -115,8 +115,8 @@ class NavMixin:
         "True if the current photo carries any edit — whether or not it was saved."
         if self.current_pil is None:
             return False
-        return (self._rotated or self._cropped or self._resized or self._perspd
-                or self._healed
+        return (self._rotated or self._mirrored or self._cropped or self._resized
+                or self._perspd or self._healed
                 or any(v != self._slider_neutral(k)
                        for k, v in self._edit_state().items()))
 

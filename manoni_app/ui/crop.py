@@ -49,17 +49,23 @@ class CropMixin:
         # subscribing once is safe — same lifetime as the panel).
         self.theme.subscribe(self._restyle_crop_chips)
 
+        # Shape is the highest-frequency control, so it stays expanded; the two
+        # preset lists below are situational (not every crop needs a social ratio
+        # or a saved size), so they fold away by default — same idea as the
+        # Filters manager's foldable groups, just simpler since crop's panel is
+        # built once and shown/hidden rather than rebuilt on toggle.
         self._crop_group_header(f, "ratio", t("Shape"))
         self._build_crop_segment(f)
         self._build_ratio_cards(f)
 
+        self._crop_group_header(f, "scan-line", t("Orientation"))
         self._build_straighten(f)
+        self._build_orientation_tools(f)
 
-        self._crop_group_header(f, "share-2", t("Social networks"))
-        self._build_social_rows(f)
-
-        self._crop_group_header(f, "ruler", t("My sizes"))
-        self._build_my_sizes(f)
+        self._build_foldable_group(f, t("Social networks"), "_crop_social_open",
+                                   self._build_social_rows)
+        self._build_foldable_group(f, t("My sizes"), "_crop_sizes_open",
+                                   self._build_my_sizes)
 
         self._build_crop_actions(f)
         return f
@@ -124,6 +130,51 @@ class CropMixin:
                              bg="bar").pack(side="left", padx=(0, 6))
         self._tw(tk.Label(row, text=text, anchor="w",
                  font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
+
+    # --- Foldable group (chevron caption + a once-built, show/hide body) ----
+
+    def _build_foldable_group(self, parent, text, flag_name, build_content):
+        "A collapsible group, matching the Filters manager's fold caption (just"
+        " a chevron + name here — no icon/count, to keep it light). Collapsed by"
+        " default; `flag_name` is a self attribute so the open/closed state"
+        " survives for the panel's lifetime. `build_content(frame)` is called"
+        " once — folding only packs/unpacks the frame, since (unlike Filters'"
+        " list) crop's panel is built once, not rebuilt on every toggle."
+        if not hasattr(self, flag_name):
+            setattr(self, flag_name, False)
+        header = self._tw(tk.Frame(parent, cursor="hand2"), bg="bar")
+        header.pack(fill="x", padx=EDIT_PAD, pady=(13, 6))
+        chev = self._tw(tk.Label(header), bg="bar")
+        chev.pack(side="left", padx=(0, 6))
+        cap = self._tw(tk.Label(header, text=text, anchor="w",
+                       font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim")
+        cap.pack(side="left", fill="x", expand=True)
+
+        content = self._tw(tk.Frame(parent), bg="bar")
+        build_content(content)
+
+        def repaint_chevron():
+            name = "chevron-down" if getattr(self, flag_name) else "chevron-right"
+            im = self.icon(name, size=12, color=self.theme["fg_dim"])
+            if im is not None:
+                chev.configure(image=im)
+                chev._icon_ref = im       # keep a hard ref alive
+
+        def refresh():
+            repaint_chevron()
+            if getattr(self, flag_name):
+                content.pack(fill="x")
+            else:
+                content.pack_forget()
+
+        def toggle(_e=None):
+            setattr(self, flag_name, not getattr(self, flag_name))
+            refresh()
+
+        for w in (header, cap, chev):
+            w.bind("<Button-1>", toggle)
+        self.theme.subscribe(repaint_chevron)
+        refresh()
 
     # --- Form segment: Free / Orig. / Custom --------------------------------
 
@@ -237,12 +288,13 @@ class CropMixin:
             w.bind("<Leave>", lambda e: hover(False))
         self._crop_register(card, paint)
 
-    # --- Straighten (horizon tilt) ------------------------------------------
+    # --- Orientation: straighten (horizon tilt) + rotate/mirror -------------
+    # Grouped under one header — angle, 90° swap and the two mirrors are all
+    # the same idea (adjust the photo's orientation before committing the crop).
 
     def _build_straighten(self, parent):
         "A horizon-straighten slider (−45…+45°, 0 = level). It tilts the photo"
         " live; the crop box auto-fits so a straighten never keeps empty corners."
-        self._crop_group_header(parent, "scan-line", t("Straighten"))
         # A bidirectional TitledSlider (title strip: label · signed angle · reset)
         # over a full-width track, matching every other migrated slider.
         self.s_straighten = tintkit.TitledSlider(
@@ -253,6 +305,30 @@ class CropMixin:
         tintkit.HoverTip(
             self.s_straighten.canvas, self.theme,
             t("Tilt to level the horizon (the crop trims the corners)"))
+
+    # (icon, command-name, tooltip) for the orientation icon row. command-name
+    # is looked up on self at build time so this table stays declarative.
+    _CROP_TOOL_ROW = [
+        ("rotate-cw-square", "_flip_crop_ratio", "Swap the selection's orientation (90°)"),
+        ("flip-horizontal-2", "mirror_horizontal", "Mirror the photo horizontally"),
+        ("flip-vertical-2", "mirror_vertical", "Mirror the photo vertically"),
+    ]
+
+    def _build_orientation_tools(self, parent):
+        "The swap-orientation + mirror-horizontal/vertical icon row. Uses"
+        " tintkit.Button's icon-only ghost variant (permanent chip fill + border)"
+        " rather than the bare IconButton, so it reads as a button at rest, not"
+        " just a floating icon."
+        tools = self._tw(tk.Frame(parent), bg="bar")
+        tools.pack(fill="x", padx=EDIT_PAD, pady=(6, 4))
+        for icon_name, cmd_name, tip in self._CROP_TOOL_ROW:
+            cell = self._tw(tk.Frame(tools), bg="bar")
+            cell.pack(side="left", expand=True)
+            btn = tintkit.Button(cell, self.theme, "", role="neutral", variant="ghost",
+                                 icon=icon_name, min_w=36, h=36, bg="bar",
+                                 command=getattr(self, cmd_name))
+            btn.pack()
+            tintkit.HoverTip(btn.canvas, self.theme, t(tip))
 
     def _on_straighten(self, deg):
         "Live tilt: set the angle, fit the auto crop box, re-render the preview."
@@ -593,27 +669,19 @@ class CropMixin:
         if self.current_pil is not None:
             self._set_crop_ratio(sz["w"] / sz["h"])
 
-    # --- Bottom actions: flip + apply + cancel ------------------------------
+    # --- Bottom actions: apply + cancel -------------------------------------
 
     def _build_crop_actions(self, parent):
-        "Flip (icon) + Crop (primary) on one row, then the outline Cancel button."
-        bar = self._tw(tk.Frame(parent), bg="bar")
-        bar.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
-
-        flip = tintkit.IconButton(bar, self.theme, "arrow-left-right", w=44, h=36,
-                                  icon_px=17, bg="bar", command=self._flip_crop_ratio)
-        flip.pack(side="left")
-        tintkit.HoverTip(flip.canvas, self.theme, t("Rotate the selection by 90°"))
-
+        "Crop (primary) and Cancel (outline), each its own full-width row."
         apply_btn = tintkit.Button(
-            bar, self.theme, t("Crop"), role="primary", variant="filled",
+            parent, self.theme, t("Crop"), role="primary", variant="filled",
             stretch=True, bg="bar", command=self.apply_crop)
-        apply_btn.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(14, 8))
 
         cancel = tintkit.Button(
             parent, self.theme, t("Cancel"), role="neutral", variant="outline",
             icon="x", stretch=True, bg="bar", command=self._reset_crop)
-        cancel.pack(fill="x", padx=EDIT_PAD, pady=(8, 10))
+        cancel.pack(fill="x", padx=EDIT_PAD, pady=(0, 10))
         tintkit.HoverTip(cancel.canvas, self.theme,
                          t("Reset the selection to the whole image"))
 

@@ -315,7 +315,7 @@ CATALOG_KA = {
     "Drag the corners; pick a shape or social network":
         "ჩავათრიე კუთხეები; აირჩიე ფორმა ან სოც. ქსელი",
     "Shape": "ფორმა",
-    "Straighten": "გასწორება",
+    "Orientation": "ორიენტაცია",
     "Angle": "კუთხე",
     "Tilt to level the horizon (the crop trims the corners)":
         "დახარე ჰორიზონტის გასასწორებლად (მოჭრა კუთხეებს მოაჭრის)",
@@ -339,7 +339,9 @@ CATALOG_KA = {
         "პერსპექტივა დადებულია  ·  შესანახად დააჭირე Save-ს",
     "Social networks": "სოციალური ქსელები",
     "⇄ Flip (3:4 ⇄ 4:3)": "⇄ გადატრიალება (3:4 ⇄ 4:3)",
-    "Rotate the selection by 90°": "მონიშვნის 90°-ით გადატრიალება",
+    "Swap the selection's orientation (90°)": "მონიშვნის ორიენტაციის შეცვლა (90°)",
+    "Mirror the photo horizontally": "ფოტოს სარკისებური გადაბრუნება ჰორიზონტალურად",
+    "Mirror the photo vertically": "ფოტოს სარკისებური გადაბრუნება ვერტიკალურად",
     "Crop": "მოჭრა",
     "Cancel": "გაუქმება",
     "Reset the selection to the whole image": "მონიშვნის სრულ სურათზე დაბრუნება",
