@@ -50,10 +50,30 @@ VIGNETTE_MASK_MAX  = 600
 # Selective focus blur (Fotor-style depth of field). A circle stays sharp; the
 # rest blurs. FOCUS_MAX_BLUR = Gaussian radius (full-res px) at a full strength
 # slider — bigger than the global MAX_BLUR so the "background" can melt away.
-# The soft mask is built at most MASK_MAX px then scaled up, like the vignette,
-# so a full-res save doesn't pay for a huge-image mask blur.
-FOCUS_MAX_BLUR  = 40.0
-FOCUS_MASK_MAX  = 600
+# FOCUS_BLUR_EASE eases the slider (raises 0..1 to this power before scaling):
+# >1 keeps low/mid slider values gentle and saves the full drama for near the
+# top of the range, since a plain linear map made even a modest-looking slider
+# position blur too hard.
+#
+# The shape's edge doesn't jump straight from sharp to FOCUS_MAX_BLUR: a short
+# ring around it (FOCUS_TRANS_BASE at feather=1.0, source px) is rendered as a
+# STACK of FOCUS_BLUR_LEVELS increasingly-blurred copies, radius climbing on
+# its own eased curve (FOCUS_BLUR_LEVEL_EASE — small steps first). A plain
+# alpha blend between the sharp image and one fully-blurred copy left a
+# translucent "ghost" of sharp detail floating over the blur right at the
+# edge; climbing the blur radius itself in short steps reads as a real lens
+# defocusing instead. That stack is built on a crop around the shape (not the
+# whole photo), and — like the mask trick above it used to use — that crop is
+# itself downsampled to at most FOCUS_WORK_MAX px before the levels are blurred,
+# so a big in-focus circle on a big save stays cheap (the crop's AREA grows
+# with the shape's own size, unlike the vignette/heal boxes, so without this it
+# would not be).
+FOCUS_MAX_BLUR        = 40.0
+FOCUS_BLUR_EASE       = 1.6
+FOCUS_TRANS_BASE      = 80.0
+FOCUS_BLUR_LEVELS     = 6
+FOCUS_WORK_MAX        = 640
+FOCUS_BLUR_LEVEL_EASE = 2.2
 
 # Sepia: a warm monochrome look. The grayscale luminance is mapped through a
 # per-channel ramp (scale, offset) so shadows go warm-brown and highlights go
@@ -269,13 +289,16 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
     stays anchored to the photo through zoom and pan. They are mapped into this
     region's display pixels via `src_box` + `scale`, exactly like the vignette —
     so the small preview and the full-res save composite identically. `blur`
-    (0..1) sets the blur radius; `feather` (0..1) softens the sharp→blurred
-    transition. The mask depends only on the geometry, so it is cached across
-    blur-slider drags via the optional `cache`."""
+    (0..1) sets the blur radius; `feather` (0..1) sets how far outside the shape
+    the blur takes to climb to full strength (see FOCUS_TRANS_BASE et al above).
+
+    The ring masks (which pixels belong to which step of the ramp) depend only
+    on the geometry, not the blur amount, so they — and the crop box they're
+    built in — are cached across blur-slider drags via the optional `cache`."""
     blur_amt = float(focus.get("blur", 0.0))
     if blur_amt <= 0.0:
         return img
-    radius = blur_amt * FOCUS_MAX_BLUR * scale          # display px
+    radius = (blur_amt ** FOCUS_BLUR_EASE) * FOCUS_MAX_BLUR * scale   # display px
     if radius < 0.1:
         return img
     w, h = img.size
@@ -284,58 +307,108 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
     cy = (focus["cy"] - sy0) * scale
     feather = focus.get("feather", 0.4)
     shape = focus.get("shape", "circle")
+    trans = max(1.0, feather * FOCUS_TRANS_BASE * scale)   # ramp width, display px
+    # Crop margin: generous enough that a Gaussian blur of FOCUS_MAX_BLUR (the
+    # largest `radius` can ever be) computed on just this crop still agrees with
+    # one computed on the whole image, right up to the crop's edge. Independent
+    # of the CURRENT blur amount, so the crop box (and the ring masks built in
+    # it, below) don't need rebuilding on every blur-slider tick, only when the
+    # shape itself moves/resizes or feather changes.
+    pad = FOCUS_MAX_BLUR * scale * 3.0 + 8.0
 
     if shape == "line":
         hw = max(1.0, focus.get("width", 0.0) * 0.5 * scale)   # half-band, display px
         angle = focus.get("angle", 0.0)
+        ux, uy = math.cos(angle), math.sin(angle)       # along the line
+        nx, ny = -uy, ux                                # across (perpendicular)
+        edge0 = hw
+        half_w = hw + trans + pad
+        L = (w + h) * 1.5 + 10.0        # long enough to cross the frame at any angle
+        corners = [
+            (cx + ux * L + nx * half_w, cy + uy * L + ny * half_w),
+            (cx - ux * L + nx * half_w, cy - uy * L + ny * half_w),
+            (cx - ux * L - nx * half_w, cy - uy * L - ny * half_w),
+            (cx + ux * L - nx * half_w, cy + uy * L - ny * half_w),
+        ]
+        xs, ys = [p[0] for p in corners], [p[1] for p in corners]
+        bx0, by0 = max(0, int(math.floor(min(xs)))), max(0, int(math.floor(min(ys))))
+        bx1, by1 = min(w, int(math.ceil(max(xs)))), min(h, int(math.ceil(max(ys))))
         key = (w, h, round(cx, 1), round(cy, 1), round(hw, 1),
                round(angle, 4), round(feather, 3), "line")
     else:
-        rx = max(1.0, focus["r"] * scale)
+        rx = max(1.0, focus["r"] * scale)               # shape radius, display px
+        edge0 = rx
+        half = rx + trans + pad
+        bx0, by0 = max(0, int(math.floor(cx - half))), max(0, int(math.floor(cy - half)))
+        bx1, by1 = min(w, int(math.ceil(cx + half))), min(h, int(math.ceil(cy + half)))
         key = (w, h, round(cx, 1), round(cy, 1), round(rx, 1),
                round(feather, 3), "circle")
 
-    mask = cache.get(key) if cache is not None else None
-    if mask is None:
-        # Low-frequency mask: build it small, then scale up (cheap on a big save).
-        f = min(1.0, FOCUS_MASK_MAX / max(w, h))
-        mw, mh = max(1, round(w * f)), max(1, round(h * f))
-        mask = Image.new("L", (mw, mh), 0)
-        draw = ImageDraw.Draw(mask)
-        if shape == "line":
-            # The sharp band: a long quad centred on the line, ±half-width across
-            # it. Drawn far past the image both ways along the line so it spans
-            # the frame at any angle. 255 inside the band = stays sharp.
-            ux, uy = math.cos(angle), math.sin(angle)       # along the line
-            nx, ny = -uy, ux                                # across (perpendicular)
-            L = (mw + mh) * 2 + 10
-            ccx, ccy, hwf = cx * f, cy * f, hw * f
-            draw.polygon([
-                (ccx + ux * L + nx * hwf, ccy + uy * L + ny * hwf),
-                (ccx - ux * L + nx * hwf, ccy - uy * L + ny * hwf),
-                (ccx - ux * L - nx * hwf, ccy - uy * L - ny * hwf),
-                (ccx + ux * L - nx * hwf, ccy + uy * L - ny * hwf),
-            ], fill=255)
-            soft = max(0.5, feather * hwf)
-        else:
-            bbox = [(cx - rx) * f, (cy - rx) * f, (cx + rx) * f, (cy + rx) * f]
-            draw.ellipse(bbox, fill=255)                     # 255 inside = sharp
-            soft = max(0.5, feather * rx * f)
-        # Feather only OUTWARD: a plain Gaussian on the hard shape spreads the
-        # 255->0 edge both ways, so its inward half would soften the area just
-        # inside the shape (blur leaking into the sharp region). Keep the hard
-        # interior fully sharp by taking the per-pixel max of the hard mask and
-        # the blurred one — inside stays 255, only the outside gets the falloff.
-        hard = mask
-        mask = ImageChops.lighter(hard, hard.filter(ImageFilter.GaussianBlur(soft)))
-        if (mw, mh) != (w, h):
-            mask = mask.resize((w, h), Image.BILINEAR)
+    if bx1 - bx0 < 4 or by1 - by0 < 4:
+        return img       # shape/frame combination leaves no room to ramp into
+    crop_box = (bx0, by0, bx1, by1)
+
+    cw, ch = bx1 - bx0, by1 - by0
+    # The crop's own AREA grows with the shape's size (a big in-focus circle on
+    # a big save has a big ring around it), so work at a downsampled copy of the
+    # crop — same "build small, scale up" trick the old single mask used — and
+    # only pay FOCUS_WORK_MAX² for the levels/masks regardless of shape size.
+    wf = min(1.0, FOCUS_WORK_MAX / max(cw, ch))
+    ww, wh = max(1, round(cw * wf)), max(1, round(ch * wf))
+
+    cached = cache.get(key) if cache is not None else None
+    if cached is not None and cached[0] == crop_box:
+        ring_masks = cached[1]
+    else:
+        wlcx, wlcy = (cx - bx0) * wf, (cy - by0) * wf   # shape centre, working coords
+
+        def ring_mask(R):
+            "255 at/beyond radius R from the shape edge, 0 inside — a touch of"
+            " blur only to antialias the ring, not to feather it (the ramp"
+            " itself comes from stacking several of these, not this blur)."
+            m = Image.new("L", (ww, wh), 255)
+            draw = ImageDraw.Draw(m)
+            Rw = R * wf
+            if shape == "line":
+                Lb = (ww + wh) * 1.5 + 10.0
+                draw.polygon([
+                    (wlcx + ux * Lb + nx * Rw, wlcy + uy * Lb + ny * Rw),
+                    (wlcx - ux * Lb + nx * Rw, wlcy - uy * Lb + ny * Rw),
+                    (wlcx - ux * Lb - nx * Rw, wlcy - uy * Lb - ny * Rw),
+                    (wlcx + ux * Lb - nx * Rw, wlcy + uy * Lb - ny * Rw),
+                ], fill=0)
+            else:
+                draw.ellipse([wlcx - Rw, wlcy - Rw, wlcx + Rw, wlcy + Rw], fill=0)
+            return m.filter(ImageFilter.GaussianBlur(max(0.75, 1.5 * wf)))
+
+        # Thresholds edge0, edge0 + trans/LEVELS, ... up to (but not including)
+        # edge0 + trans — the last step's mask still reaches to infinity, so
+        # everything beyond the ramp gets the final (full-radius) level.
+        ring_masks = [ring_mask(edge0 + (k / FOCUS_BLUR_LEVELS) * trans)
+                      for k in range(FOCUS_BLUR_LEVELS)]
         if cache is not None:
             cache.clear()            # keep only the latest geometry (single slot)
-            cache[key] = mask
-    blurred = img.filter(ImageFilter.GaussianBlur(radius))
-    # Inside the shape (mask=255) keep the sharp img; outside, the blurred copy.
-    return Image.composite(img, blurred, mask)
+            cache[key] = (crop_box, ring_masks)
+
+    # The ramp: start from the sharp crop, then repeatedly paste in a slightly
+    # MORE blurred copy of it everywhere at/beyond the next ring threshold. The
+    # per-level radius climbs on its own eased curve (small steps first, e.g.
+    # ~1, 2, 5, 9, 14, 18px rather than jumping straight to the full amount) —
+    # each step blends two RELATIVELY CLOSE blur amounts, so it reads as the
+    # blur itself growing, not as sharp detail ghosting through a heavy blur.
+    sub = img.crop(crop_box)
+    sub_w = sub.resize((ww, wh), Image.BILINEAR) if (ww, wh) != (cw, ch) else sub
+    result = sub_w
+    for k in range(1, FOCUS_BLUR_LEVELS + 1):
+        r_k = ((k / FOCUS_BLUR_LEVELS) ** FOCUS_BLUR_LEVEL_EASE) * radius * wf
+        level = sub_w.filter(ImageFilter.GaussianBlur(r_k)) if r_k >= 0.1 else sub_w
+        result = Image.composite(level, result, ring_masks[k - 1])
+    if (ww, wh) != (cw, ch):
+        result = result.resize((cw, ch), Image.BILINEAR)
+
+    blurred_full = img.filter(ImageFilter.GaussianBlur(radius))
+    blurred_full.paste(result, crop_box)
+    return blurred_full
 
 
 # --- The individual slider passes --------------------------------------------
