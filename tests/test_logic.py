@@ -22,6 +22,7 @@ from manoni_app.ui.actions import ActionsMixin          # noqa: E402
 from manoni_app.ui.resize import ResizeMixin            # noqa: E402
 from manoni_app.ui.crop import CropMixin                # noqa: E402
 from manoni_app.ui.saving import SaveMixin              # noqa: E402
+from manoni_app.ui.perspective import PerspectiveMixin  # noqa: E402
 
 
 class FakeApp(FiltersMixin, ActionsMixin, ResizeMixin, CropMixin, SaveMixin):
@@ -324,6 +325,91 @@ def save_basename_appends_edited():
     a.files = ["Photo.JPG"]
     a.index = 0
     assert a._save_basename() == "Photo_edited", "save basename rule wrong"
+
+
+# ---- perspective: commit bakes pixels + resets dependent geometry ----------
+
+class PerspApp(PerspectiveMixin):
+    """The real perspective mixin with only the plain state apply_perspective_commit
+    reads. Every Tk-touching collaborator it calls is stubbed to a no-op, so the
+    genuine commit LOGIC (warp the pixels, reset crop / clone, zero the sliders,
+    mark unsaved) runs without a Tk root."""
+
+    def __init__(self, img):
+        self.current_pil = img
+        self._before_pil = img.copy()
+        self._before_base_key = "k"
+        self.persp_v = self.persp_h = 0.0
+        self.clone_src = (1, 2)
+        self.clone_offset = (3, 4)
+        self.crop_rect = [5.0, 5.0, 9.0, 9.0]              # a non-full stale box
+        self.crop_ratio = (16, 9)
+        self._crop_btn_active = "16:9"
+        self._edits_saved = True
+        self.fit_mode = False
+        self.pan_x = self.pan_y = 7.0
+        self._view_key = "stale"
+        self.files = ["Photo.jpg"]
+        self.index = 0
+        self.folder = ""
+        self._toasts = []
+
+    # Tk-touching collaborators → no-ops (never exercised headless).
+    def toast(self, msg): self._toasts.append(msg)
+    def _clear_focus_for_geometry(self): pass
+    def _clear_text_for_geometry(self): pass
+    def _restyle_crop_chips(self): pass
+    def _render_preview(self): pass
+    def _update_info(self, *a): pass
+    def _refresh_filter_strip(self): pass
+
+
+@check
+def perspective_commit_noop_when_flat():
+    src = Image.new("RGB", (40, 30), (120, 120, 120))
+    a = PerspApp(src)
+    a.apply_perspective_commit()                            # both sliders at 0
+    assert a.current_pil is src, "commit warped the pixels with no keystone set"
+    assert not getattr(a, "_perspd", False), "flat commit set the perspective flag"
+    assert a._toasts and "slider" in a._toasts[-1].lower(), "no 'move a slider' hint"
+
+
+@check
+def perspective_commit_bakes_and_resets():
+    from manoni_app import imaging
+    src = _quad_image(60, 40)
+    a = PerspApp(src)
+    before = src.copy()
+    a.persp_v, a.persp_h = 40.0, -20.0                      # sliders read −100..100
+    a.apply_perspective_commit()
+    # pixels are baked (warped) but the frame size is preserved.
+    assert a.current_pil.size == (60, 40), "commit changed the image size"
+    assert a.current_pil.tobytes() != before.tobytes(), "commit did not warp the pixels"
+    # the committed pixels equal a direct warp at the /100 amounts.
+    ref = imaging.apply_perspective(before, 0.40, -0.20)
+    assert a.current_pil.tobytes() == ref.tobytes(), "commit != apply_perspective(v/100)"
+    # the compare 'before' is warped in lockstep so the A/B stays aligned.
+    assert a._before_pil.tobytes() != before.tobytes(), "before image not kept aligned"
+    assert a._before_base_key is None, "before cache key not invalidated"
+    # dependent geometry is reset: crop back to the full NEW frame, ratio cleared.
+    assert a.crop_rect == [0.0, 0.0, 60.0, 40.0], f"crop not reset to full: {a.crop_rect}"
+    assert a.crop_ratio is None and a._crop_btn_active is None, "crop ratio/active not cleared"
+    assert a.clone_src is None and a.clone_offset is None, "clone anchor not cleared"
+    # sliders zeroed (warp now baked in), and it is marked dirty + refit.
+    assert a.persp_v == 0.0 and a.persp_h == 0.0, "sliders not zeroed after commit"
+    assert a._perspd is True, "perspective flag not set"
+    assert a._edits_saved is False, "commit left edits marked saved"
+    assert a.fit_mode is True and a.pan_x == 0.0 and a.pan_y == 0.0, "view not refit"
+    assert a._view_key is None, "cached view not dropped after pixels changed"
+
+
+def _quad_image(w, h):
+    img = Image.new("RGB", (w, h))
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            px[x, y] = (200 if x < w // 2 else 60, 200 if y < h // 2 else 60, 120)
+    return img
 
 
 def main():

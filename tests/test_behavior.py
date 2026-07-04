@@ -21,7 +21,7 @@ import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PIL import Image, ImageStat        # noqa: E402
+from PIL import Image, ImageStat, ImageChops   # noqa: E402
 from manoni_app import imaging          # noqa: E402
 from manoni_app.imaging import Edits    # noqa: E402
 
@@ -496,14 +496,105 @@ def clone_copies_the_source():
 
 
 # ---- perspective ----
+# apply_perspective(img, v, h): v/h are signed keystone amounts (-1..+1). The
+# warp is defined in fractions of W/H, so it is SCALE-FREE (the fitted-preview
+# warp must equal the full-res commit), the sampled trapezoid lies inside the
+# source (so the output is FULLY FILLED — no black corners), and +v / -v act on
+# OPPOSITE edges (so a photo flip conjugates a sign flip exactly).
+
+def _flip_lr(im): return im.transpose(Image.FLIP_LEFT_RIGHT)
+def _flip_tb(im): return im.transpose(Image.FLIP_TOP_BOTTOM)
+
+
+def _mad(a, b):
+    "Mean absolute per-channel difference between two images."
+    d = ImageChops.difference(a.convert("RGB"), b.convert("RGB"))
+    return sum(ImageStat.Stat(d).mean) / 3.0
+
+
+def _quadrants(w=120, h=120):
+    "Four distinct quadrants so a flip / sign error is visible, not symmetric-away."
+    img = Image.new("RGB", (w, h))
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            px[x, y] = (200 if x < w // 2 else 60,
+                        200 if y < h // 2 else 60, 120)
+    return img
+
 
 @check
-def perspective_warps_and_noops():
+def perspective_neutral_and_warps():
     b = stripes(w=80, h=80, period=8)
     assert same(b, imaging.apply_perspective(b, 0.0, 0.0)), "perspective 0/0 not a no-op"
     out = imaging.apply_perspective(b, 0.3, -0.2)
     assert out.size == b.size, "perspective changed the size"
     assert not same(b, out), "perspective changed nothing"
+    # each axis alone must bite, and its two signs must differ (opposite edges).
+    q = _quadrants()
+    assert not same(q, imaging.apply_perspective(q, 0.4, 0.0)), "vertical keystone no-op"
+    assert not same(q, imaging.apply_perspective(q, 0.0, 0.4)), "horizontal keystone no-op"
+    assert not same(imaging.apply_perspective(q, 0.4, 0.0),
+                    imaging.apply_perspective(q, -0.4, 0.0)), "+v == -v (no direction)"
+    assert not same(imaging.apply_perspective(q, 0.0, 0.4),
+                    imaging.apply_perspective(q, 0.0, -0.4)), "+h == -h (no direction)"
+
+
+@check
+def perspective_is_scale_free():
+    "The headline property: warp-then-shrink must equal shrink-then-warp."
+    big = stripes(w=240, h=240, period=24)
+    half = (120, 120)
+    warp_then_shrink = imaging.apply_perspective(big, 0.3, -0.2).resize(half, Image.BICUBIC)
+    shrink_then_warp = imaging.apply_perspective(big.resize(half, Image.BICUBIC), 0.3, -0.2)
+    d = _mad(warp_then_shrink, shrink_then_warp)
+    assert d < 4.0, f"perspective is not scale-free (mad {d:.2f}) — preview won't match commit"
+
+
+@check
+def perspective_fills_no_black_corners():
+    "The sampled trapezoid stays inside the source, so a solid stays solid — no fill."
+    white = solid((255, 255, 255), size=(120, 120))
+    out = imaging.apply_perspective(white, 0.6, 0.6)          # both axes, hard
+    lo = min(mn for mn, mx in ImageStat.Stat(out.convert("RGB")).extrema)
+    assert lo >= 250, f"perspective left dark corners (min {lo}) — sampled outside source"
+
+
+@check
+def perspective_direction_symmetry():
+    "+v / -v are a vertical mirror of each other (pin direction); pure v stays L-R"
+    " symmetric (no lean introduced). Same for h, transposed. All bit-exact."
+    q = _quadrants()
+    ap = imaging.apply_perspective
+    # vertical keystone: L-R symmetric, and sign flip == top/bottom flip.
+    assert same(_flip_lr(ap(q, 0.4, 0.0)), ap(_flip_lr(q), 0.4, 0.0)), "v not L-R symmetric"
+    assert same(_flip_tb(ap(q, 0.4, 0.0)), ap(_flip_tb(q), -0.4, 0.0)), "v sign != T-B flip"
+    # horizontal keystone: T-B symmetric, and sign flip == left/right flip.
+    assert same(_flip_tb(ap(q, 0.0, 0.4)), ap(_flip_tb(q), 0.0, 0.4)), "h not T-B symmetric"
+    assert same(_flip_lr(ap(q, 0.0, 0.4)), ap(_flip_lr(q), 0.0, -0.4)), "h sign != L-R flip"
+
+
+@check
+def perspective_coerces_paletted_modes():
+    "P and 1 mode are promoted to RGB (transform can't sample a palette), same size."
+    q = _quadrants()
+    for mode in ("P", "1"):
+        out = imaging.apply_perspective(q.convert(mode), 0.3, 0.2)
+        assert out.mode == "RGB", f"{mode} mode not promoted to RGB (got {out.mode})"
+        assert out.size == q.size, f"{mode} mode changed size"
+
+
+@check
+def perspective_coeffs_identity_and_degenerate():
+    "The pure-Python solver: an identity quad gives the identity map; a collapsed"
+    " quad is reported singular (None) rather than returning garbage coefficients."
+    from manoni_app.imaging import retouch
+    sq = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    c = retouch.perspective_coeffs(sq, sq)
+    assert c is not None, "identity quad reported singular"
+    expect = [1, 0, 0, 0, 1, 0, 0, 0]
+    assert all(abs(a - e) < 1e-9 for a, e in zip(c, expect)), f"identity coeffs off: {c}"
+    assert retouch.perspective_coeffs(sq, [(0, 0)] * 4) is None, "degenerate quad not None"
 
 
 # --- runner ------------------------------------------------------------------

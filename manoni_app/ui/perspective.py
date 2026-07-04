@@ -32,12 +32,12 @@ class PerspectiveMixin:
             wraplength=self._edit_dpi_w(190)), bg="bar", fg="fg_dim")
         intro.pack(fill="x", padx=EDIT_PAD, pady=(12, 6))
 
-        self._persp_group_header(f, "move", t("Vertical"))
+        self._persp_group_header(f, "flip-vertical-2", t("Vertical"))
         self.s_persp_v = self._persp_slider(
             f, t("Vertical"), "persp_v",
             t("Tilt the top/bottom — fix verticals that lean in or out"))
 
-        self._persp_group_header(f, "move", t("Horizontal"))
+        self._persp_group_header(f, "flip-horizontal-2", t("Horizontal"))
         self.s_persp_h = self._persp_slider(
             f, t("Horizontal"), "persp_h",
             t("Tilt the left/right — fix horizontals that lean in or out"))

@@ -119,9 +119,9 @@
 
 ## 9. Perspective
 
-- [ ] **(მე)** Vertical (persp_v) / Horizontal (persp_h) — warp მიმართულება; 0 = no-op.
-- [ ] **(მე)** `apply_perspective_commit` — pixels ეცხობა, crop/focus/text/clone reset.
-- [ ] **(მე)** scale-free (preview view == full-res commit).
+- [x] **(მე)** Vertical (persp_v) / Horizontal (persp_h) — warp მიმართულება; 0 = no-op.
+- [x] **(მე)** `apply_perspective_commit` — pixels ეცხობა, crop/focus/text/clone reset.
+- [x] **(მე)** scale-free (preview view == full-res commit).
 - [ ] **(შენ)** live warp fitted view-ზე ჩანს, შენობის ვერტიკალები სწორდება.
 
 ## 10. Heal & Clone
