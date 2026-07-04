@@ -252,7 +252,9 @@ class HelpMixin:
         self._help_row(win, "wand-sparkles", "Effects",
                        "Clarity, sharpen, denoise, dehaze, grain and vignette.")
         self._help_row(win, "crop", "Crop",
-                       "Trim and straighten; keep your own saved aspect ratios.")
+                       "Trim, straighten a tilted horizon (±45°), rotate 90° and "
+                       "flip horizontally or vertically; ratio, social and your "
+                       "own saved presets.")
         self._help_row(win, "scaling", "Resize",
                        "Change the pixel dimensions — one photo, or a whole "
                        "folder (optionally its subfolders), with a progress bar "

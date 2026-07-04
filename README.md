@@ -80,7 +80,7 @@ A tool rail on the right — click a tool to open its panel.
 | <img src="assets/readme/sliders-horizontal.png" width="22" alt=""> | **Basic** | White balance · tone (highlights / shadows / whites / blacks) · detail (clarity / texture / denoise / dehaze / sharpen) · colour (vibrance / saturation) |
 | <img src="assets/readme/palette.png" width="22" alt=""> | **Color mixer** | Per-hue HSL bands, plus dedicated gold & skin mini-HSLs |
 | <img src="assets/readme/wand-sparkles.png" width="22" alt=""> | **Effects** | Vignette · grain · split-tone |
-| <img src="assets/readme/crop.png" width="22" alt=""> | **Crop** | Trim & straighten, with ratio / social presets |
+| <img src="assets/readme/crop.png" width="22" alt=""> | **Crop** | Trim, straighten a tilted horizon (±45°), rotate 90°, flip H / V — with ratio and social presets |
 | <img src="assets/readme/scaling.png" width="22" alt=""> | **Resize** | Resize one photo, or every photo in a folder and its subfolders in one batch |
 | <img src="assets/readme/frame.png" width="22" alt=""> | **Perspective** | Fix keystoning, straighten converging lines |
 | <img src="assets/readme/bandage.png" width="22" alt=""> | **Heal & Clone** | Remove blemishes (auto, or <kbd>Alt</kbd>+click a clone source) |
