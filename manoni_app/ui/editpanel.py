@@ -492,13 +492,13 @@ class EditPanelMixin:
         return btn
 
     def _peek_action_press(self, btn):
-        "Press → show the original (იყო); fill the button to mark it active."
+        "Press → show the original (before); fill the button to mark it active."
         self._compare_peek_on()
         btn.role, btn.variant = "primary", "filled"
         btn.repaint()
 
     def _peek_action_release(self, btn):
-        "Release → back to the edit (არის); restore the resting outline."
+        "Release → back to the edit (after); restore the resting outline."
         self._compare_peek_off()
         btn.role, btn.variant = "neutral", "outline"
         btn.repaint()

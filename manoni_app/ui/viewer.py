@@ -235,7 +235,7 @@ class ViewerMixin:
         self._pan_anchor = None
         self.preview.configure(cursor="hand2" if self.hand_tool else "")
 
-    # --- Before/after compare (იყო / არის) ----------------------------------
+    # --- Before/after compare -----------------------------------------------
 
     def _compare_drag(self, event):
         "Move the split divider to the pointer (clamped to the photo's on-screen span)."
@@ -641,7 +641,7 @@ class ViewerMixin:
     def _compose_compare(self, img, img_left, vw):
         """Blend the unedited 'before' into the edited `img` for compare.
 
-        "Before" (იყო) is the photo with NO slider/effect edits AND none of the
+        "Before" is the photo with NO slider/effect edits AND none of the
         destructive heal/clone strokes — so a retouched blemish shows again on the
         left. Peek replaces the whole frame with it; the split pastes its left part
         over `img`. `img`/`before` may be a shared cache, so copy before pasting.
@@ -663,7 +663,7 @@ class ViewerMixin:
         return img
 
     def _draw_compare_divider(self, vw, vh):
-        "Draw the split line, a centre grab handle, and the იყო / არის tags."
+        "Draw the split line, a centre grab handle, and the before/after tags."
         x = self.compare_frac * vw
         if self._compare_span:
             lo, hi = self._compare_span

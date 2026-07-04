@@ -32,6 +32,7 @@ previews/
 
 # Personal planning / spec docs (kept local, not tracked)
 spec/
+TESTING_TODO.md
 
 # Local scratch: files not needed to run the app (old prototypes, generated
 # artifacts). Moved here out of the repo root; regenerate/delete freely.

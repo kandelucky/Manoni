@@ -32,9 +32,9 @@ def save_json_writes_and_roundtrips():
     d = tempfile.mkdtemp()
     try:
         p = os.path.join(d, "state.json")
-        assert save_json(p, {"a": 1, "ka": "ქართული"}) is True, "save returned False"
+        assert save_json(p, {"a": 1, "unicode": "日本語 café"}) is True, "save returned False"
         with open(p, encoding="utf-8") as f:
-            assert json.load(f) == {"a": 1, "ka": "ქართული"}, "content did not round-trip"
+            assert json.load(f) == {"a": 1, "unicode": "日本語 café"}, "content did not round-trip"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 

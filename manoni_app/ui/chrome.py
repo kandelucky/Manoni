@@ -293,7 +293,7 @@ class ChromeMixin:
         "Toolbar action: flip the hand (pan) tool on/off."
         self._set_hand_tool(not self.hand_tool)
 
-    # --- Before/after compare (იყო / არის) ----------------------------------
+    # --- Before/after compare -----------------------------------------------
 
     def _build_compare_button(self, parent):
         "A before/after toggle: click splits the photo with a draggable line;"

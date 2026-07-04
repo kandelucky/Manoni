@@ -353,7 +353,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.pan_y = 0.0
         self._pan_anchor = None  # (mx, my, pan_x, pan_y) captured while panning
         self.hand_tool = False   # hand (pan) tool: while on, left-drag pans the canvas
-        # Before/after compare (იყო / არის): split-line view + hold-to-peek.
+        # Before/after compare: split-line view + hold-to-peek.
         self.compare_mode = False  # split-line view on? (drag the line over the photo)
         self.compare_frac = 0.5    # divider position, as a fraction of the canvas width
         self._compare_peek = False  # holding the button → show the full original

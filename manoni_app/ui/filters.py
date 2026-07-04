@@ -761,7 +761,7 @@ class FiltersMixin:
         # The name lives in a box locked to the thumbnail's width, so a long
         # name can't widen the cell — every cell stays the same size. The font
         # shrinks to fit; if it still overflows at the floor, the middle is
-        # elided ("ჩემ...ი 34") so both the start AND the end stay visible. The
+        # elided ("My f...r 34") so both the start AND the end stay visible. The
         # full name is always on the hover tooltip.
         namebox = tk.Frame(inner, bg=bar, width=photo.width(),
                            height=self._strip_name_h())

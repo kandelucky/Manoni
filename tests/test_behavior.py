@@ -1,4 +1,4 @@
-"""Behavioural tests for manoni_app.imaging — the (მე) items of TESTING_TODO.md.
+"""Behavioural tests for manoni_app.imaging — the (auto) items of TESTING_TODO.md.
 
 Unlike test_imaging_golden.py (which only locks the current pixels so a refactor
 can be shown identical), this file asserts that each effect does the RIGHT thing:

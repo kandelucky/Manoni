@@ -330,7 +330,7 @@ class HealMixin:
         if patched is None:
             return
         # Snapshot the un-healed pixels the first time a stroke touches this photo,
-        # so the before/after compare can show the blemish in "before" (იყო).
+        # so the before/after compare can show the blemish in "before".
         if self._before_pil is None:
             self._before_pil = self.current_pil.copy()
             self._before_base_key = None

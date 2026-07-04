@@ -1,4 +1,4 @@
-"""Logic tests for the non-imaging (მე) items: filters, actions, resize, crop,
+"""Logic tests for the non-imaging (auto) items: filters, actions, resize, crop,
 save — the JSON safety, unique naming, group bookkeeping, resolution-independent
 action replay, resize math and the save-metadata rules.
 
