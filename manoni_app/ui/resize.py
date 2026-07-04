@@ -1,11 +1,22 @@
-"""Resize tool for Manoni: scale the photo down (or up) keeping its aspect
-ratio, by a target long-side in pixels or by a percentage.
+"""Resize tool for Manoni: scale the photo down (or up) keeping — or breaking —
+its aspect ratio, by explicit width×height or by a percentage.
 
 Like crop / rotate this is a DESTRUCTIVE in-memory bake into current_pil — the
 original file on disk is never touched; Save writes the resized copy. The
 compare "before" image is resized in lockstep, the source-px crop box / focus
 shape are dropped (their coordinates no longer map), and the photo refits the
 window. Reversed by leaving the photo (discard), exactly like crop.
+
+Panel layout (approved "variant A"):
+  * a Dimensions | Percent mode toggle;
+  * Dimensions = a W and an H field with an aspect LOCK (locked = the pair
+    stays proportional to the photo; unlocked = a free, possibly-distorting
+    W×H);
+  * Percent = one field scaling both sides;
+  * Quick sizes = long-side px chips that jump to Dimensions, proportionally;
+  * a foldable Quality group (resample filter + strength);
+  * Resize / Reset live in a PINNED footer (like crop's Crop/Cancel) so they
+    never scroll out of reach.
 
 Mixin on the Manoni window — every method uses the shared `self`, so behaviour
 is identical to when it lived directly on the class.
@@ -22,12 +33,34 @@ from ..config import EDIT_PANEL_W, EDIT_PAD
 from ..i18n import t
 
 
+class StretchTabs(tintkit.SegmentedTabs):
+    """A SegmentedTabs that fills its parent's width, splitting the segments
+    equally — so every toggle row spans the panel like the full-width buttons
+    instead of shrinking to its text (which made rows look mismatched)."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self._lastw = 0
+        self.canvas.bind("<Configure>", self._on_cfg, add="+")
+
+    def _on_cfg(self, e):
+        if e.width <= 4 or e.width == self._lastw:
+            return
+        self._lastw = e.width
+        n = len(self.options)
+        inner = e.width - tintkit.s(6)
+        base = inner // n
+        self._widths = [base] * (n - 1) + [inner - base * (n - 1)]
+        self.w = e.width
+        self.repaint()
+
+
 class ResizeMixin:
     # --- Resize tool (col 3 panel) ------------------------------------------
 
-    # Quick targets per mode: a long-side in px (web-friendly sizes) or a percent.
-    RESIZE_PX_PRESETS  = [1080, 1600, 2000, 2560]
-    RESIZE_PCT_PRESETS = [25, 50, 75]
+    # Quick-target long sides in px (web-friendly). Clicking one jumps to the
+    # Dimensions mode with a proportional W×H.
+    RESIZE_PX_PRESETS = [1080, 1600, 2000, 2560]
 
     # Pixel quality = which resampling filter the resize uses (and, for "sharp",
     # a light output-sharpen afterwards). Shared by the single photo + folder
@@ -67,14 +100,19 @@ class ResizeMixin:
             out = out.filter(ImageFilter.GaussianBlur(self.RESIZE_SOFT_BLUR[lvl]))
         return out
 
+    # --- Panel build --------------------------------------------------------
+
     def _build_resize_section(self, parent):
-        "Resize panel: current size, mode toggle, a value entry + presets, apply."
+        "Resize panel content (Resize/Reset are a separate pinned footer)."
         f = self._tw(tk.Frame(parent), bg="bar")
-        self._resize_modes = ["px", "pct"]   # tab order for the mode toggle
-        self._resize_mode = "px"             # "px" = long side, "pct" = percent
+        self._resize_modes = ["dim", "pct"]  # tab order for the mode toggle
+        self._resize_mode = "dim"            # "dim" = W×H, "pct" = percent
+        self._resize_lock = True             # Dimensions: keep W:H proportional
         self._resize_quality = "normal"      # soft / normal / sharp (resample)
         self._resize_strength = {"soft": "medium", "sharp": "medium"}  # per quality
-        self._resize_var = tk.StringVar()
+        self._resize_w_var = tk.StringVar()
+        self._resize_h_var = tk.StringVar()
+        self._resize_pct_var = tk.StringVar()
 
         self._resize_group(f, t("Size"))
         # Current dimensions, refreshed on enter and after every resize.
@@ -82,156 +120,254 @@ class ResizeMixin:
                                         font=("Segoe UI", 9)), bg="bar", fg="fg_dim")
         self._resize_current.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
 
-        # Mode toggle: scale by the long side (px) or by a percentage — the two
-        # are exclusive, so a segmented control (like the focus / heal toggles).
-        self._resize_mode_tabs = tintkit.SegmentedTabs(
-            f, self.theme, [t("Long side"), t("Percent")], selected=0, bg="bar",
+        # Mode toggle: explicit dimensions or a percentage — exclusive, so a
+        # full-width segmented control.
+        self._resize_mode_tabs = StretchTabs(
+            f, self.theme, [t("Dimensions"), t("Percent")], selected=0, bg="bar",
             command=lambda i, _l: self._set_resize_mode(self._resize_modes[i]))
-        self._resize_mode_tabs.pack(padx=EDIT_PAD, pady=(0, 8))
+        self._resize_mode_tabs.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
 
-        # Value entry + a live unit suffix (px / %). Enter applies.
-        erow = self._tw(tk.Frame(f), bg="bar")
-        erow.pack(fill="x", padx=EDIT_PAD)
-        self._resize_unit = self._tw(tk.Label(erow, text="px",
-                                     font=("Segoe UI", 9)), bg="bar", fg="fg_dim")
-        self._resize_unit.pack(side="right", padx=(6, 0))
-        ent = self._tw(tk.Entry(erow, textvariable=self._resize_var,
-                       relief="flat", justify="center",
-                       font=("Segoe UI", 11)), bg="chip", fg="fg", insert="fg")
-        ent.pack(side="left", fill="x", expand=True, ipady=5)
-        ent.bind("<Return>", lambda e: self.apply_resize())
-        self._resize_entry = ent
+        # --- Dimensions body: W · lock · H --------------------------------
+        self._resize_dim_body = self._tw(tk.Frame(f), bg="bar")
+        self._resize_w_entry = self._resize_field(
+            self._resize_dim_body, "W", self._resize_w_var, self._resize_on_w)
+        lockrow = self._tw(tk.Frame(self._resize_dim_body), bg="bar")
+        lockrow.pack(fill="x", padx=EDIT_PAD, pady=(2, 4))
+        self._resize_lock_chk = tintkit.Checkbox(
+            lockrow, self.theme, t("Lock aspect ratio"), state="on",
+            command=self._resize_set_lock, bg="bar")
+        self._resize_lock_chk.pack(anchor="w")
+        self._resize_h_entry = self._resize_field(
+            self._resize_dim_body, "H", self._resize_h_var, self._resize_on_h)
 
-        # Quick-target chips (rebuilt when the mode changes).
-        self._resize_presets = self._tw(tk.Frame(f), bg="bar")
-        self._resize_presets.pack(fill="x", padx=EDIT_PAD, pady=(8, 2))
+        # --- Percent body -------------------------------------------------
+        self._resize_pct_body = self._tw(tk.Frame(f), bg="bar")
+        self._resize_pct_entry = self._resize_field(
+            self._resize_pct_body, "%", self._resize_pct_var, self._resize_on_pct,
+            unit_only=True)
 
-        # Live result of the current input ("→ W × H").
+        # Live result of the current input ("→ W × H"), under whichever body.
         self._resize_result = self._tw(tk.Label(f, text="", anchor="w",
                                        font=("Segoe UI", 10, "bold")),
                                        bg="bar", fg="accent")
         self._resize_result.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
 
-        # Pixel quality (resample filter). One setting drives the single photo
-        # AND the whole-folder batch. The three are exclusive → a segmented control.
-        self._tw(tk.Label(f, text=t("Pixels"), anchor="w",
-                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
-                     fill="x", padx=EDIT_PAD, pady=(12, 4))
-        qlabels = {"soft": t("Soft"), "normal": t("Normal"), "sharp": t("Sharp")}
-        self._resize_q_tabs = tintkit.SegmentedTabs(
-            f, self.theme, [qlabels[k] for k in self.RESIZE_QUALITIES],
-            selected=self.RESIZE_QUALITIES.index(self._resize_quality), bg="bar",
-            command=lambda i, _l: self._set_resize_quality(self.RESIZE_QUALITIES[i]))
-        self._resize_q_tabs.pack(padx=EDIT_PAD)
-
-        # Strength of the soft/sharp effect (a whole block, shown only for those
-        # two — "normal" has no effect to dial). Packed before the hint label.
-        self._resize_str_block = self._tw(tk.Frame(f), bg="bar")
-        self._tw(tk.Label(self._resize_str_block, text=t("Strength"),
-                 anchor="w", font=("Segoe UI", 8, "bold")),
-                 bg="bar", fg="fg_dim").pack(fill="x", pady=(8, 4))
-        slabels = {"light": t("Light"), "medium": t("Medium"), "strong": t("Strong")}
-        self._resize_str_tabs = tintkit.SegmentedTabs(
-            self._resize_str_block, self.theme,
-            [slabels[k] for k in self.RESIZE_STRENGTHS], selected=0, bg="bar",
-            command=lambda i, _l: self._set_resize_strength(self.RESIZE_STRENGTHS[i]))
-        self._resize_str_tabs.pack(anchor="w")
-
-        self._resize_q_hint = self._tw(tk.Label(
-            f, text=t("Soft = smoother · Sharp adds web output-sharpening."),
-            anchor="w", justify="left", font=("Segoe UI", 8),
-            wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
-            bg="bar", fg="fg_dim")
-        self._resize_q_hint.pack(fill="x", padx=EDIT_PAD, pady=(5, 0))
-        self._set_resize_quality(self._resize_quality)   # paints chips + str block
-
-        # Footer: Resize bakes the target into current_pil; Reset returns the
-        # value to the current photo's size (the outline secondary, x icon).
-        apply_btn = tintkit.Button(
-            f, self.theme, t("Resize"), role="primary", variant="filled",
-            stretch=True, bg="bar", command=self.apply_resize)
-        apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(14, 6))
-        reset_btn = tintkit.Button(
-            f, self.theme, t("Reset"), role="neutral", variant="outline",
-            icon="x", stretch=True, bg="bar", command=self._reset_resize)
-        reset_btn.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
-        tintkit.HoverTip(reset_btn.canvas, self.theme,
-                         t("Reset the size to the current photo"))
+        # Quick long-side targets — each jumps to Dimensions with a proportional
+        # W×H. Equal-width columns so the four always fit the panel.
+        self._resize_group(f, t("Quick sizes (long side)"))
+        qs = self._tw(tk.Frame(f), bg="bar")
+        qs.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+        for i in range(len(self.RESIZE_PX_PRESETS)):
+            qs.columnconfigure(i, weight=1, uniform="rp")
+        for i, p in enumerate(self.RESIZE_PX_PRESETS):
+            tintkit.Button(qs, self.theme, str(p), role="neutral", variant="outline",
+                           min_w=40, h=30, stretch=True, bg="bar",
+                           command=lambda v=p: self._resize_apply_preset(v)).grid(
+                               row=0, column=i, sticky="ew", padx=2)
 
         self._tw(tk.Label(f, text=t("The original stays untouched — Save writes the resized copy."),
-                 anchor="w", justify="left",
-                 font=("Segoe UI", 8),
+                 anchor="w", justify="left", font=("Segoe UI", 8),
                  wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
-                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
+                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
 
-        # --- Whole-folder batch (same size rule applied to every photo) -------
+        # Pixel quality — secondary, so it folds away (collapsed by default).
+        self._build_foldable_group(f, t("Quality"), "_resize_quality_open",
+                                   self._build_resize_quality_body)
+
+        # --- Whole-folder batch (same size rule applied to every photo) ---
         self._resize_group(f, t("Whole folder"))
         self._tw(tk.Label(f, text=t("Resize every photo in the folder with the size above. "
                            "Originals are untouched; the copies go to a new folder."),
-                 anchor="w", justify="left",
-                 font=("Segoe UI", 8),
+                 anchor="w", justify="left", font=("Segoe UI", 8),
                  wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
                  bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
+        tintkit.Button(f, self.theme, t("Resize the whole folder"), role="neutral",
+                       variant="outline", icon="folder-output", stretch=True, bg="bar",
+                       command=self._resize_folder).pack(
+                           fill="x", padx=EDIT_PAD, pady=(0, 8))
 
-        folder_btn = tintkit.Button(
-            f, self.theme, t("Resize the whole folder"), role="neutral",
-            variant="outline", icon="folder-output", stretch=True, bg="bar",
-            command=self._resize_folder)
-        folder_btn.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
-
-        # Recompute the result label live as the value changes (typing or preset).
-        self._resize_var.trace_add("write", lambda *_: self._update_resize_display())
+        self._set_resize_quality(self._resize_quality)   # paints tabs + str block
+        self._resize_dim_body.pack(fill="x", before=self._resize_result)  # default mode
         return f
 
     def _resize_group(self, parent, text):
-        "A thin divider + small bold caption titling the resize panel."
+        "A thin divider + small bold caption titling a resize sub-section."
         self._tw(tk.Frame(parent, height=1), bg="divider").pack(
             fill="x", padx=EDIT_PAD, pady=(12, 0))
         self._tw(tk.Label(parent, text=text, anchor="w",
                  font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
                      fill="x", padx=EDIT_PAD, pady=(4, 6))
 
-    # --- Mode + presets -----------------------------------------------------
+    def _resize_field(self, parent, tag, var, on_change, unit_only=False):
+        """A [tag] [entry] [unit] row. For W/H the tag is the leading letter and
+        the unit is "px"; for percent pass unit_only=True so the tag ("%") is the
+        trailing unit and the leading column is blank — keeping every field's
+        left edge aligned."""
+        row = self._tw(tk.Frame(parent), bg="bar")
+        row.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        unit = tag if unit_only else "px"
+        self._tw(tk.Label(row, text=unit, font=("Segoe UI", 9)),
+                 bg="bar", fg="fg_dim").pack(side="right", padx=(6, 0))
+        self._tw(tk.Label(row, text="" if unit_only else tag, width=2, anchor="w",
+                 font=("Segoe UI", 10)), bg="bar", fg="fg_dim").pack(side="left")
+        ent = self._tw(tk.Entry(row, textvariable=var, relief="flat",
+                       justify="center", font=("Segoe UI", 11)),
+                       bg="chip", fg="fg", insert="fg")
+        ent.pack(side="left", fill="x", expand=True, ipady=5)
+        ent.bind("<Return>", lambda e: self.apply_resize())
+        ent.bind("<KeyRelease>", lambda e: on_change())
+        return ent
+
+    def _build_resize_quality_body(self, parent):
+        "Foldable Quality body: resample filter + a strength row for soft/sharp."
+        qlabels = {"soft": t("Soft"), "normal": t("Normal"), "sharp": t("Sharp")}
+        self._resize_q_tabs = StretchTabs(
+            parent, self.theme, [qlabels[k] for k in self.RESIZE_QUALITIES],
+            selected=self.RESIZE_QUALITIES.index(self._resize_quality), bg="bar",
+            command=lambda i, _l: self._set_resize_quality(self.RESIZE_QUALITIES[i]))
+        self._resize_q_tabs.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+
+        # Strength (a whole block, shown only for soft/sharp). Packed before the
+        # hint by _refresh_resize_strength.
+        self._resize_str_block = self._tw(tk.Frame(parent), bg="bar")
+        self._tw(tk.Label(self._resize_str_block, text=t("Strength"),
+                 anchor="w", font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(fill="x", pady=(8, 4))
+        slabels = {"light": t("Light"), "medium": t("Medium"), "strong": t("Strong")}
+        self._resize_str_tabs = StretchTabs(
+            self._resize_str_block, self.theme,
+            [slabels[k] for k in self.RESIZE_STRENGTHS], selected=0, bg="bar",
+            command=lambda i, _l: self._set_resize_strength(self.RESIZE_STRENGTHS[i]))
+        self._resize_str_tabs.pack(fill="x")
+
+        self._resize_q_hint = self._tw(tk.Label(
+            parent, text=t("Soft = smoother · Sharp adds web output-sharpening."),
+            anchor="w", justify="left", font=("Segoe UI", 8),
+            wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
+            bg="bar", fg="fg_dim")
+        self._resize_q_hint.pack(fill="x", padx=EDIT_PAD, pady=(5, 0))
+
+    def _build_resize_footer(self, panel):
+        "Scaffold the pinned Resize/Reset row; hidden until the resize tool opens."
+        wrap = self._tw(tk.Frame(panel), bg="bar")
+        wrap.pack(side="bottom", fill="x", before=self._sec_host)
+        self._tw(tk.Frame(wrap, height=1), bg="divider").pack(side="top", fill="x")
+
+        apply_btn = tintkit.Button(
+            wrap, self.theme, t("Resize"), role="primary", variant="filled",
+            stretch=True, bg="bar", command=self.apply_resize)
+        apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
+
+        reset_btn = tintkit.Button(
+            wrap, self.theme, t("Reset"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._reset_resize)
+        reset_btn.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        tintkit.HoverTip(reset_btn.canvas, self.theme,
+                         t("Reset the size to the current photo"))
+
+        self._resize_footer = wrap
+        wrap.pack_forget()
+        return wrap
+
+    # --- Mode + lock --------------------------------------------------------
 
     def _set_resize_mode(self, mode):
-        "Switch between long-side-px and percent; reset the value to a sane default."
+        "Switch between explicit dimensions and percent; reseed the fields."
         if mode == self._resize_mode:
             return
         self._resize_mode = mode
         self._refresh_resize_mode()
         self._reset_resize_input()
+        self._update_resize_display()
 
     def _refresh_resize_mode(self):
-        "Sync the mode toggle, the unit suffix, and rebuild the preset buttons."
+        "Sync the mode toggle and show the matching body (dimensions / percent)."
+        if not hasattr(self, "_resize_mode_tabs"):
+            return
         idx = self._resize_modes.index(self._resize_mode)
         if self._resize_mode_tabs.selected != idx:
             self._resize_mode_tabs.selected = idx
             self._resize_mode_tabs.repaint()
-        px = self._resize_mode == "px"
-        self._resize_unit.configure(text="px" if px else "%")
-        pf = self._resize_presets
-        for w in pf.winfo_children():
-            w.destroy()
-        presets = self.RESIZE_PX_PRESETS if px else self.RESIZE_PCT_PRESETS
-        suffix = "px" if px else "%"
-        # Equal-width columns so the buttons always fit the panel (4 px / 3 percent).
-        for i in range(max(len(self.RESIZE_PX_PRESETS), len(self.RESIZE_PCT_PRESETS))):
-            pf.columnconfigure(i, weight=1 if i < len(presets) else 0, uniform="rp")
-        for i, p in enumerate(presets):
-            self._resize_preset_chip(pf, f"{p}{suffix}", p, i)
+        self._resize_dim_body.pack_forget()
+        self._resize_pct_body.pack_forget()
+        body = (self._resize_dim_body if self._resize_mode == "dim"
+                else self._resize_pct_body)
+        body.pack(fill="x", before=self._resize_result)
 
-    def _resize_preset_chip(self, parent, label, value, col):
-        "One quick-target button; click fills the value entry."
-        b = tintkit.Button(
-            parent, self.theme, label, role="neutral", variant="outline",
-            min_w=40, h=28, stretch=True, bg="bar",
-            command=lambda v=value: self._resize_var.set(str(v)))
-        b.grid(row=0, column=col, sticky="ew", padx=2)
-        return b
+    def _resize_set_lock(self, state):
+        "Aspect-lock checkbox: on = keep W:H proportional (re-tie H to W now)."
+        self._resize_lock = (state == "on")
+        if self._resize_lock:
+            self._resize_sync("w")
+        self._update_resize_display()
+
+    def _resize_on_w(self):
+        "W changed: under lock recompute H from the photo aspect, then refresh."
+        if self._resize_lock:
+            self._resize_sync("w")
+        self._update_resize_display()
+
+    def _resize_on_h(self):
+        "H changed: under lock recompute W from the photo aspect, then refresh."
+        if self._resize_lock:
+            self._resize_sync("h")
+        self._update_resize_display()
+
+    def _resize_on_pct(self):
+        self._update_resize_display()
+
+    def _resize_sync(self, src):
+        "Under lock: set the OTHER dimension from the current photo's aspect."
+        if self.current_pil is None:
+            return
+        iw, ih = self.current_pil.size
+        if src == "w":
+            w = self._resize_num(self._resize_w_var)
+            if w:
+                self._resize_h_var.set(str(max(1, round(w * ih / iw))))
+        else:
+            h = self._resize_num(self._resize_h_var)
+            if h:
+                self._resize_w_var.set(str(max(1, round(h * iw / ih))))
+
+    # --- Presets + reset ----------------------------------------------------
+
+    def _resize_apply_preset(self, long_side):
+        "Quick long-side chip: jump to Dimensions with a proportional W×H."
+        if self._resize_mode != "dim":
+            self._set_resize_mode("dim")
+        if self.current_pil is None:
+            return
+        iw, ih = self.current_pil.size
+        scale = long_side / max(iw, ih)
+        self._resize_w_var.set(str(max(1, round(iw * scale))))
+        self._resize_h_var.set(str(max(1, round(ih * scale))))
+        self._update_resize_display()
+
+    def _reset_resize(self):
+        "Footer secondary: return the fields to the current photo's size."
+        self._reset_resize_input()
+        self._update_resize_display()
+
+    def _reset_resize_input(self):
+        "Seed the fields: the photo's W×H (dimensions) and 100 (percent)."
+        if self.current_pil is None:
+            self._resize_w_var.set("")
+            self._resize_h_var.set("")
+            self._resize_pct_var.set("")
+            return
+        iw, ih = self.current_pil.size
+        self._resize_w_var.set(str(iw))
+        self._resize_h_var.set(str(ih))
+        self._resize_pct_var.set("100")
+
+    # --- Quality + strength -------------------------------------------------
 
     def _set_resize_quality(self, q):
         "Pick the resample quality; sync the toggle + show/hide the strength block."
         self._resize_quality = q
+        if not hasattr(self, "_resize_q_tabs"):
+            return
         idx = self.RESIZE_QUALITIES.index(q)
         if self._resize_q_tabs.selected != idx:
             self._resize_q_tabs.selected = idx
@@ -258,43 +394,68 @@ class ResizeMixin:
             self._resize_str_tabs.selected = idx
             self._resize_str_tabs.repaint()
 
-    def _reset_resize(self):
-        "Outline secondary: return the value to the current photo's size."
-        self._reset_resize_input()
-        self._update_resize_display()
+    # --- Value reading ------------------------------------------------------
 
-    def _reset_resize_input(self):
-        "Seed the value: the current long side (px mode) or 100 (percent mode)."
-        if self.current_pil is None:
-            self._resize_var.set("")
-            return
-        iw, ih = self.current_pil.size
-        self._resize_var.set("100" if self._resize_mode == "pct"
-                             else str(max(iw, ih)))
-
-    # --- Computation + display ----------------------------------------------
-
-    def _resize_value(self):
-        "The entered number (>0) as a float, or None if blank / invalid."
+    def _resize_num(self, var):
+        "One field as a float (>0), or None if blank / invalid."
         try:
-            val = float(self._resize_var.get().strip().replace(",", "."))
+            val = float(var.get().strip().replace(",", "."))
         except (ValueError, AttributeError):
             return None
         return val if val > 0 else None
 
-    def _resize_target_for(self, iw, ih):
-        "(new_w, new_h) for an iw×ih image from the value + mode; None if invalid."
-        val = self._resize_value()
-        if val is None:
+    def _resize_wh(self):
+        "The Dimensions (w, h) as positive ints, or None if either is invalid."
+        w = self._resize_num(self._resize_w_var)
+        h = self._resize_num(self._resize_h_var)
+        if w is None or h is None:
             return None
-        scale = (val / 100.0) if self._resize_mode == "pct" else (val / max(iw, ih))
-        return (max(1, round(iw * scale)), max(1, round(ih * scale)))
+        return (max(1, int(round(w))), max(1, int(round(h))))
+
+    def _resize_pct(self):
+        "The Percent value as a float (>0), or None."
+        return self._resize_num(self._resize_pct_var)
+
+    def _resize_ready(self):
+        "True when the active mode has a valid value to apply."
+        if self._resize_mode == "pct":
+            return self._resize_pct() is not None
+        return self._resize_wh() is not None
 
     def _resize_target_size(self):
-        "(new_w, new_h) for the open photo, keeping aspect; None if invalid."
+        """Target (w, h) for the OPEN photo — the exact fields in Dimensions,
+        a proportional scale in Percent. None if the input is invalid."""
         if self.current_pil is None:
             return None
-        return self._resize_target_for(*self.current_pil.size)
+        iw, ih = self.current_pil.size
+        if self._resize_mode == "pct":
+            p = self._resize_pct()
+            if p is None:
+                return None
+            return (max(1, round(iw * p / 100)), max(1, round(ih * p / 100)))
+        return self._resize_wh()
+
+    def _resize_target_for(self, iw, ih):
+        """Target (w, h) for ONE image of the folder batch (per-image, so a
+        percent or a locked box scales each photo by its own size). None if
+        the input is invalid.
+
+        Percent    → scale both sides.
+        Dimensions, locked   → fit INSIDE the W×H box, keeping each photo's aspect.
+        Dimensions, unlocked → the exact W×H (may distort a different-aspect photo)."""
+        if self._resize_mode == "pct":
+            p = self._resize_pct()
+            if p is None:
+                return None
+            return (max(1, round(iw * p / 100)), max(1, round(ih * p / 100)))
+        wh = self._resize_wh()
+        if wh is None:
+            return None
+        tw, th = wh
+        if self._resize_lock:
+            scale = min(tw / iw, th / ih)
+            return (max(1, round(iw * scale)), max(1, round(ih * scale)))
+        return (tw, th)
 
     def _update_resize_display(self):
         "Refresh the current-size and live-result labels (cheap; on every keystroke)."
@@ -316,8 +477,9 @@ class ResizeMixin:
     # --- Enter + apply ------------------------------------------------------
 
     def _enter_resize(self):
-        "Open the resize tool: refresh the panel from the current photo, plain view."
+        "Open the resize tool: pin the footer, refresh the panel, plain view."
         self.preview.configure(cursor="")
+        self._resize_footer.pack(side="bottom", fill="x", before=self._sec_host)
         if hasattr(self, "_resize_mode_tabs"):
             self._refresh_resize_mode()
             self._reset_resize_input()
@@ -393,7 +555,7 @@ class ResizeMixin:
         if not self.files or not self.folder:
             self.toast(t("Open a folder first"))
             return
-        if self._resize_value() is None:
+        if not self._resize_ready():
             self.toast(t("Enter a valid size"))
             return
         cfg = self._ask_batch_config(

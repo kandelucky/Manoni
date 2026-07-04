@@ -41,10 +41,12 @@ class FakeApp(FiltersMixin, ActionsMixin, ResizeMixin, CropMixin, SaveMixin):
         self.index = 0
         self.folder = ""
         # resize state
-        self._resize_mode = "px"
+        self._resize_mode = "dim"
+        self._resize_lock = True
         self._resize_quality = "normal"
         self._resize_strength = {"soft": "medium", "sharp": "medium"}
-        self._rv = None                       # what _resize_value() returns
+        self._pct = None                      # what _resize_pct() returns
+        self._wh = None                       # what _resize_wh() returns
         # crop state
         self.crop_ratio = None
         self.crop_rect = None
@@ -62,8 +64,11 @@ class FakeApp(FiltersMixin, ActionsMixin, ResizeMixin, CropMixin, SaveMixin):
     def _edit_state(self):
         return dict(self._state)
 
-    def _resize_value(self):
-        return self._rv
+    def _resize_pct(self):
+        return self._pct
+
+    def _resize_wh(self):
+        return self._wh
 
 
 CHECKS = []
@@ -251,15 +256,23 @@ def action_unique_names():
 # ---- resize: target maths + quality passes ---------------------------------
 
 @check
-def resize_target_px_and_percent():
+def resize_target_batch_dim_and_percent():
     a = app()
-    a._resize_mode = "px"
-    a._rv = 1000                                       # long side -> 1000
-    assert a._resize_target_for(2000, 1000) == (1000, 500), "px long-side maths wrong"
+    # percent → scale each image proportionally
     a._resize_mode = "pct"
-    a._rv = 50
+    a._pct = 50
     assert a._resize_target_for(2000, 1000) == (1000, 500), "percent maths wrong"
-    a._rv = None
+    # dimensions, locked → fit INSIDE the W×H box, keeping aspect
+    a._resize_mode = "dim"
+    a._resize_lock = True
+    a._wh = (1000, 1000)
+    assert a._resize_target_for(2000, 1000) == (1000, 500), "locked fit-box maths wrong"
+    # dimensions, unlocked → the exact box (may distort)
+    a._resize_lock = False
+    assert a._resize_target_for(2000, 1000) == (1000, 1000), "unlocked exact maths wrong"
+    # blank value → None
+    a._resize_mode = "pct"
+    a._pct = None
     assert a._resize_target_for(2000, 1000) is None, "blank value not None"
 
 

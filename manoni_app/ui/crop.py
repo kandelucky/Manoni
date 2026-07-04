@@ -166,7 +166,10 @@ class CropMixin:
         def refresh():
             repaint_chevron()
             if getattr(self, flag_name):
-                content.pack(fill="x")
+                # Sit the body directly under its own header — not at the end of
+                # the parent (which would drop it below any later section, e.g.
+                # resize's "Whole folder").
+                content.pack(fill="x", after=header)
             else:
                 content.pack_forget()
 

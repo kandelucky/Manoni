@@ -107,6 +107,7 @@ class EditPanelMixin:
         self._build_panel_actions(panel)
         self._build_filters_footer(panel)   # pinned Create/Undo, filters tool only
         self._build_crop_footer(panel)      # pinned Crop/Cancel, crop tool only
+        self._build_resize_footer(panel)    # pinned Resize/Reset, resize tool only
 
     def _refresh_histogram(self):
         "Show or hide the panel's live histogram per the General setting."
@@ -602,6 +603,7 @@ class EditPanelMixin:
         self.active_section = key
         self._filters_footer.pack_forget()   # only the filters tool pins its footer
         self._crop_footer.pack_forget()      # only the crop tool pins its footer
+        self._resize_footer.pack_forget()    # only the resize tool pins its footer
         for k, frame in self.sections.items():
             if k == key:
                 frame.pack(fill="both", expand=True)

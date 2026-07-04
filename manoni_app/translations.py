@@ -383,8 +383,12 @@ CATALOG_KA = {
     # --- Resize tool (resize.py) ------------------------------------------
     "Resize": "ზომის შეცვლა",
     "Size": "ზომა",
+    "Dimensions": "ზომები",
     "Long side": "გრძელი გვერდი",
     "Percent": "პროცენტი",
+    "Lock aspect ratio": "პროპორციის დაბლოკვა",
+    "Quick sizes (long side)": "სწრაფი ზომები (გრძელი გვერდი)",
+    "Quality": "ხარისხი",
     "Current: {w} × {h}": "ამჟამად: {w} × {h}",
     "The original stays untouched — Save writes the resized copy.":
         "ორიგინალი ხელუხლებელია — შენახვა ჩაწერს შეცვლილ ასლს.",
@@ -420,15 +424,20 @@ CATALOG_KA = {
     "Clone": "კლონი",
     "Aligned": "თანხვედრილი",
     "Mirror": "სარკისებური",
+    "On: the source keeps the same offset from the brush across every stroke. Off: each new stroke re-anchors to the picked source point.":
+        "ჩართული: წყარო ინარჩუნებს იმავე დაშორებას ფუნჯიდან ყველა stroke-ზე. გამორთული: ყოველი ახალი stroke ისევ არჩეულ წყაროს წერტილს უბრუნდება.",
+    "Mirror the source left-right about its point — handy for symmetric retouching (e.g. copying from the other eye).":
+        "წყაროს სარკისებურად აბრუნებს (მარცხნივ↔მარჯვნივ) თავისი წერტილის გარშემო — გამოსადეგია სიმეტრიული რეტუშისთვის (მაგ. მეორე თვალიდან კოპირება).",
     "Brush size": "ფუნჯის ზომა",
     "Strength": "სიძლიერე",
     "Edge softness": "კიდის სიფაფუკე",
     "Ctrl+Z — undo the last action": "Ctrl+Z — ბოლო მოქმედების გაუქმება",
     "Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size.":
         "Alt+დააწკაპე — წყაროს არჩევა; მერე ხატე ზუსტი ასლი. ბორბალი ან [ ] ფუნჯის ზომას ცვლის.",
-    "Click or drag over a blemish — I erase it with a copy of nearby clean background. The wheel or [ ] changes the brush size.":
-        "დააწკაპე ან გადაუსვი ლაქას — ვშლი მახლობელი სუფთა ფონის ასლით. ბორბალი ან [ ] ფუნჯის ზომას ცვლის.",
+    "Click or drag over a blemish — I erase it with nearby clean background, or Alt+click to pick your own source. The wheel or [ ] changes the brush size.":
+        "დააწკაპე ან გადაუსვი ლაქას — ვშლი მახლობელი სუფთა ფონით, ან Alt+დააწკაპე საკუთარი წყაროს ასარჩევად. ბორბალი ან [ ] ფუნჯის ზომას ცვლის.",
     "Source picked — now paint the copy": "წყარო არჩეულია — ახლა ხატე ასლი",
+    "Source picked — now paint": "წყარო არჩეულია — ახლა ხატე",
     "First Alt+click a source": "ჯერ Alt+დააწკაპე წყაროზე",
     "Can't undo — a different image is open":
         "გაუქმება შეუძლებელია — სხვა სურათია",
