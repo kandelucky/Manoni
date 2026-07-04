@@ -373,10 +373,10 @@ def apply_vibrance(img, amt):
 
 
 def apply_exposure_gamma(img, amt):
-    "TEST exposure: a gamma curve out = 255*(in/255)^gamma, gamma = 2^-amt. Unlike"
-    " the linear ImageEnhance.Brightness multiply, the endpoints are locked (0->0,"
-    " 255->255), so it lifts/lowers the midtones without clipping highlights to"
-    " white or crushing shadows to black."
+    "Brightness/Fill exposure: a gamma curve out = 255*(in/255)^gamma, gamma = 2^-amt."
+    " Unlike the linear ImageEnhance.Brightness multiply, the endpoints are locked"
+    " (0->0, 255->255), so it lifts/lowers the midtones without clipping highlights"
+    " to white or crushing shadows to black."
     if amt == 0.0:
         return img
     gamma = 2.0 ** (-amt)

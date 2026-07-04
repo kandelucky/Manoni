@@ -12,7 +12,7 @@ effect functions themselves (imported below) know nothing about each other.
 
 from PIL import ImageEnhance
 
-from .levels import apply_auto_luts, tone_lut
+from .levels import apply_auto_luts, tone_lut, contrast_lut
 from .colormix import apply_color_mixer, color_mixer_active, _mixer_sig
 from .text import _apply_texts
 from .effects import (apply_vignette, apply_grain, apply_denoise, apply_split_tone,
@@ -36,20 +36,22 @@ def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
     if auto_luts is not None:
         add((("auto", id(auto_luts)), lambda img: apply_auto_luts(img, auto_luts)))
     if e.brightness != 1.0:
-        # TEST: linear exposure at half strength (deviation from 1.0 halved) so it
-        # can be compared fairly against the gentler gamma exposure beside it.
+        # Linear exposure at half strength (deviation from 1.0 halved) — the raw
+        # ImageEnhance.Brightness was too aggressive at the slider extremes. Sits
+        # beside the gentler gamma exposure (exposure_g / Brightness/Fill).
         add((("brightness", e.brightness),
              lambda img, f=1.0 + (e.brightness - 1.0) * 0.5:
                  ImageEnhance.Brightness(img).enhance(f)))
     if e.exposure_g != 1.0:
         add((("exposure_g", e.exposure_g),
              lambda img, a=e.exposure_g - 1.0: apply_exposure_gamma(img, a)))
-    if e.contrast != 1.0:
-        # Contrast dialled back to 50% strength (deviation from 1.0 x0.5) — the raw
-        # ImageEnhance.Contrast was too aggressive at the slider extremes.
+    clut = contrast_lut(e.contrast - 1.0)
+    if clut is not None:
+        # Mid-gray S-curve (see levels.contrast_lut): a fixed 128 pivot with soft
+        # rolloff, so it behaves the same on every photo and never clips flat —
+        # unlike the old mean-pivoted, hard-clipping ImageEnhance.Contrast.
         add((("contrast", e.contrast),
-             lambda img, f=1.0 + (e.contrast - 1.0) * 0.5:
-                 ImageEnhance.Contrast(img).enhance(f)))
+             lambda img, l=clut: img.point(l * len(img.getbands()))))
     lut = tone_lut(e)
     if lut is not None:
         add((("tone", e.highlights, e.shadows, e.whites, e.blacks),

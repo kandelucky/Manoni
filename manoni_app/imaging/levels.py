@@ -63,6 +63,47 @@ def autocontrast_luts(img, per_channel, cutoff=AUTO_CUTOFF):
     return [lut, lut, lut]
 
 
+# --- Contrast (mid-gray S-curve) --------------------------------------------
+
+# Contrast pivots at mid-gray (128), so the control behaves the SAME on every
+# photo — unlike PIL's ImageEnhance.Contrast, which pivots on the image's own
+# mean and therefore reads as "brightening" a dark shot / "darkening" a bright
+# one. Positive amounts steepen a sigmoid with a soft rolloff at the ends (no
+# hard clip to flat black / white); negative amounts fade the photo by
+# compressing the range toward mid-gray. CONTRAST_K = the sigmoid steepness at
+# a full (+1) slider (bigger = punchier).
+CONTRAST_K = 5.0
+
+# How far the negative (fade) side lifts the BLACK point at a full (-1) slider.
+# The fade follows the dehaze "add haze" curve — it raises the black point but
+# keeps the white point at 255, so the highlights stay bright. A plain range
+# compression toward mid-gray instead pulled the whites down (dull, muddy top),
+# which is exactly what this avoids.
+CONTRAST_LIFT = 80.0
+
+
+def contrast_lut(amount):
+    "One 256-entry contrast LUT (None if neutral). `amount` signed -1..+1: + adds"
+    " contrast through a mid-gray sigmoid (soft rolloff, no clipping), - fades by"
+    " lifting the black point while keeping the white point at 255 (bright top)."
+    if amount == 0.0:
+        return None
+    if amount > 0.0:
+        k = amount * CONTRAST_K
+        s0 = 1.0 / (1.0 + math.exp(k * 0.5))     # sigmoid at input 0
+        span = 1.0 / (1.0 + math.exp(-k * 0.5)) - s0   # sigmoid(1) - sigmoid(0)
+        lut = []
+        for i in range(256):
+            s = 1.0 / (1.0 + math.exp(-k * (i / 255.0 - 0.5)))
+            lut.append(max(0, min(255, int(round(255.0 * (s - s0) / span)))))
+        return lut
+    # Negative: fade like the dehaze haze curve — map [0,255] -> [lift, 255], so
+    # blacks rise but the white point (upper limit) stays at 255.
+    lift = -amount * CONTRAST_LIFT
+    return [max(0, min(255, int(round(lift + i * (255.0 - lift) / 255.0))))
+            for i in range(256)]
+
+
 # --- Tone curve (highlights / shadows / whites / blacks) --------------------
 
 def _bump(t, center, half):
