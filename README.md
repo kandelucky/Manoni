@@ -134,3 +134,13 @@ stripped per your choice, and the original is **never touched**.
 
 The <img src="assets/readme/circle-help.png" width="16" alt=""> **Help** button in
 the top bar opens a tabbed guide covering all of the above.
+
+---
+
+## Any language
+
+The interface ships in **English and Georgian**, and adding your own is easy —
+no code, no rebuild. **Settings → General → Add your language** generates a
+template listing every phrase in the app; translate the ones you want, then
+import it back. Anything you leave untranslated simply stays English, so even a
+half-finished pack works the moment you load it.
