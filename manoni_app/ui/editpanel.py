@@ -362,20 +362,28 @@ class EditPanelMixin:
         self._tw(tk.Frame(top, height=1), bg="border").pack(side="top", fill="x",
                                                    padx=12, pady=(0, 6))
 
-        for key, icon_name, label in [
-            ("basic",   "sliders-horizontal", "Basic Edit"),
-            ("crop",    "crop",               "Crop"),
-            ("resize",  "scaling",            "Resize"),
-            ("perspective", "frame",          "Perspective"),
-            ("heal",    "bandage",            "Heal"),
-            ("focus",   "aperture",           "Blur"),
-            ("color",   "droplets",           "Colors"),
-            ("effects", "wand-sparkles",      "Effects"),
-            ("text",    "type",               "Text"),
-            ("filters", "palette",            "Filters"),
-            ("actions", "clapperboard",       "Actions"),
-        ]:
-            self._rail_button(top, icon_name, label, key=key)
+        # Tools grouped by task: adjust · geometry · retouch · overlay ·
+        # automate, with a thin separator between groups (no text headers —
+        # the rail is too narrow for them).
+        rail_groups = [
+            [("basic",   "sliders-horizontal", "Basic Edit"),
+             ("color",   "palette",            "Colors"),
+             ("effects", "wand-sparkles",      "Effects"),
+             ("filters", "blend",              "Filters")],
+            [("crop",    "crop",               "Crop"),
+             ("resize",  "scaling",            "Resize"),
+             ("perspective", "frame",          "Perspective")],
+            [("heal",    "bandage",            "Heal"),
+             ("focus",   "circle-dot",         "Blur")],
+            [("text",    "type",               "Text")],
+            [("actions", "circle-play",        "Actions")],
+        ]
+        for gi, group in enumerate(rail_groups):
+            if gi:
+                self._tw(tk.Frame(top, height=1), bg="border").pack(
+                    side="top", fill="x", padx=12, pady=(1, 3))
+            for key, icon_name, label in group:
+                self._rail_button(top, icon_name, label, key=key)
 
         # Quick save (one click, no dialog) — pinned to the bottom like Fotor, as
         # one accent button that spans the FULL rail width (the primary action).
@@ -474,17 +482,17 @@ class EditPanelMixin:
     def _rail_button(self, parent, icon_name, label, key=None, command=None):
         "One rail cell: icon stacked over a label. key = selectable section."
         cell = tk.Frame(parent, bg=self.theme["bar"], cursor="hand2")
-        cell.pack(side="top", fill="x", pady=2)
+        cell.pack(side="top", fill="x", pady=1)
         img = self.icon(icon_name)
         if img is not None:
             ic = tk.Label(cell, image=img, bg=self.theme["bar"])
         else:
             ic = tk.Label(cell, text="□", bg=self.theme["bar"], fg=self.theme["fg"],
                           font=("Segoe UI", 14))
-        ic.pack(pady=(8, 2))
+        ic.pack(pady=(4, 1))
         tx = tk.Label(cell, text=t(label), bg=self.theme["bar"],
                       fg=self.theme["fg_dim"], font=("Segoe UI", 8))
-        tx.pack(pady=(0, 8))
+        tx.pack(pady=(0, 4))
         cell._widgets = (ic, tx)
         # The rail icon re-tints with state (see _update_rail): on_accent while the
         # cell is the active section, fg otherwise — so it flips dark<->light too.
