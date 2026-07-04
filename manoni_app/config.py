@@ -13,6 +13,11 @@ ROOT_DIR = os.path.dirname(_PKG_DIR)
 
 # Icons live in ./icons at the project root (Lucide, white strokes on transparent).
 ICON_DIR = os.path.join(ROOT_DIR, "icons")
+
+# The fixed showcase image the filter preview strip renders every filter onto
+# (a single reference photo instead of a thumbnail of whatever is open), so a
+# filter's look reads the same regardless of the current photo.
+FILTER_SHOW_IMG = os.path.join(ROOT_DIR, "Filter_Show.jpg")
 SUPPORTED = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff", ".tif"}
 
 # Remembers the last opened folder + image, restored on the next launch.

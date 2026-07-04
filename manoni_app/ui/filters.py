@@ -17,9 +17,10 @@ in editpanel._build_edit_panel, outside the scrolling section content, so they
 stay reachable no matter how long the list grows; shown only while the filters
 tool is open, Undo only once a filter-trying run is live. The PREVIEW STRIP
 (_build_filter_strip) is a second, optional way to browse: a horizontal
-filmstrip under the preview that renders each saved filter onto a thumbnail of
-the current photo (toggled in Settings; the manager's list works with or
-without it).
+filmstrip under the preview that renders each saved filter onto a fixed
+showcase image (Filter_Show.jpg), so a filter's look reads the same whatever
+photo is open (toggled in Settings; the manager's list works with or without
+it).
 
 Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
@@ -29,6 +30,7 @@ import os
 import json
 import tkinter as tk
 import tkinter.filedialog as tkfd
+import tkinter.font as tkfont
 
 from PIL import Image, ImageTk
 
@@ -38,7 +40,7 @@ import tintkit
 # scaffolding uses chrome's `_tw`; the heavily-rebuilt rows/cells read the live
 # theme at build time and are rebuilt on a switch (via _refresh_filter_strip,
 # subscribed). Only EDIT_PAD (a layout inset, not a colour) stays a config const.
-from ..config import EDIT_PAD
+from ..config import EDIT_PAD, FILTER_SHOW_IMG
 from ..widgets import Tooltip
 from ..i18n import t
 from .. import imaging
@@ -392,6 +394,7 @@ class FiltersMixin:
             w.destroy()
         self._filter_list_rows = []
         self._filter_rows_by_group = {} # group name -> [{key,widget}], per-group band
+        self._filter_list_thumbs = []   # row preview PhotoImages, kept alive
         self._add_flist_header(holder)
         for grp in self._strip_groups():
             self._add_flist_group(holder, grp)
@@ -445,8 +448,8 @@ class FiltersMixin:
         return None
 
     def _add_flist_row(self, parent, label, vals, fl=None, group_id=None):
-        "One filter row: a grip + indented name (+ … menu for user filters, not"
-        " built-ins); click applies the look onto the photo."
+        "One filter row: a grip + a small preview + indented name (+ … menu for"
+        " user filters, not built-ins); click applies the look onto the photo."
         active = self._filter_active(vals)
         bar = self.theme["bar"]
         row = tk.Frame(parent, bg=bar, cursor="hand2")
@@ -456,15 +459,24 @@ class FiltersMixin:
             self._filter_rows_by_group.setdefault(group_id, []).append(
                 {"key": fl, "widget": row})
             self._kebab(row, lambda anc, f=fl: self._filter_menu(anc, f, lambda: None))
+        # A small square preview (Filter_Show.jpg under this filter), left of the
+        # name. Built-ins have no grip, so they take a left indent that lines the
+        # preview up with the grip'd rows.
+        pic = None
+        thumb = self._list_thumb_image(vals)
+        if thumb is not None:
+            self._filter_list_thumbs.append(thumb)
+            pic = tk.Label(row, image=thumb, bg=bar)
+            pic.pack(side="left", padx=(2 if fl is not None else 24, 6))
         tx = tk.Label(row, text=label, bg=bar,
                       fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
-        tx.pack(side="left", fill="x", expand=True,
-                padx=(4 if fl is not None else 26, 6), pady=4)
+        name_lpad = 0 if pic is not None else (4 if fl is not None else 26)
+        tx.pack(side="left", fill="x", expand=True, padx=(name_lpad, 6), pady=4)
 
         cell = {"frame": row, "label": tx, "vals": vals, "active": active}
         self._filter_list_rows.append(cell)
-        parts = (row, tx)
+        parts = (row, tx) if pic is None else (row, pic, tx)
 
         def enter(_e=None):
             if not cell["active"]:
@@ -490,6 +502,7 @@ class FiltersMixin:
 
     FILTER_THUMB_W = 68       # logical px: the cell image's width budget
     FILTER_THUMB_H = 50       # logical px: the cell image's height budget
+    FILTER_LIST_THUMB = 30    # logical px: the panel-list row's square preview
     # Idle cell border is the theme "border" token (accent when the look is
     # active); read live in _add_filter_cell / _repaint_filter_strip.
 
@@ -520,8 +533,9 @@ class FiltersMixin:
         self.filter_strip_holder = holder
         self._filter_cells = []        # one dict per cell (for the active repaint)
         self._filter_thumb_imgs = []   # PhotoImages kept alive
-        self._fstrip_base = None       # cached small RGB copy of the current photo
-        self._fstrip_base_key = None   # id(current_pil) the base was built from
+        # cached small RGB copy of the showcase image; keep any copy the panel
+        # list already loaded (it builds before this strip scaffold).
+        self._fstrip_base = getattr(self, "_fstrip_base", None)
 
         strip.grid_remove()            # hidden until there are filters + a photo
         # The strip + panel-list cells read the live theme at build time; rebuild
@@ -541,10 +555,10 @@ class FiltersMixin:
         if not getattr(self, "show_filter_strip", True):
             self.filter_strip.grid_remove()
             return
-        # Built-in filters are always present, so the strip shows whenever a photo
-        # is open (base is None only when nothing is loaded).
+        # The strip stays photo-gated (its clicks edit the OPEN photo); the panel
+        # list, already refreshed above, shows its previews with or without one.
         base = self._filter_thumb_base()
-        if base is None:
+        if base is None or self.current_pil is None:
             self.filter_strip.grid_remove()
             return
         holder = self.filter_strip_holder
@@ -627,30 +641,107 @@ class FiltersMixin:
         self._refresh_filter_strip()
 
     def _filter_thumb_base(self):
-        "A small RGB copy of the current photo, cached by photo identity (or None)."
-        if self.current_pil is None:
-            return None
-        key = id(self.current_pil)
-        if self._fstrip_base_key == key and self._fstrip_base is not None:
+        "A small RGB copy of the fixed showcase image (Filter_Show.jpg), cached"
+        " once. None only when the image is missing/unreadable. Photo-independent"
+        " so the strip AND the panel list can render previews from it."
+        # getattr: the panel list is built (and first refreshed) before the strip
+        # scaffold runs, so this can be called before _fstrip_base is assigned.
+        if getattr(self, "_fstrip_base", None) is not None:
             return self._fstrip_base
+        try:
+            im = Image.open(FILTER_SHOW_IMG).convert("RGB")
+        except (OSError, ValueError):
+            return None
         box = (round(self.FILTER_THUMB_W * self.dpi),
                round(self.FILTER_THUMB_H * self.dpi))
-        im = self.current_pil.convert("RGB").copy()
         im.thumbnail(box, Image.LANCZOS)
         self._fstrip_base = im
-        self._fstrip_base_key = key
         return im
 
-    def _filter_thumb_image(self, base, vals):
-        "Render the base photo through one filter's factors → a PhotoImage."
-        fields = {k: float(vals[k]) for k in self.FILTER_KEYS if k in vals}
-        e = imaging.Edits(**fields)
-        auto_luts = imaging.build_auto_luts(base, vals.get("auto_mode"))
-        return ImageTk.PhotoImage(imaging.apply_edits(base, e, auto_luts=auto_luts))
+    def _thumb_key(self, vals):
+        "A hashable identity for one filter's render (its factors + auto mode),"
+        " so the strip and the list reuse a single rendered image per look."
+        keys = tuple(sorted((k, round(float(vals[k]), 4))
+                            for k in self.FILTER_KEYS if k in vals))
+        return keys + (("auto_mode", vals.get("auto_mode")),)
+
+    def _thumb_render(self, vals):
+        "The showcase base rendered through one filter (PIL, base size), cached"
+        " by filter identity so the same look is never rendered twice (the base"
+        " is fixed, so the cache stays valid for the whole session)."
+        base = self._filter_thumb_base()
+        if base is None:
+            return None
+        cache = self.__dict__.setdefault("_thumb_cache", {})
+        key = self._thumb_key(vals)
+        im = cache.get(key)
+        if im is None:
+            fields = {k: float(vals[k]) for k in self.FILTER_KEYS if k in vals}
+            e = imaging.Edits(**fields)
+            auto_luts = imaging.build_auto_luts(base, vals.get("auto_mode"))
+            im = imaging.apply_edits(base, e, auto_luts=auto_luts)
+            cache[key] = im
+        return im
+
+    def _filter_thumb_image(self, vals):
+        "A strip cell image: the (cached) showcase render at full strip size."
+        im = self._thumb_render(vals)
+        return ImageTk.PhotoImage(im) if im is not None else None
+
+    def _list_thumb_image(self, vals):
+        "A panel-list row image: the same render, downscaled to a small square."
+        im = self._thumb_render(vals)
+        if im is None:
+            return None
+        s = round(self.FILTER_LIST_THUMB * self.dpi)
+        small = im.copy()          # copy: thumbnail() mutates, base is shared
+        small.thumbnail((s, s), Image.LANCZOS)
+        return ImageTk.PhotoImage(small)
+
+    def _strip_name_h(self):
+        "Fixed pixel height for a cell's name box — one line of the strip's font."
+        if getattr(self, "_strip_name_height", None) is None:
+            self._strip_name_height = (self._strip_font(8).metrics("linespace")
+                                       + round(4 * self.dpi))
+        return self._strip_name_height
+
+    def _strip_font(self, size):
+        "A cached 'Segoe UI' Font at the given point size (for measuring names)."
+        fonts = self.__dict__.setdefault("_strip_fonts", {})
+        if size not in fonts:
+            fonts[size] = tkfont.Font(font=("Segoe UI", size))
+        return fonts[size]
+
+    def _strip_name_fit(self, label, max_w):
+        "Fit a name into max_w px: pick the largest font (8 down to a 6 floor)"
+        " that holds the whole name; if it still overflows at the floor, elide"
+        " the MIDDLE so head + tail stay visible. Returns (font, display_text)."
+        for size in (8, 7, 6):
+            if self._strip_font(size).measure(label) <= max_w:
+                return ("Segoe UI", size), label
+        return ("Segoe UI", 6), self._middle_elide(label, self._strip_font(6),
+                                                    max_w)
+
+    def _middle_elide(self, text, font, max_w):
+        "Drop characters from the centre of `text` (keeping head + tail, joined"
+        " by '...') until it fits max_w px. Falls back to '...' if nothing fits."
+        ell = "..."
+        if font.measure(text) <= max_w:
+            return text
+        n = len(text)
+        # Cut a growing chunk from the middle; keep the split near-even so both
+        # ends survive, favouring the tail by one char (the end matters most).
+        for keep in range(n - 1, 0, -1):
+            tail = (keep + 1) // 2
+            head = keep - tail
+            cand = text[:head] + ell + text[n - tail:]
+            if font.measure(cand) <= max_w:
+                return cand
+        return ell
 
     def _add_filter_cell(self, parent, label, vals):
         "One filmstrip cell: the filtered thumbnail + its name; click applies the look."
-        photo = self._filter_thumb_image(self._fstrip_base, vals)
+        photo = self._filter_thumb_image(vals)
         self._filter_thumb_imgs.append(photo)
         active = self._filter_active(vals)
         bar, border = self.theme["bar"], self.theme["border"]
@@ -661,14 +752,24 @@ class FiltersMixin:
         inner.pack(padx=2, pady=2)
         pic = tk.Label(inner, image=photo, bg=bar)
         pic.pack()
-        name = tk.Label(inner, text=label, bg=bar,
+        # The name lives in a box locked to the thumbnail's width, so a long
+        # name can't widen the cell — every cell stays the same size. The font
+        # shrinks to fit; if it still overflows at the floor, the middle is
+        # elided ("ჩემ...ი 34") so both the start AND the end stay visible. The
+        # full name is always on the hover tooltip.
+        namebox = tk.Frame(inner, bg=bar, width=photo.width(),
+                           height=self._strip_name_h())
+        namebox.pack(fill="x", pady=(2, 1))
+        namebox.pack_propagate(False)
+        font, display = self._strip_name_fit(label, photo.width())
+        name = tk.Label(namebox, text=display, bg=bar,
                         fg=self.theme["accent"] if active else self.theme["fg_dim"],
-                        font=("Segoe UI", 8), anchor="center")
-        name.pack(fill="x", pady=(2, 1))
+                        font=font, anchor="center")
+        name.pack(fill="both", expand=True)
 
         cell = {"frame": frame, "name": name, "vals": vals, "active": active}
         self._filter_cells.append(cell)
-        parts = (frame, inner, pic, name)
+        parts = (frame, inner, pic, namebox, name)
 
         def enter(_e=None):
             if not cell["active"]:

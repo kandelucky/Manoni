@@ -170,7 +170,7 @@ class Tooltip:
         self._job = None
         # add="+" so we never clobber the widget's own hover / click bindings.
         widget.bind("<Enter>", self._schedule, add="+")
-        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<Leave>", self._on_leave, add="+")
         widget.bind("<Button>", self._hide, add="+")
 
     def _schedule(self, _event=None):
@@ -207,8 +207,31 @@ class Tooltip:
         w = self.tip.winfo_width()
         self.tip.wm_geometry(f"+{x - w // 2}+{y}")
 
+    def _on_leave(self, event=None):
+        # A <Leave> also fires when the pointer merely crosses onto a CHILD of
+        # the widget (e.g. a cell's thumbnail or name label) — it is still
+        # "inside" the cell, so don't dismiss the tip then. Only hide once the
+        # pointer has truly left the widget's subtree. Without this the tip is
+        # cancelled the instant you move off the frame's own pixels, so it
+        # barely ever shows (looks like "hover works only once").
+        if event is not None and self._still_inside(event):
+            return
+        self._hide()
+
     def _hide(self, _event=None):
         self._cancel()
         if self.tip is not None:
             self.tip.destroy()
             self.tip = None
+
+    def _still_inside(self, event):
+        "True when the pointer (at this <Leave>) is over the widget or a child."
+        try:
+            under = self.widget.winfo_containing(event.x_root, event.y_root)
+        except tk.TclError:
+            return False
+        while under is not None:
+            if under is self.widget:
+                return True
+            under = getattr(under, "master", None)
+        return False
