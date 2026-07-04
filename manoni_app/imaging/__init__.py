@@ -21,7 +21,8 @@ This package used to be one big `imaging.py`; it is split by topic now, and this
 """
 
 from .edits import Edits                                             # noqa: F401
-from .levels import autocontrast_luts, tone_lut, apply_auto_luts     # noqa: F401
+from .levels import (autocontrast_luts, tone_lut, apply_auto_luts,   # noqa: F401
+                     contrast_lut, auto_tone_luts, build_auto_luts)
 from .colormix import (HSL_BANDS, apply_color_mixer,                 # noqa: F401
                        color_mixer_active)
 from .text import (TEXT_FONTS, resolve_font_family, text_extent,     # noqa: F401

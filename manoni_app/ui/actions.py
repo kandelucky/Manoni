@@ -329,10 +329,7 @@ class ActionsMixin:
             focus = self._focus_from_rel_size(live.get("focus"), *img.size)
             kw = {k: live[k] for k in self.FILTER_KEYS if k in live}
             e = imaging.Edits(focus=focus, **kw)
-            luts = None
-            am = live.get("auto_mode")
-            if am in ("levels", "contrast"):
-                luts = imaging.autocontrast_luts(img, am == "levels")
+            luts = imaging.build_auto_luts(img, live.get("auto_mode"))
             img = imaging.apply_edits(img, e, auto_luts=luts)
         return img
 

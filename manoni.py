@@ -363,6 +363,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.show_rulers = True  # top + left pixel rulers (Ctrl+R); persisted
         self.show_filter_strip = True  # the filter-preview filmstrip; persisted
         self.show_histogram = True  # the edit panel's live histogram; persisted
+        self.basic_full = False  # Basic Edits: show all sliders vs the simple 7; persisted
         self.fast_preview = True  # drop heavy filters during a slider drag; persisted
         self.async_render = True  # render off the UI thread so a heavy edit can't
                                   # freeze the window; persisted (Settings → General)
@@ -510,6 +511,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "show_rulers": self.show_rulers,
                  "show_filter_strip": self.show_filter_strip,
                  "show_histogram": self.show_histogram,
+                 "basic_full": self.basic_full,
                  "fast_preview": self.fast_preview,
                  "async_render": self.async_render,
                  "restore_session": self.restore_session,
@@ -592,7 +594,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "show_filter_strip", "show_histogram",
-                    "fast_preview", "async_render"):
+                    "basic_full", "fast_preview", "async_render"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)

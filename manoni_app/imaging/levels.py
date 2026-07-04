@@ -145,3 +145,96 @@ def apply_auto_luts(img, luts):
     "Auto Levels / Auto Contrast: per-channel stretch through the prebuilt LUTs."
     r, g, b = img.convert("RGB").split()
     return Image.merge("RGB", (r.point(luts[0]), g.point(luts[1]), b.point(luts[2])))
+
+
+# --- Auto tone (auto exposure + contrast normalisation) ---------------------
+
+# Auto Tone normalises a flat / mis-exposed shot: it stretches the black & white
+# points to restore contrast, then sets the midtone with a gamma so the photo
+# lands at a balanced exposure. It is BIDIRECTIONAL — a washed-out bright shot is
+# pulled DOWN, an under-exposed one lifted — unlike the range-only Auto Contrast /
+# Auto Level. The trap a plain "median → mid-gray" would hit is graying a clean
+# white background; so the DARKENING half of the gamma is faded out when the photo
+# already owns a true white point (its 99th percentile is near 255). A genuine
+# white-bg product shot therefore keeps its whites, while a dull, washed, no-true-
+# white shot (the "overexposed" case) is brought down AND given contrast. One
+# shared LUT keeps the colour balance.
+AUTO_TONE_CLIP     = 0.4    # % clipped at each end for the black / white points
+AUTO_TONE_MID      = 0.48   # target midtone (0..1) the median is pulled toward
+AUTO_TONE_STRENGTH = 0.7    # how far toward AUTO_TONE_MID to pull the median
+AUTO_TONE_GAMMA_LO = 0.45   # clamp the auto gamma so it never over-corrects
+AUTO_TONE_GAMMA_HI = 2.6
+AUTO_TONE_WHITE_LO = 240    # p99 below this → washed (darkening allowed, full pull)
+AUTO_TONE_WHITE_HI = 253    # p99 at/above this → a true white point (no darkening)
+
+
+def _percentile_level(hist, pct):
+    "The lowest 0–255 level at/below which `pct`% of the pixels fall."
+    n = sum(hist)
+    if n == 0:
+        return 128
+    thresh = n * pct / 100.0
+    cum = 0
+    for i in range(256):
+        cum += hist[i]
+        if cum >= thresh:
+            return i
+    return 255
+
+
+def auto_tone_luts(img):
+    "Auto exposure + contrast (see the module notes): stretch the black/white"
+    " points, then set the midtone with a gamma — pulling a washed bright shot"
+    " DOWN and lifting a dark one, while a true white background is protected from"
+    " graying. Colour balance kept (one shared LUT)."
+    hist = img.convert("L").histogram()
+    n = sum(hist)
+    if n == 0:
+        lut = list(range(256))
+        return [lut, lut, lut]
+    # Black / white points (restore contrast on a flat shot).
+    clip = n * AUTO_TONE_CLIP / 100.0
+    cum, lo = 0, 0
+    for i in range(256):
+        cum += hist[i]
+        if cum > clip:
+            lo = i
+            break
+    cum, hi = 0, 255
+    for i in range(255, -1, -1):
+        cum += hist[i]
+        if cum > clip:
+            hi = i
+            break
+    if hi <= lo:
+        lo, hi = 0, 255
+    # Midtone gamma toward the target. The DARKENING half is faded out when the
+    # photo already owns a true white point (p99 near 255), so a clean white
+    # background is not grayed; a washed shot with no real white is pulled down.
+    m = min(max((_percentile_level(hist, 50) - lo) / (hi - lo), 0.01), 0.99)
+    pull = AUTO_TONE_STRENGTH
+    if AUTO_TONE_MID < m:                       # a bright photo → this would DARKEN
+        white = min(1.0, max(0.0, (_percentile_level(hist, 99) - AUTO_TONE_WHITE_LO)
+                                  / (AUTO_TONE_WHITE_HI - AUTO_TONE_WHITE_LO)))
+        pull *= (1.0 - white)                   # protect a true white background
+    target = min(max(m + pull * (AUTO_TONE_MID - m), 0.01), 0.99)
+    gamma = min(max(math.log(target) / math.log(m),
+                    AUTO_TONE_GAMMA_LO), AUTO_TONE_GAMMA_HI)
+    scale = 255.0 / (hi - lo)
+    lut = []
+    for i in range(256):
+        v = max(0.0, min(1.0, (i - lo) * scale / 255.0))
+        lut.append(max(0, min(255, int(round(255.0 * v ** gamma)))))
+    return [lut, lut, lut]
+
+
+def build_auto_luts(img, mode):
+    "Per-channel auto-correction LUTs for `mode`, or None if it is falsy / unknown."
+    " 'levels' = per-channel stretch (removes a colour cast); 'contrast' = one"
+    " luminance stretch (colour kept); 'tone' = luminance stretch + midtone gamma"
+    " (colour kept, midtones re-exposed — see auto_tone_luts)."
+    if mode == "tone":
+        return auto_tone_luts(img)
+    if mode in ("levels", "contrast"):
+        return autocontrast_luts(img, mode == "levels")
+    return None

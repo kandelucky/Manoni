@@ -48,7 +48,7 @@ class FiltersMixin:
                    "gold_hue", "gold_sat", "gold_light",
                    "skin_hue", "skin_sat", "skin_light",
                    "bw", "sepia", "vignette", "grain", "split_hi", "split_sh")
-    AUTO_MODES = (None, "levels", "contrast")
+    AUTO_MODES = (None, "levels", "contrast", "tone")
 
     # Standard built-in filters: a palette of popular looks shipped with the app.
     # Unlike user filters these are defined in code (not the JSON store), so they
@@ -332,36 +332,17 @@ class FiltersMixin:
     # (the fold state is the SAME as the strip's, so they stay in sync).
 
     def _build_filter_list(self, parent):
-        "Scaffold the scrollable grouped list; rows are filled by _refresh_filter_list."
+        "Scaffold the grouped list (scrolls with the rest of the section, like the"
+        " Actions list); rows are filled by _refresh_filter_list."
         self._tw(tk.Label(parent, text=t("All filters"), anchor="w",
                           font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim") \
             .pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
-        wrap = self._tw(tk.Frame(parent), bg="bar")
-        wrap.pack(fill="both", expand=True, padx=(EDIT_PAD, 0), pady=(0, 8))
+        holder = self._tw(tk.Frame(parent), bg="bar")
+        holder.pack(fill="x", padx=(EDIT_PAD, 0), pady=(0, 8))
 
-        canvas = self._tw(tk.Canvas(wrap, highlightthickness=0), bg="bar")
-        sb = self._make_scrollbar(wrap, canvas)
-        holder = self._tw(tk.Frame(canvas), bg="bar")
-        win = canvas.create_window((0, 0), window=holder, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-
-        def on_body(_e=None):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas.itemconfigure(win, width=canvas.winfo_width())
-        holder.bind("<Configure>", on_body)
-        canvas.bind("<Configure>", on_body)
-        canvas.bind("<MouseWheel>", self._flist_wheel)
-
-        self.filter_list_canvas = canvas
         self.filter_list_holder = holder
         self._filter_list_rows = []     # [{frame,label,vals,active}] for the repaint
         self._refresh_filter_list()
-
-    def _flist_wheel(self, e):
-        "Vertical wheel scroll for the grouped filter list."
-        self.filter_list_canvas.yview_scroll(int(-e.delta / 120), "units")
 
     def _refresh_filter_list(self):
         "Rebuild the grouped list: 'Standard' built-ins first, then each non-empty"
@@ -374,15 +355,17 @@ class FiltersMixin:
         self._filter_list_rows = []
         for grp in self._strip_groups():
             self._add_flist_group(holder, grp)
-        self.filter_list_canvas.yview_moveto(0.0)
-        self.filter_list_canvas.configure(
-            scrollregion=self.filter_list_canvas.bbox("all"))
 
     def _add_flist_group(self, parent, grp):
-        "A foldable caption (chevron + name + count); when open, its filter rows."
+        "A foldable caption (chevron + name + count + … menu); when open, its rows."
         bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
+        builtin = grp["id"] == self.GROUP_STANDARD
         header = tk.Frame(parent, bg=bar, cursor="hand2")
         header.pack(fill="x", pady=(6, 0))
+        # The … menu sits at the right; pack it first so the title can expand.
+        self._kebab(header, lambda anc, gid=grp["id"]:
+                    self._group_menu(anc, gid, lambda: None),
+                    icon_name="folder-cog", size=13)
         parts = [header]
         chev = self.icon("chevron-right" if grp["collapsed"] else "chevron-down",
                          size=12)
@@ -398,17 +381,27 @@ class FiltersMixin:
             w.bind("<Button-1>", lambda e, gid=grp["id"]: self._toggle_group(gid))
             w.bind("<Enter>", lambda e: tx.configure(fg=fg))
             w.bind("<Leave>", lambda e: tx.configure(fg=fg_dim))
-            w.bind("<MouseWheel>", self._flist_wheel)
         if not grp["collapsed"]:
             for label, vals in grp["items"]:
-                self._add_flist_row(parent, label, vals)
+                fl = None if builtin else self._filter_by_name(label)
+                self._add_flist_row(parent, label, vals, fl)
 
-    def _add_flist_row(self, parent, label, vals):
-        "One filter row: an indented name; click applies the look onto the photo."
+    def _filter_by_name(self, name):
+        "The stored user filter dict with this name, or None (built-ins aren't stored)."
+        for fl in self.user_filters:
+            if fl["name"] == name:
+                return fl
+        return None
+
+    def _add_flist_row(self, parent, label, vals, fl=None):
+        "One filter row: an indented name (+ … menu for user filters, not built-ins);"
+        " click applies the look onto the photo."
         active = self._filter_active(vals)
         bar = self.theme["bar"]
         row = tk.Frame(parent, bg=bar, cursor="hand2")
         row.pack(fill="x")
+        if fl is not None:
+            self._kebab(row, lambda anc, f=fl: self._filter_menu(anc, f, lambda: None))
         tx = tk.Label(row, text=label, bg=bar,
                       fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
@@ -431,7 +424,6 @@ class FiltersMixin:
             w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
             w.bind("<Enter>", enter)
             w.bind("<Leave>", leave)
-            w.bind("<MouseWheel>", self._flist_wheel)
         return row
 
     # --- The filter preview strip (horizontal, below the editor) ------------
@@ -598,9 +590,7 @@ class FiltersMixin:
         "Render the base photo through one filter's factors → a PhotoImage."
         fields = {k: float(vals[k]) for k in self.FILTER_KEYS if k in vals}
         e = imaging.Edits(**fields)
-        auto = vals.get("auto_mode")
-        auto_luts = (imaging.autocontrast_luts(base, auto == "levels")
-                     if auto in ("levels", "contrast") else None)
+        auto_luts = imaging.build_auto_luts(base, vals.get("auto_mode"))
         return ImageTk.PhotoImage(imaging.apply_edits(base, e, auto_luts=auto_luts))
 
     def _add_filter_cell(self, parent, label, vals):
@@ -764,7 +754,8 @@ class FiltersMixin:
         header = tk.Frame(parent, bg=bar, cursor="hand2")
         header.pack(fill="x", pady=(8, 0))
         # The … menu sits at the right; pack it first so the title can expand.
-        self._kebab(header, lambda anc, gn=name: self._group_menu(anc, gn, redraw))
+        self._kebab(header, lambda anc, gn=name: self._group_menu(anc, gn, redraw),
+                    icon_name="folder-cog", size=13)
         chev = self.icon("chevron-right" if collapsed else "chevron-down", size=13)
         hcells = [header]
         if chev is not None:
@@ -806,9 +797,11 @@ class FiltersMixin:
                  anchor="w", font=("Segoe UI", 9)).pack(
             side="left", fill="x", expand=True, padx=(32, 6), pady=5)
 
-    def _kebab(self, parent, open_menu):
+    def _kebab(self, parent, open_menu, icon_name="ellipsis", size=15):
         "A small '…' button on the right of a row that opens its popup menu."
-        img = self.icon("ellipsis", size=15)
+        " Groups use 'folder-cog' (smaller, since it reads heavier than the plain"
+        " dots) so they look distinct from filter rows."
+        img = self.icon(icon_name, size=size)
         if img is not None:
             b = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
         else:

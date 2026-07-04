@@ -149,6 +149,7 @@ def collect():
         imaging.autocontrast_luts(base, per_channel=True))
     out["autolut_luminance"] = digest_obj(
         imaging.autocontrast_luts(base, per_channel=False))
+    out["autolut_tone"] = digest_obj(imaging.auto_tone_luts(base))
     out["color_mixer"] = digest_img(
         imaging.apply_color_mixer(base.copy(), Edits(sat_red=0.4, gold_sat=1.5)))
     out["histogram"] = digest_img(imaging.histogram_image(base, 200, 80))

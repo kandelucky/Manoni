@@ -10,7 +10,7 @@ import tkinter.ttk as ttk
 
 import tintkit
 
-from ..config import EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD, CHIP_GAP
+from ..config import EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD
 from .. import imaging
 from ..widgets import Tooltip, Histogram
 from ..i18n import t
@@ -157,47 +157,48 @@ class EditPanelMixin:
             self._bind_section_wheel(c)
 
     def _build_basic_section(self, parent):
-        "Basic Edits: auto-fix buttons + grouped live sliders (Photoshop order)."
+        "Basic Edits: a simple seven-slider set + a toggle that reveals the full"
+        " slider set (every tone / detail / colour control)."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Auto corrections at the very top, like Photoshop's Auto Levels / Auto
-        # Contrast. They are mutually exclusive one-click toggles.
-        self.auto_buttons = {}
-        autobar = self._tw(tk.Frame(f), bg="bar")
-        autobar.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
-        autobar.columnconfigure(0, weight=1, uniform="auto")
-        autobar.columnconfigure(1, weight=1, uniform="auto")
-        self._auto_btn(autobar, t("Auto level"), "levels", 0,
-                       t("Auto-correct color balance (each channel stretched separately)"))
-        self._auto_btn(autobar, t("Auto contrast"), "contrast", 1,
-                       t("Auto-correct contrast (color stays unchanged)"))
+        # Simple version: the seven most-used controls, always visible. No group
+        # headers — a short flat list reads simpler. The rest live in the advanced
+        # block below, revealed by the Full-version toggle.
+        ess = self._tw(tk.Frame(f), bg="bar")
+        ess.pack(fill="x", pady=(8, 0))
+        self.s_exposure   = self._slider(ess, t("Exposure"), "brightness")
+        self.s_exposure_g = self._slider(ess, t("Brightness/Fill"), "exposure_g")
+        self.s_contrast   = self._slider(ess, t("Contrast"), "contrast")
+        self.s_highlights = self._slider(ess, t("Highlights"), "highlights")
+        self.s_shadows    = self._slider(ess, t("Shadows"), "shadows")
+        self.s_vibrance   = self._slider(ess, t("Vibrance"), "vibrance")
+        self.s_sharpen    = self._slider(ess, t("Sharpen"), "sharpen")
 
-        # Photoshop order: white balance at the very top, then tone, then detail.
-        # Each group is split off with its own header so the sliders read as
-        # distinct sections rather than one long glued strip.
-        self._group_header(f, t("White balance"))
-        self.s_temp       = self._slider(f, t("Temperature"), "temperature")
-        self.s_tint       = self._slider(f, t("Tint"), "tint")
-
-        self._group_header(f, t("Tone"))
-        self.s_exposure   = self._slider(f, t("Exposure"), "brightness")
-        self.s_exposure_g = self._slider(f, t("Brightness/Fill"), "exposure_g")
-        self.s_contrast   = self._slider(f, t("Contrast"), "contrast")
-        self.s_highlights = self._slider(f, t("Highlights"), "highlights")
-        self.s_shadows    = self._slider(f, t("Shadows"), "shadows")
-        self.s_whites     = self._slider(f, t("Whites"), "whites")
-        self.s_blacks     = self._slider(f, t("Blacks"), "blacks")
-
-        self._group_header(f, t("Detail & Color"))
-        self.s_clarity    = self._slider(f, t("Clarity"), "clarity")
-        self.s_dehaze     = self._slider(f, t("Dehaze"), "dehaze")
-        self.s_vibrance   = self._slider(f, t("Vibrance"), "vibrance")
-        self.s_color      = self._slider(f, t("Color"), "color")
-        self.s_texture    = self._slider(f, t("Texture"), "texture")
-        self.s_sharpen    = self._slider(f, t("Sharpen"), "sharpen")
+        # Advanced version: everything else, in the Photoshop groups. Built now
+        # (so its sliders still join the shared reset / undo / filter machinery)
+        # but only shown while basic_full is on — see _apply_basic_full. It is NOT
+        # packed here; the toggle packs it in above itself when the user expands.
+        adv = self._tw(tk.Frame(f), bg="bar")
+        self._basic_adv = adv
+        self._group_header(adv, t("White balance"))
+        self.s_temp       = self._slider(adv, t("Temperature"), "temperature")
+        self.s_tint       = self._slider(adv, t("Tint"), "tint")
+        self._group_header(adv, t("Tone"))
+        self.s_whites     = self._slider(adv, t("Whites"), "whites")
+        self.s_blacks     = self._slider(adv, t("Blacks"), "blacks")
+        self._group_header(adv, t("Detail & Color"))
+        self.s_clarity    = self._slider(adv, t("Clarity"), "clarity")
+        self.s_dehaze     = self._slider(adv, t("Dehaze"), "dehaze")
+        self.s_color      = self._slider(adv, t("Color"), "color")
+        self.s_texture    = self._slider(adv, t("Texture"), "texture")
         # Noise reduction rests at 0 (off → full strength), like the effects.
-        self.s_denoise    = self._slider(f, t("Noise reduction"), "denoise",
+        self.s_denoise    = self._slider(adv, t("Noise reduction"), "denoise",
                                          hi=100, neutral=0)
+
+        # The Simple/Full toggle sits under the seven essentials; the advanced
+        # block is revealed just above it (a "show more / show less" at the foot).
+        self._basic_more = self._basic_toggle(f)
+
         self.sliders = {"brightness": self.s_exposure,
                         "exposure_g": self.s_exposure_g,
                         "contrast": self.s_contrast,
@@ -216,7 +217,60 @@ class EditPanelMixin:
                         "tint": self.s_tint}
 
         self._clear_button(f)
+        self._apply_basic_full()      # honour the saved simple/full choice
         return f
+
+    def _basic_toggle(self, parent):
+        "Full-width Simple/Full-version toggle: reveals or hides the advanced basic"
+        " sliders. Its chevron + caption flip with the state (see _apply_basic_full)."
+        btn = self._tw(tk.Frame(parent, cursor="hand2"), bg="chip")
+        btn.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
+        inner = self._tw(tk.Frame(btn), bg="chip")   # centres the chevron + label
+        inner.pack(pady=6)
+        ic = self._tw(tk.Label(inner), bg="chip")    # image set by _sync_basic_chevron
+        ic.pack(side="left", padx=(0, 6))
+        self._basic_chevron = ic
+        tx = self._tw(tk.Label(inner, font=("Segoe UI", 9, "bold")), bg="chip", fg="fg")
+        tx.pack(side="left")
+        self._basic_more_label = tx
+        parts = [btn, inner, ic, tx]
+        for w in parts:
+            w.bind("<Button-1>", lambda e: self._toggle_basic_full())
+            w.bind("<Enter>", lambda e: [p.configure(bg=self.theme["hover"]) for p in parts])
+            w.bind("<Leave>", lambda e: [p.configure(bg=self.theme["chip"]) for p in parts])
+        btn._tip = Tooltip(btn, t("Show every Basic Edit slider"))
+        self.theme.subscribe(self._sync_basic_chevron)   # re-tint on dark<->light
+        return btn
+
+    def _toggle_basic_full(self):
+        "Flip the Basic Edits simple/full view and remember the choice."
+        self.basic_full = not getattr(self, "basic_full", False)
+        self._apply_basic_full()
+        self._save_state()
+
+    def _apply_basic_full(self):
+        "Show/hide the advanced basic sliders and sync the toggle's caption + chevron"
+        " to self.basic_full."
+        full = getattr(self, "basic_full", False)
+        if full:
+            self._basic_adv.pack(fill="x", before=self._basic_more)
+        else:
+            self._basic_adv.pack_forget()
+        self._basic_more_label.configure(
+            text=t("Simple version") if full else t("Full version"))
+        self._sync_basic_chevron()
+        self.root.after_idle(self._sync_section_scroll)   # content height changed
+
+    def _sync_basic_chevron(self):
+        "Point the toggle's chevron: down = collapsed (expand), up = expanded."
+        ic = getattr(self, "_basic_chevron", None)
+        if ic is None:
+            return
+        name = "chevron-up" if getattr(self, "basic_full", False) else "chevron-down"
+        im = self.icon(name, size=15, color=self.theme["fg"])
+        if im is not None:
+            ic.configure(image=im)
+            ic._icon_ref = im
 
     def _group_header(self, parent, text):
         "A thin divider + small bold caption that splits the basic sliders into"
@@ -228,27 +282,10 @@ class EditPanelMixin:
                  font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
                      fill="x", padx=EDIT_PAD, pady=(4, 2))
 
-    def _auto_btn(self, parent, text, mode, col, tip):
-        "One auto-correction toggle button (accent-filled while its mode is on)."
-        b = self._tw(tk.Label(parent, text=text, cursor="hand2",
-                     font=("Segoe UI", 8, "bold"), padx=4, pady=6), bg="chip", fg="fg")
-        b._mode = mode
-        pad = (0, CHIP_GAP // 2) if col == 0 else (CHIP_GAP // 2, 0)
-        b.grid(row=0, column=col, sticky="ew", padx=pad)
-        b.bind("<Button-1>", lambda e, m=mode: self._set_auto(m))
-        b.bind("<Enter>", lambda e, w=b: self._auto_btn_hover(w, True))
-        b.bind("<Leave>", lambda e, w=b: self._auto_btn_hover(w, False))
-        b._tip = Tooltip(b, tip)
-        self.auto_buttons[mode] = b
-
-    def _auto_btn_hover(self, btn, entering):
-        "Brighten an auto button on hover; the active one keeps its accent fill."
-        if btn._mode == self.auto_mode:
-            return
-        btn.configure(bg=self.theme["hover"] if entering else self.theme["chip"])
-
     def _refresh_auto_buttons(self):
         "Repaint the auto buttons so the active mode is accent-filled, rest neutral."
+        " No-op now that the auto buttons are gone from the UI (auto_buttons is"
+        " never built) — kept because nav / filters / actions still call it."
         if not hasattr(self, "auto_buttons"):
             return
         for mode, btn in self.auto_buttons.items():
@@ -666,26 +703,17 @@ class EditPanelMixin:
         self._recompute_auto()
         self._refresh_auto_buttons()
 
-    # --- Auto tone (Photoshop "Auto Levels" / "Auto Contrast") --------------
+    # --- Auto-correction LUTs (plumbing; the buttons were removed) -----------
+    # The Auto tone / level / contrast buttons are gone from the UI, but this
+    # stays so a saved filter or action that still carries an auto_mode keeps
+    # applying — and so the feature is trivial to restore later.
 
     def _recompute_auto(self):
         "Rebuild the cached auto LUTs from the full base image (or clear them)."
         if self.auto_mode is None or self.current_pil is None:
             self._auto_luts = None
         else:
-            self._auto_luts = imaging.autocontrast_luts(
-                self.current_pil, self.auto_mode == "levels")
-
-    def _set_auto(self, mode):
-        "Toggle an auto correction (levels/contrast are mutually exclusive). Undoable."
-        before = self._edit_state()
-        self.auto_mode = None if self.auto_mode == mode else mode
-        self._recompute_auto()
-        self._refresh_auto_buttons()
-        self._edits_saved = False
-        self._render_preview()
-        self._record_edit(before)
-        self._repaint_filter_strip()
+            self._auto_luts = imaging.build_auto_luts(self.current_pil, self.auto_mode)
 
     def _reset_edits(self):
         "Reset all sliders to neutral as a single undoable step."

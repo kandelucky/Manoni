@@ -230,7 +230,9 @@ def action_replay_is_resolution_independent():
         out = a._apply_action_to_image(src, crops, live)
         assert out.size == (w // 2, h), f"crop not scaled for {w}x{h}: {out.size}"
         from PIL import ImageStat
-        assert ImageStat.Stat(out).mean[0] > 120, "replayed brightness missing"
+        # brightness 1.4 lifts the gray-100 crop; the linear Exposure runs at half
+        # strength (factor 1.2 → ~120), so assert a clear lift over the original 100.
+        assert ImageStat.Stat(out).mean[0] > 110, "replayed brightness missing"
     # plain crop (no edit) leaves the pixels alone but still crops.
     plain = a._apply_action_to_image(Image.new("RGB", (100, 100), (100, 100, 100)),
                                      crops, {})
