@@ -330,6 +330,51 @@ def resize_pixels_size_and_quality():
     assert normal.tobytes() != soft.tobytes(), "soft pass identical to normal"
 
 
+@check
+def resize_batch_gather_and_dest():
+    import tempfile
+    import shutil
+    a = app()
+    root = tempfile.mkdtemp()
+    try:
+        os.makedirs(os.path.join(root, "sub", "deep"))
+        os.makedirs(os.path.join(root, "_out"))
+        os.makedirs(os.path.join(root, "sub", "resized"))
+        for p in ("a.jpg", "b.PNG", "c.txt", "sub/d.jpeg",
+                  "sub/deep/e.webp", "_out/old.jpg", "sub/resized/x.jpg"):
+            open(os.path.join(root, *p.split("/")), "w").close()
+
+        # Top level only skips subfolders and non-images.
+        top = sorted(f for _, f in a._gather_batch_images(root, False))
+        assert top == ["a.jpg", "b.PNG"], f"top-level gather wrong: {top}"
+
+        # Recurse + skip the flat/mirror output dir → its copies aren't re-read
+        # (other folders, e.g. sub/resized, are still ordinary images here).
+        rec = sorted(f for _, f in a._gather_batch_images(
+            root, True, skip_dir=os.path.join(root, "_out")))
+        assert rec == ["a.jpg", "b.PNG", "d.jpeg", "e.webp", "x.jpg"], \
+            f"skip_dir wrong: {rec}"
+
+        # Recurse + skip the in-place sub-folder name → same, but _out kept.
+        rn = sorted(f for _, f in a._gather_batch_images(
+            root, True, skip_name="resized"))
+        assert rn == ["a.jpg", "b.PNG", "d.jpeg", "e.webp", "old.jpg"], \
+            f"skip_name wrong: {rn}"
+
+        # Destination directory per output mode.
+        sd = os.path.join(root, "sub", "deep")
+        flat = {"out_mode": "flat", "out_dir": os.path.join(root, "o"),
+                "src": root, "sub_name": "resized"}
+        mirror = dict(flat, out_mode="mirror")
+        inplace = dict(flat, out_mode="inplace")
+        assert a._batch_dest_dir(flat, sd) == os.path.join(root, "o")
+        assert a._batch_dest_dir(mirror, sd) == os.path.join(root, "o", "sub", "deep")
+        assert a._batch_dest_dir(mirror, root) == os.path.join(root, "o")
+        assert a._batch_dest_dir(inplace, sd) == os.path.join(sd, "resized")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 # ---- crop: pure geometry / formatting helpers ------------------------------
 
 @check

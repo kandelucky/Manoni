@@ -412,15 +412,28 @@ CATALOG_KA = {
     "Resized → {w}×{h}px  ·  Save to write it to a file":
         "ზომა შეიცვალა → {w}×{h}px  ·  შენახვა ფაილში ჩასაწერად",
     "Whole folder": "მთელი ფოლდერი",
-    "Resize every photo in the folder with the size above. "
-    "Originals are untouched; the copies go to a new folder.":
-        "ფოლდერის ყველა ფოტოს შეუცვლის ზომას ზემოთ მითითებულით. "
-        "ორიგინალები ხელუხლებელია; ასლები ახალ ფოლდერში შეინახება.",
+    "Resize every photo in a folder with the size above — "
+    "pick the folder, subfolders and where the copies go. "
+    "Originals are untouched.":
+        "ფოლდერის ყველა ფოტოს შეუცვლის ზომას ზემოთ მითითებულით — "
+        "აირჩიე ფოლდერი, ქვე-ფოლდერები და სად შეინახოს ასლები. "
+        "ორიგინალები ხელუხლებელია.",
     "Resize the whole folder": "მთელი ფოლდერის რესიზე",
     "Resize whole folder": "მთელი ფოლდერის რესიზე",
-    "Resize all {n} photos in the folder and save the copies.":
-        "შეუცვალე ზომა ფოლდერის ყველა ({n}) ფოტოს და შეინახე ასლები.",
+    "Source folder": "წყარო ფოლდერი",
+    "Include subfolders": "ქვე-ფოლდერების ჩათვლით",
+    "{n} images found": "ნაპოვნია {n} სურათი",
+    "Where to save": "სად შეინახოს",
+    "One folder (all together)": "ერთ ფოლდერში (ყველა ერთად)",
+    "Same subfolder structure": "იმავე ქვე-ფოლდერების სტრუქტურით",
+    "A new subfolder in each folder": "ახალი ქვე-ფოლდერი თითო ფოლდერში",
+    "Choose a source folder": "აირჩიე წყარო ფოლდერი",
+    "No images in that folder": "ამ ფოლდერში სურათი არ არის",
     "Resizing folder… {i}/{n}": "ფოლდერის რესიზე… {i}/{n}",
+    "Resizing…": "ზომის შეცვლა…",
+    "Cancelling…": "უქმდება…",
+    "Cancelled — {ok} resized, {fail} failed  ·  {dir}":
+        "შეწყდა — {ok} შეიცვალა, {fail} ჩავარდა  ·  {dir}",
     "Done — {ok} resized, {fail} failed  ·  {dir}":
         "დასრულდა — {ok} შეიცვალა, {fail} ჩავარდა  ·  {dir}",
 

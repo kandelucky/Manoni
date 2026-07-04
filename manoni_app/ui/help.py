@@ -254,7 +254,9 @@ class HelpMixin:
         self._help_row(win, "crop", "Crop",
                        "Trim and straighten; keep your own saved aspect ratios.")
         self._help_row(win, "scaling", "Resize",
-                       "Change the pixel dimensions of the photo.")
+                       "Change the pixel dimensions — one photo, or a whole "
+                       "folder (optionally its subfolders), with a progress bar "
+                       "you can cancel.")
         self._help_row(win, "frame", "Perspective",
                        "Correct keystoning and straighten converging lines.")
         self._help_row(win, "bandage", "Heal & Clone",

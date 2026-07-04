@@ -201,9 +201,17 @@ class BrowserMixin:
 
     # --- Loading overlay ("please wait" while a big folder builds) ----------
 
-    def _show_loading_overlay(self, total):
-        "Dark, input-blocking screen shown over the whole window while thumbnails load."
+    def _show_loading_overlay(self, total, sub=None, cancelable=False):
+        """Dark, input-blocking screen shown over the whole window during a long
+        job. `sub` is the caption before the counter (default: loading photos) —
+        e.g. a folder batch passes its own so the bar reads 'Resizing…'.
+
+        `cancelable` adds a Cancel button that flips self._loading_cancelled; the
+        caller checks that flag between items and stops early (the folder-load
+        overlay leaves it off — its work can't be safely half-done)."""
         self._hide_loading_overlay()          # never stack two
+        self._loading_label = sub or t("Loading photos…")
+        self._loading_cancelled = False
         dpi = getattr(self, "dpi", 1.0)
         ov = tk.Frame(self.root, bg=LOADING_BG)
         ov.place(relx=0, rely=0, relwidth=1, relheight=1)   # cover everything
@@ -230,6 +238,23 @@ class BrowserMixin:
         self._loading_fill = tk.Frame(track, bg=ACCENT)
         self._loading_fill.place(x=0, y=0, relheight=1, relwidth=0.0)
 
+        if cancelable:
+            btn = tk.Label(box, text=t("Cancel"), bg=HOVER, fg=FG, cursor="hand2",
+                           font=("Segoe UI", 10), padx=int(18 * dpi),
+                           pady=int(7 * dpi))
+            btn.pack(pady=(18, 0))
+
+            def _cancel(_e=None):
+                self._loading_cancelled = True
+                btn.configure(text=t("Cancelling…"), fg=FG_DIM, cursor="")
+                btn.unbind("<Button-1>")          # one-shot; ignore further clicks
+
+            btn.bind("<Button-1>", _cancel)
+            btn.bind("<Enter>", lambda e: btn.configure(bg=ACCENT)
+                     if not self._loading_cancelled else None)
+            btn.bind("<Leave>", lambda e: btn.configure(bg=HOVER)
+                     if not self._loading_cancelled else None)
+
         self._update_loading_overlay(0, total)
         self._grab_loading()
 
@@ -253,8 +278,8 @@ class BrowserMixin:
         frac = 0.0 if total <= 0 else max(0.0, min(1.0, done / total))
         try:
             self._loading_fill.place_configure(relwidth=frac)
-            self._loading_sub.configure(
-                text=f"{t('Loading photos…')}   {done} / {total}")
+            label = getattr(self, "_loading_label", None) or t("Loading photos…")
+            self._loading_sub.configure(text=f"{label}   {done} / {total}")
         except tk.TclError:
             pass
 

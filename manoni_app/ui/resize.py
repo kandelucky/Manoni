@@ -24,12 +24,13 @@ is identical to when it lived directly on the class.
 
 import os
 import tkinter as tk
+import tkinter.filedialog as tkfd
 
 from PIL import Image, ImageFilter
 
 import tintkit
 
-from ..config import EDIT_PANEL_W, EDIT_PAD
+from ..config import EDIT_PANEL_W, EDIT_PAD, SUPPORTED
 from ..i18n import t
 
 
@@ -176,8 +177,9 @@ class ResizeMixin:
 
         # --- Whole-folder batch (same size rule applied to every photo) ---
         self._resize_group(f, t("Whole folder"))
-        self._tw(tk.Label(f, text=t("Resize every photo in the folder with the size above. "
-                           "Originals are untouched; the copies go to a new folder."),
+        self._tw(tk.Label(f, text=t("Resize every photo in a folder with the size above — "
+                           "pick the folder, subfolders and where the copies go. "
+                           "Originals are untouched."),
                  anchor="w", justify="left", font=("Segoe UI", 8),
                  wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
                  bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
@@ -550,52 +552,287 @@ class ResizeMixin:
             pass
         return extra
 
+    def _gather_batch_images(self, src, recurse, skip_name=None, skip_dir=None):
+        """List (dirpath, filename) for every supported image under `src`.
+
+        recurse   → walk the whole tree; else only `src`'s top level.
+        skip_name → prune any sub-folder with this name (the in-place output
+                    sub-folder, so a re-run never re-processes its own copies).
+        skip_dir  → prune this one absolute directory subtree (the flat/mirror
+                    output folder when it sits inside the source)."""
+        out = []
+        skip_dir = os.path.normcase(os.path.abspath(skip_dir)) if skip_dir else None
+        if not src or not os.path.isdir(src):
+            return out
+        if recurse:
+            for dpath, dnames, fnames in os.walk(src):
+                dnames[:] = [d for d in dnames
+                             if d != skip_name and
+                             (skip_dir is None or
+                              os.path.normcase(os.path.abspath(os.path.join(dpath, d)))
+                              != skip_dir)]
+                for f in sorted(fnames):
+                    if os.path.splitext(f)[1].lower() in SUPPORTED:
+                        out.append((dpath, f))
+        else:
+            try:
+                for f in sorted(os.listdir(src)):
+                    p = os.path.join(src, f)
+                    if os.path.isfile(p) and os.path.splitext(f)[1].lower() in SUPPORTED:
+                        out.append((src, f))
+            except OSError:
+                pass
+        return out
+
+    @staticmethod
+    def _batch_dest_dir(cfg, src_dir):
+        "Output directory for one source file living in `src_dir`, per the mode."
+        mode = cfg["out_mode"]
+        if mode == "inplace":                         # a sub-folder beside each photo
+            return os.path.join(src_dir, cfg["sub_name"])
+        if mode == "mirror":                          # rebuild the tree under out_dir
+            rel = os.path.relpath(src_dir, cfg["src"])
+            return cfg["out_dir"] if rel == "." else os.path.join(cfg["out_dir"], rel)
+        return cfg["out_dir"]                          # flat — everything together
+
     def _resize_folder(self):
-        "Resize every photo in the open folder by the current rule, saving copies."
-        if not self.files or not self.folder:
-            self.toast(t("Open a folder first"))
-            return
+        "Resize images in a chosen folder by the current size rule, saving copies."
         if not self._resize_ready():
             self.toast(t("Enter a valid size"))
             return
-        cfg = self._ask_batch_config(
-            len(self.files), title=t("Resize whole folder"),
-            intro=t("Resize all {n} photos in the folder and save the copies.").format(
-                n=len(self.files)),
-            default_dir=os.path.join(self.folder, "_resized"))
+        cfg = self._ask_resize_batch_config(self.folder or "")
         if cfg is None:
             return
-        try:
-            os.makedirs(cfg["dir"], exist_ok=True)
-        except OSError:
-            self.toast(t("Could not create the output folder"))
+        # Never re-read our own output: prune the in-place sub-folder, and the
+        # flat/mirror output folder when it lives inside the source.
+        skip_name = cfg["sub_name"] if cfg["out_mode"] == "inplace" else None
+        skip_dir = None
+        if cfg["out_mode"] != "inplace":
+            od = os.path.normcase(os.path.abspath(cfg["out_dir"]))
+            sd = os.path.normcase(os.path.abspath(cfg["src"]))
+            if od.startswith(sd + os.sep) or od == sd:
+                skip_dir = cfg["out_dir"]
+        images = self._gather_batch_images(cfg["src"], cfg["recurse"],
+                                           skip_name=skip_name, skip_dir=skip_dir)
+        if not images:
+            self.toast(t("No images in that folder"))
             return
         from ..storage import unique_path
         ext = self.FMT_EXT[cfg["fmt"]]
-        total, ok, fail = len(self.files), 0, 0
-        for i, fname in enumerate(self.files):
-            self.toast(t("Resizing folder… {i}/{n}").format(i=i + 1, n=total))
-            self.root.update()                        # show progress, stay responsive
-            try:
-                with Image.open(os.path.join(self.folder, fname)) as im:
-                    im.load()
-                    target = self._resize_target_for(*im.size)
-                    if target is None:                # value went blank mid-run
-                        fail += 1
-                        continue
-                    out = self._resize_pixels(im, target)
-                    extra = self._batch_export_meta(im)
-                # Don't let two sources (a.jpg + a.png) or a re-run overwrite each
-                # other — number a clashing name instead.
-                dest = unique_path(os.path.join(cfg["dir"],
-                                                os.path.splitext(fname)[0] + ext))
-                if cfg["fmt"] == "PNG":
-                    out.save(dest, "PNG", **extra)
-                else:
-                    out.convert("RGB").save(dest, cfg["fmt"],
-                                            quality=int(cfg["quality"]), **extra)
-                ok += 1
-            except Exception:
-                fail += 1
-        self.toast(t("Done — {ok} resized, {fail} failed  ·  {dir}").format(
-            ok=ok, fail=fail, dir=os.path.basename(cfg["dir"]) or cfg["dir"]))
+        total, ok, fail = len(images), 0, 0
+        # Blocking "please wait" screen with a filling bar + i/n counter — a long
+        # batch shouldn't leave the window looking frozen or half-drawn. Cancel
+        # stops between photos (each already-written copy is kept).
+        self._show_loading_overlay(total, sub=t("Resizing…"), cancelable=True)
+        self.root.update()
+        cancelled = False
+        try:
+            for i, (dpath, fname) in enumerate(images):
+                self._update_loading_overlay(i, total)
+                self.root.update()                    # repaint the bar, stay alive
+                if getattr(self, "_loading_cancelled", False):
+                    cancelled = True
+                    break
+                try:
+                    with Image.open(os.path.join(dpath, fname)) as im:
+                        im.load()
+                        target = self._resize_target_for(*im.size)
+                        if target is None:            # value went blank mid-run
+                            fail += 1
+                            continue
+                        out = self._resize_pixels(im, target)
+                        extra = self._batch_export_meta(im)
+                    dest_dir = self._batch_dest_dir(cfg, dpath)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    # Don't let two sources (a.jpg + a.png) or a re-run overwrite
+                    # each other — number a clashing name instead.
+                    dest = unique_path(os.path.join(dest_dir,
+                                                    os.path.splitext(fname)[0] + ext))
+                    if cfg["fmt"] == "PNG":
+                        out.save(dest, "PNG", **extra)
+                    else:
+                        out.convert("RGB").save(dest, cfg["fmt"],
+                                                quality=int(cfg["quality"]), **extra)
+                    ok += 1
+                except Exception:
+                    fail += 1
+        finally:
+            self._hide_loading_overlay()              # always tear the screen down
+        where = cfg["sub_name"] if cfg["out_mode"] == "inplace" else cfg["out_dir"]
+        short = os.path.basename(where.rstrip("\\/")) or where
+        if cancelled:
+            self.toast(t("Cancelled — {ok} resized, {fail} failed  ·  {dir}").format(
+                ok=ok, fail=fail, dir=short))
+        else:
+            self.toast(t("Done — {ok} resized, {fail} failed  ·  {dir}").format(
+                ok=ok, fail=fail, dir=short))
+
+    # --- The whole-folder resize dialog -------------------------------------
+
+    def _ask_resize_batch_config(self, start_dir):
+        """Dialog for the whole-folder resize: source folder (+ sub-folders),
+        output layout (flat / mirror tree / in-place sub-folder), format +
+        quality. Returns a config dict, or None on cancel."""
+        seed = self.quick_save_cfg or self.last_save or {}
+        st = {"src": start_dir, "recurse": False, "out_mode": "flat",
+              "out_dir": os.path.join(start_dir, "_resized") if start_dir else "_resized",
+              "sub_name": "resized",
+              "fmt": seed.get("fmt") or "JPEG",
+              "quality": int(seed.get("quality", 95)), "ok": False}
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(t("Resize whole folder"))
+        self._tw(dlg, bg="bg")
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+        wrap = self._tw(tk.Frame(dlg, padx=22, pady=16), bg="bg")
+        wrap.pack(fill="both", expand=True)
+
+        def heading(text):
+            self._tw(tk.Label(wrap, text=text, font=("Segoe UI", 8)),
+                     bg="bg", fg="fg_dim").pack(anchor="w", pady=(10, 2))
+
+        # --- Source folder + browse + a live image count ---
+        heading(t("Source folder"))
+        src_var = tk.StringVar(value=st["src"])
+
+        def pick_src():
+            dlg.grab_release()
+            d = tkfd.askdirectory(parent=dlg, title=t("Choose a folder"),
+                                  initialdir=src_var.get() or start_dir or None)
+            dlg.grab_set()
+            if d:
+                src_var.set(d)
+                recount()
+
+        frow = self._tw(tk.Frame(wrap), bg="bg"); frow.pack(fill="x")
+        tintkit.Button(frow, self.theme, t("Select"), role="neutral",
+                       variant="outline", command=pick_src, bg="bg").pack(
+                           side="right", padx=(6, 0))
+        src_field = tintkit.TextField(frow, self.theme, bg="bg")
+        src_field.entry.configure(textvariable=src_var)
+        src_field.pack(side="left", fill="x", expand=True)
+
+        count_lbl = self._tw(tk.Label(wrap, text="", anchor="w",
+                             font=("Segoe UI", 8)), bg="bg", fg="accent")
+        count_lbl.pack(fill="x", pady=(4, 0))
+
+        def recount():
+            src = src_var.get().strip()
+            n = len(self._gather_batch_images(src, recurse_chk.state == "on"))
+            count_lbl.configure(text=t("{n} images found").format(n=n))
+
+        recurse_chk = tintkit.Checkbox(
+            wrap, self.theme, t("Include subfolders"), state="off",
+            command=lambda _s: recount(), bg="bg")
+        recurse_chk.pack(anchor="w", pady=(8, 0))
+        recount()
+
+        # --- Where to save: flat / mirror tree / in-place sub-folder ---
+        heading(t("Where to save"))
+        grp = tintkit.RadioGroup(self.theme, command=lambda v: set_mode(v))
+        grp.add(wrap, t("One folder (all together)"), "flat",
+                selected=True, bg="bg").pack(anchor="w", pady=2)
+        grp.add(wrap, t("Same subfolder structure"), "mirror", bg="bg").pack(
+            anchor="w", pady=2)
+        grp.add(wrap, t("A new subfolder in each folder"), "inplace", bg="bg").pack(
+            anchor="w", pady=2)
+
+        # A host that swaps between the output-folder picker and the name field.
+        ctx_host = self._tw(tk.Frame(wrap), bg="bg"); ctx_host.pack(fill="x")
+
+        outdir_box = self._tw(tk.Frame(ctx_host), bg="bg")
+        odir_var = tk.StringVar(value=st["out_dir"])
+
+        def pick_out():
+            dlg.grab_release()
+            d = tkfd.askdirectory(parent=dlg, title=t("Choose a folder"),
+                                  initialdir=odir_var.get() or src_var.get() or None)
+            dlg.grab_set()
+            if d:
+                odir_var.set(d)
+        orow = self._tw(tk.Frame(outdir_box), bg="bg"); orow.pack(fill="x", pady=(6, 0))
+        tintkit.Button(orow, self.theme, t("Select"), role="neutral",
+                       variant="outline", command=pick_out, bg="bg").pack(
+                           side="right", padx=(6, 0))
+        odir_field = tintkit.TextField(orow, self.theme, bg="bg")
+        odir_field.entry.configure(textvariable=odir_var)
+        odir_field.pack(side="left", fill="x", expand=True)
+
+        subname_box = self._tw(tk.Frame(ctx_host), bg="bg")
+        sub_var = tk.StringVar(value=st["sub_name"])
+        self._tw(tk.Label(subname_box, text=t("Subfolder name"),
+                 font=("Segoe UI", 8)), bg="bg", fg="fg_dim").pack(
+                     anchor="w", pady=(6, 2))
+        sub_field = tintkit.TextField(subname_box, self.theme, bg="bg")
+        sub_field.entry.configure(textvariable=sub_var)
+        sub_field.pack(fill="x")
+
+        def set_mode(v):
+            st["out_mode"] = v
+            outdir_box.pack_forget(); subname_box.pack_forget()
+            (subname_box if v == "inplace" else outdir_box).pack(fill="x")
+        set_mode("flat")
+
+        # --- Format (drives quality visibility) + Quality ---
+        q_opts = (80, 90, 95, 100)
+        st["quality"] = min(q_opts, key=lambda q: abs(q - st["quality"]))
+        heading(t("Format"))
+        fmt_row = self._tw(tk.Frame(wrap), bg="bg"); fmt_row.pack(anchor="w")
+        fmt_opts = ("JPEG", "PNG", "WEBP")
+
+        qbox = self._tw(tk.Frame(wrap), bg="bg")
+        self._tw(tk.Label(qbox, text=t("Quality"), font=("Segoe UI", 8)),
+                 bg="bg", fg="fg_dim").pack(anchor="w", pady=(10, 2))
+
+        def pick_q(i, _label):
+            st["quality"] = q_opts[i]
+        tintkit.SegmentedTabs(qbox, self.theme, [str(q) for q in q_opts],
+                              selected=q_opts.index(st["quality"]),
+                              command=pick_q, bg="bg").pack(anchor="w")
+
+        def apply_fmt(f):
+            st["fmt"] = f
+            if f == "PNG":
+                qbox.pack_forget()                 # PNG is lossless — no quality
+            else:
+                qbox.pack(fill="x", anchor="w", after=fmt_row)
+        tintkit.SegmentedTabs(fmt_row, self.theme, list(fmt_opts),
+                              selected=fmt_opts.index(st["fmt"]),
+                              command=lambda i, label: apply_fmt(label),
+                              bg="bg").pack(anchor="w")
+        apply_fmt(st["fmt"])                        # initial quality visibility
+
+        # --- Confirm / cancel ---
+        def confirm():
+            src = src_var.get().strip()
+            if not src or not os.path.isdir(src):
+                self.toast(t("Choose a source folder"))
+                return
+            st["src"] = src
+            st["recurse"] = recurse_chk.state == "on"
+            if st["out_mode"] == "inplace":
+                st["sub_name"] = sub_var.get().strip() or "resized"
+            else:
+                st["out_dir"] = odir_var.get().strip() or \
+                    (os.path.join(src, "_resized"))
+            st["ok"] = True
+            dlg.destroy()
+
+        brow = self._tw(tk.Frame(wrap), bg="bg"); brow.pack(anchor="e", pady=(16, 0))
+        tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
+                       variant="outline", command=dlg.destroy, bg="bg").pack(
+                           side="right", padx=(8, 0))
+        tintkit.Button(brow, self.theme, t("Resize"), role="primary",
+                       variant="filled", command=confirm, bg="bg").pack(
+                           side="right")
+
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.bind("<Return>", lambda e: confirm())
+        self._place_filter_dialog(dlg)
+        if not st["ok"]:
+            return None
+        return {"src": st["src"], "recurse": st["recurse"],
+                "out_mode": st["out_mode"], "out_dir": st["out_dir"],
+                "sub_name": st["sub_name"], "fmt": st["fmt"],
+                "quality": st["quality"]}
