@@ -403,6 +403,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._undo_stack = []
         self._redo_stack = []
         self._edit_before = None  # edit-state snapshot taken when a drag begins
+        self._filter_anchor = None  # edit state from before the current run of
+                                     # filter-trying started (see "Remove filter")
 
         self._init_scrollbar_style()
         # The ttk scrollbar style is global (not per-widget), so re-run it on a

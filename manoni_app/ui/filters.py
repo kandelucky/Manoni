@@ -2,15 +2,18 @@
 
 A "filter" here is NOT a baked colour table — it is a named snapshot of the
 edit factors (temperature, contrast, vignette, …). Creating one captures the
-current sliders; applying one (from the horizontal strip below the editor)
-just plays those factors back onto the open photo.
+current sliders; applying one just plays those factors back onto the open
+photo (replacing whatever was on the sliders, not blending with it).
 
 Two parts live here. The MANAGER panel (in the edit panel's "filters" section)
-offers four actions: create (from the current edit), edit (rename / refresh /
-delete), import and export — it never lists the filters as clickable looks. The
-clickable looks are the PREVIEW STRIP (_build_filter_strip): a horizontal
-filmstrip under the preview that renders each saved filter onto a thumbnail of
-the current photo, so a click applies the look you can already see.
+offers Create, Remove filter (undo a run of filter-trying back to whatever was
+there before) and Import, plus the grouped "All filters" list: each group/filter
+row is clickable (applies the look) and carries a … menu (rename / move / delete
+/ export-group, plus Move up/down for a custom group) and, for a filter, a grip
+to drag-reorder it within its group. The PREVIEW STRIP (_build_filter_strip) is
+a second, optional way to browse: a horizontal filmstrip under the preview that
+renders each saved filter onto a thumbnail of the current photo (toggled in
+Settings; the manager's list works with or without it).
 
 Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
@@ -254,7 +257,8 @@ class FiltersMixin:
     # --- The manager panel (shown in the edit panel's "filters" section) ----
 
     def _build_filters_section(self, parent):
-        "Filter MANAGER: create / edit / import / export. No filter list here."
+        "Filter MANAGER: Create / Remove filter / Import actions, then the"
+        " clickable grouped list (see _build_filter_list)."
         f = self._tw(tk.Frame(parent), bg="bar")
 
         self._tw(tk.Label(f, text=t("Save the current edit as a filter, or add ready-made filters from a file."),
@@ -270,9 +274,10 @@ class FiltersMixin:
         self._filter_action(f, "plus",         t("Create filter"),
                             self._filter_create,
                             t("Saves the current slider values as a filter"))
-        self._filter_action(f, "pencil",       t("Edit"),
-                            self._filter_edit,
-                            t("Rename / refresh / delete saved filters"))
+        self._filter_action(f, "eraser",       t("Remove filter"),
+                            self._filter_remove,
+                            t("Undoes whatever filter(s) you've tried, back to"
+                              " before the first one"))
 
         self._tw(tk.Frame(f, height=1), bg="divider").pack(
             fill="x", padx=EDIT_PAD, pady=(8, 8))
@@ -280,9 +285,6 @@ class FiltersMixin:
         self._filter_action(f, "folder-input", t("Import"),
                             self._filter_import,
                             t("Load filters from a .json file"))
-        self._filter_action(f, "share-2",      t("Export"),
-                            self._filter_export,
-                            t("Save filters to a .json file to share"))
 
         self._tw(tk.Frame(f, height=1), bg="divider").pack(
             fill="x", padx=EDIT_PAD, pady=(8, 6))
@@ -342,6 +344,7 @@ class FiltersMixin:
 
         self.filter_list_holder = holder
         self._filter_list_rows = []     # [{frame,label,vals,active}] for the repaint
+        self._drag = None               # active grip-drag, if any (see _drag_start)
         self._refresh_filter_list()
 
     def _refresh_filter_list(self):
@@ -353,6 +356,7 @@ class FiltersMixin:
         for w in holder.winfo_children():
             w.destroy()
         self._filter_list_rows = []
+        self._filter_rows_by_group = {} # group name -> [{key,widget}], per-group band
         for grp in self._strip_groups():
             self._add_flist_group(holder, grp)
 
@@ -384,7 +388,7 @@ class FiltersMixin:
         if not grp["collapsed"]:
             for label, vals in grp["items"]:
                 fl = None if builtin else self._filter_by_name(label)
-                self._add_flist_row(parent, label, vals, fl)
+                self._add_flist_row(parent, label, vals, fl, grp["id"])
 
     def _filter_by_name(self, name):
         "The stored user filter dict with this name, or None (built-ins aren't stored)."
@@ -393,19 +397,23 @@ class FiltersMixin:
                 return fl
         return None
 
-    def _add_flist_row(self, parent, label, vals, fl=None):
-        "One filter row: an indented name (+ … menu for user filters, not built-ins);"
-        " click applies the look onto the photo."
+    def _add_flist_row(self, parent, label, vals, fl=None, group_id=None):
+        "One filter row: a grip + indented name (+ … menu for user filters, not"
+        " built-ins); click applies the look onto the photo."
         active = self._filter_active(vals)
         bar = self.theme["bar"]
         row = tk.Frame(parent, bg=bar, cursor="hand2")
         row.pack(fill="x")
         if fl is not None:
+            self._grip(row, fl, group_id)
+            self._filter_rows_by_group.setdefault(group_id, []).append(
+                {"key": fl, "widget": row})
             self._kebab(row, lambda anc, f=fl: self._filter_menu(anc, f, lambda: None))
         tx = tk.Label(row, text=label, bg=bar,
                       fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
-        tx.pack(side="left", fill="x", expand=True, padx=(26, 6), pady=4)
+        tx.pack(side="left", fill="x", expand=True,
+                padx=(4 if fl is not None else 26, 6), pady=4)
 
         cell = {"frame": row, "label": tx, "vals": vals, "active": active}
         self._filter_list_rows.append(cell)
@@ -663,9 +671,13 @@ class FiltersMixin:
 
     def _apply_filter_values(self, vals):
         "Play a filter's factors (FILTER_KEYS + auto mode) onto the photo, undoably."
+        " The first application in a run remembers the pre-filter state, so trying"
+        " several filters in a row can all be undone at once via 'Remove filter'."
         if self.current_pil is None:
             return
         before = self._edit_state()
+        if self._filter_anchor is None:
+            self._filter_anchor = before
         for k in self.FILTER_KEYS:
             v = float(vals.get(k, self._slider_neutral(k)))
             setattr(self, k, v)
@@ -678,8 +690,32 @@ class FiltersMixin:
         self._refresh_auto_buttons()
         self._edits_saved = False
         self._render_preview()
-        self._record_edit(before)
+        self._record_edit(before, is_filter=True)
         self._repaint_filter_strip()
+
+    def _filter_remove(self):
+        "Undo whatever effect trying filters had this run — back to the state from"
+        " right before the first one, no matter how many were tried since."
+        if self.current_pil is None or self._filter_anchor is None:
+            self.toast(t("No filter to remove"))
+            return
+        before = self._edit_state()
+        anchor = self._filter_anchor
+        for k in self.FILTER_KEYS:
+            v = float(anchor.get(k, self._slider_neutral(k)))
+            setattr(self, k, v)
+            s = self.sliders.get(k)
+            if s is not None:
+                s.set(round(v * 100))
+        auto = anchor.get("auto_mode")
+        self.auto_mode = auto if auto in self.AUTO_MODES else None
+        self._recompute_auto()
+        self._refresh_auto_buttons()
+        self._edits_saved = False
+        self._render_preview()
+        self._record_edit(before)      # is_filter=False → also clears the anchor
+        self._repaint_filter_strip()
+        self.toast(t("Filter removed"))
 
     # --- Create -------------------------------------------------------------
 
@@ -700,103 +736,6 @@ class FiltersMixin:
         self._refresh_filter_strip()
         self.toast(t("Filter saved: {name}").format(name=name))
 
-    # --- Edit (rename / refresh / delete) -----------------------------------
-
-    def _filter_edit(self):
-        "Open the grouped manager (collapsible groups; … menu on each group/filter)."
-        self._open_filter_manager()
-
-    def _open_filter_manager(self):
-        "The modeless grouped manager. Modeless so the user can still nudge the"
-        " sliders (e.g. before 'Refresh from current edit') with it open."
-        existing = getattr(self, "_fmgr_dlg", None)
-        if existing is not None and existing.winfo_exists():
-            existing.lift(); existing.focus_force(); return
-        dlg, body = self._filter_dialog(t("Edit filters"))
-        self._fmgr_dlg = dlg
-
-        def redraw():
-            self._close_filter_popup()
-            for w in body.winfo_children():
-                w.destroy()
-            # Top action: start a new (empty) group.
-            self._filter_action_plain(body, "folder-plus", t("New group"),
-                                      lambda: self._do_new_group(redraw))
-            tk.Frame(body, bg=self.theme["divider"], height=1).pack(
-                fill="x", pady=(6, 2))
-            # 'Standard' (built-ins, read-only) first, then the user's groups.
-            self._manager_group(body, self.GROUP_STANDARD, redraw)
-            for g in list(self.filter_groups):
-                self._manager_group(body, g["name"], redraw)
-
-        redraw()
-        # The manager is MODELESS, so it can outlive a dark<->light switch —
-        # rebuild its rows in the new scheme, and stop listening once it closes.
-        self.theme.subscribe(redraw)
-
-        def _drop(e, d=dlg):
-            if e.widget is d:
-                self.theme.unsubscribe(redraw)
-        dlg.bind("<Destroy>", _drop, add="+")
-        self._place_modeless(dlg)
-
-    def _manager_group(self, parent, name, redraw):
-        "One group section: a foldable header (with a … menu) + its filter rows."
-        builtin = (name == self.GROUP_STANDARD)
-        collapsed = self._group_collapsed(name)
-        if builtin:
-            rows = [(t(n), None) for n, _ in self.BUILTIN_FILTERS]
-        else:
-            rows = [(fl["name"], fl) for fl in self.user_filters
-                    if fl["group"] == name]
-
-        bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
-        header = tk.Frame(parent, bg=bar, cursor="hand2")
-        header.pack(fill="x", pady=(8, 0))
-        # The … menu sits at the right; pack it first so the title can expand.
-        self._kebab(header, lambda anc, gn=name: self._group_menu(anc, gn, redraw),
-                    icon_name="folder-cog", size=13)
-        chev = self.icon("chevron-right" if collapsed else "chevron-down", size=13)
-        hcells = [header]
-        if chev is not None:
-            ic = tk.Label(header, image=chev, bg=bar)
-            ic.pack(side="left", padx=(8, 4))
-            hcells.append(ic)
-        title = tk.Label(header,
-                         text=f"{self._group_display(name)}  ({len(rows)})",
-                         bg=bar, fg=fg, anchor="w", font=("Segoe UI", 9, "bold"))
-        title.pack(side="left", fill="x", expand=True, pady=6)
-        hcells.append(title)
-        for w in hcells:
-            w.bind("<Button-1>", lambda e, gn=name: self._manager_toggle(gn, redraw))
-
-        if collapsed:
-            return
-        if not rows:
-            tk.Label(parent, text=t("No filters in this group"), bg=bar,
-                     fg=fg_dim, font=("Segoe UI", 8), anchor="w") \
-                .pack(fill="x", padx=(32, 8), pady=(1, 1))
-            return
-        for label, fl in rows:
-            self._manager_filter_row(parent, label, fl, redraw, builtin)
-
-    def _manager_toggle(self, name, redraw):
-        "Fold / unfold a group from the manager (keeps the strip in sync)."
-        self._set_group_collapsed(name, not self._group_collapsed(name))
-        self._refresh_filter_strip()
-        redraw()
-
-    def _manager_filter_row(self, parent, label, fl, redraw, builtin):
-        "One filter row inside a group: indented name + (user filters) a … menu."
-        row = tk.Frame(parent, bg=self.theme["bar"])
-        row.pack(fill="x")
-        if not builtin:
-            self._kebab(row, lambda anc, f=fl: self._filter_menu(anc, f, redraw))
-        tk.Label(row, text=label, bg=self.theme["bar"],
-                 fg=self.theme["fg"] if not builtin else self.theme["fg_dim"],
-                 anchor="w", font=("Segoe UI", 9)).pack(
-            side="left", fill="x", expand=True, padx=(32, 6), pady=5)
-
     def _kebab(self, parent, open_menu, icon_name="ellipsis", size=15):
         "A small '…' button on the right of a row that opens its popup menu."
         " Groups use 'folder-cog' (smaller, since it reads heavier than the plain"
@@ -814,20 +753,138 @@ class FiltersMixin:
         b.bind("<Button-1>", lambda e, w=b: open_menu(w))
         return b
 
+    # --- Grip drag-to-reorder (filters only, panel list) ---------------------
+    # A grip on a filter row's left drags it among its own group's filters
+    # (built-ins have no grip; cross-group moves are still "Move to group").
+    # Groups reorder via the … menu's Move up/down instead — a drag grip there
+    # looked identical to a filter's, so the two were hard to tell apart.
+    # No live reflow while dragging — just an accent drop-line — the actual move
+    # (list splice + save + rebuild) happens once, on release.
+
+    def _grip(self, parent, key, band_id):
+        "A drag handle; `band_id` is the group name this filter reorders within."
+        img = self.icon("grip-vertical", size=13)
+        if img is not None:
+            g = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="fleur")
+        else:
+            g = tk.Label(parent, text="::", bg=self.theme["bar"],
+                         fg=self.theme["fg_dim"], cursor="fleur",
+                         font=("Segoe UI", 9, "bold"))
+        g.pack(side="left", padx=(6, 4))
+        g.bind("<ButtonPress-1>",
+               lambda e, key=key, b=band_id: self._drag_start(e, key, b))
+        g.bind("<B1-Motion>", self._drag_motion)
+        g.bind("<ButtonRelease-1>", self._drag_release)
+        return g
+
+    def _drag_start(self, e, key, band_id):
+        "Arm a drag: remember the dragged filter's band + starting index."
+        band = self._filter_rows_by_group.get(band_id, [])
+        idx = next((i for i, r in enumerate(band) if r["key"] is key), None)
+        if idx is None or len(band) < 2:
+            self._drag = None
+            return
+        line = tk.Frame(self.filter_list_holder, bg=self.theme["accent"], height=2)
+        self._drag = {"key": key, "band_id": band_id,
+                      "band": band, "start": idx, "target": idx, "line": line}
+
+    def _drag_motion(self, _e):
+        "Track the pointer; show an accent drop-line at the prospective landing."
+        d = self._drag
+        if d is None:
+            return
+        band = d["band"]
+        idx = len(band)
+        for i, r in enumerate(band):
+            w = r["widget"]
+            if _e.y_root < w.winfo_rooty() + w.winfo_height() // 2:
+                idx = i
+                break
+        d["target"] = idx
+        if idx < len(band):
+            y = band[idx]["widget"].winfo_y()
+        else:
+            last = band[-1]["widget"]
+            y = last.winfo_y() + last.winfo_height()
+        d["line"].place(x=0, y=max(0, y - 1), relwidth=1.0, height=2)
+
+    def _drag_release(self, _e):
+        "Commit the reorder (if the drop landed somewhere new) and clean up."
+        d = self._drag
+        self._drag = None
+        if d is None:
+            return
+        d["line"].destroy()
+        start, target = d["start"], d["target"]
+        if target > start:
+            target -= 1      # removing the dragged row shifts later indices down
+        if target == start:
+            return
+        self._reorder_filter(d["key"], d["band_id"], target)
+
+    def _reorder_group(self, gid, target_idx):
+        "Move a custom group to `target_idx` among the other custom groups"
+        " ('My filters' stays first, 'Others' stays last)."
+        reorderable = [g for g in self.filter_groups
+                       if g["name"] not in self.RESERVED_GROUPS]
+        moved = next(g for g in reorderable if g["name"] == gid)
+        reorderable = [g for g in reorderable if g is not moved]
+        reorderable.insert(target_idx, moved)
+        mine = [g for g in self.filter_groups if g["name"] == self.GROUP_MINE]
+        others = [g for g in self.filter_groups if g["name"] == self.GROUP_OTHERS]
+        self.filter_groups = mine + reorderable + others
+        self._save_filters()
+        self._refresh_filter_strip()
+
+    def _reorder_filter(self, fl, group_name, target_idx):
+        "Move a filter to `target_idx` among its own group's filters."
+        siblings = [f for f in self.user_filters
+                    if f["group"] == group_name and f is not fl]
+        others = [f for f in self.user_filters if f["group"] != group_name]
+        siblings.insert(target_idx, fl)
+        self.user_filters = others + siblings
+        self._save_filters()
+        self._refresh_filter_strip()
+
     # --- The … menus (group / filter / move) --------------------------------
 
     def _group_menu(self, anchor, name, redraw):
-        "The … menu for a group. Reserved groups expose Export only."
+        "The … menu for a group. Reserved groups expose Export only; a custom"
+        " group also gets Move up/down (omitted at either end of the custom band)."
         export = ("share-2", t("Export group"), lambda: self._export_group(name))
         if name in self.RESERVED_GROUPS:
             specs = [export]
         else:
+            custom = [g["name"] for g in self.filter_groups
+                      if g["name"] not in self.RESERVED_GROUPS]
+            idx = custom.index(name)
             specs = [("pencil", t("Rename group"),
-                      lambda: self._do_rename_group(name, redraw)),
-                     export, ("sep",),
-                     ("trash-2", t("Delete group"),
-                      lambda: self._do_delete_group(name, redraw))]
+                      lambda: self._do_rename_group(name, redraw)), export]
+            moves = []
+            if idx > 0:
+                moves.append(("chevron-up", t("Move up"),
+                              lambda: self._do_move_group(name, -1, redraw)))
+            if idx < len(custom) - 1:
+                moves.append(("chevron-down", t("Move down"),
+                              lambda: self._do_move_group(name, 1, redraw)))
+            if moves:
+                specs.append(("sep",))
+                specs.extend(moves)
+            specs.append(("sep",))
+            specs.append(("trash-2", t("Delete group"),
+                          lambda: self._do_delete_group(name, redraw)))
         self._popup_menu(anchor, specs)
+
+    def _do_move_group(self, name, direction, redraw):
+        "Swap a custom group with its neighbor (direction -1 up / +1 down); persist."
+        custom_names = [g["name"] for g in self.filter_groups
+                        if g["name"] not in self.RESERVED_GROUPS]
+        idx = custom_names.index(name)
+        j = idx + direction
+        if not (0 <= j < len(custom_names)):
+            return
+        self._reorder_group(name, j)
+        redraw()
 
     def _filter_menu(self, anchor, fl, redraw):
         "The … menu for one user filter: rename / move / refresh / delete."
@@ -855,17 +912,6 @@ class FiltersMixin:
         self._popup_menu(anchor, specs)
 
     # --- Group / filter operations (called from the menus) ------------------
-
-    def _do_new_group(self, redraw):
-        name = self._ask_text(t("New group"), t("Group name"))
-        if not name:
-            return
-        self.filter_groups.append({"name": self._unique_group_name(name),
-                                   "collapsed": False})
-        self._normalize_groups()
-        self._save_filters()
-        self._refresh_filter_strip()
-        redraw()
 
     def _do_rename_group(self, name, redraw):
         g = self._group(name)
@@ -1041,16 +1087,6 @@ class FiltersMixin:
         self._place_filter_dialog(dlg)
         return result["ok"]
 
-    def _place_modeless(self, dlg):
-        "Center a NON-modal dialog over the main window (no grab / no wait)."
-        dlg.update_idletasks()
-        dw, dh = dlg.winfo_width(), dlg.winfo_height()
-        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-        rw, rh = self.root.winfo_width(), self.root.winfo_height()
-        dlg.geometry(f"+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
-        dlg.lift()
-        dlg.focus_force()
-
     # --- Import / Export ----------------------------------------------------
 
     def _filter_import(self):
@@ -1081,27 +1117,6 @@ class FiltersMixin:
             self.toast(t("Added {n} filter(s)").format(n=added))
         else:
             self.toast(t("No filters found in the file"))
-
-    def _filter_export(self):
-        "Pick a filter to export, or export all into one file."
-        if not self.user_filters:
-            self.toast(t("No filters saved yet"))
-            return
-        dlg, body = self._filter_dialog(t("Export filters"))
-
-        if len(self.user_filters) > 1:
-            self._filter_action_plain(
-                body, "folder-output", t("All in one file"),
-                lambda: (self._export_filters(self.user_filters), dlg.destroy()))
-            tk.Frame(body, bg=self.theme["divider"], height=1).pack(
-                fill="x", pady=(6, 6))
-
-        for fl in self.user_filters:
-            self._filter_action_plain(
-                body, "share-2", fl["name"],
-                lambda f=fl: (self._export_filters([f]), dlg.destroy()))
-
-        self._place_filter_dialog(dlg)
 
     def _export_filters(self, filters):
         "Write the given filters to a .json file the user chooses."

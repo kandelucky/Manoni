@@ -186,6 +186,7 @@ CATALOG_KA = {
     "Clear all": "გასუფთავება",
     "Reset all sliders": "ყველა სლაიდერის განულება",
     "Restore original": "დააბრუნე ორიგინალი",
+    "View original": "ორიგინალის ნახვა",
     "Discard every edit and reload the original photo":
         "ყველა ცვლილება უქმდება და ორიგინალი ფოტო თავიდან იტვირთება",
     "Restore the original?": "დავაბრუნო ორიგინალი?",

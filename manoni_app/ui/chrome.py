@@ -16,10 +16,9 @@ import tkinter.filedialog as tkfd
 from PIL import Image, ImageTk
 
 # Live theming: chrome now reads colours from self.theme (dark<->light) via the
-# `_tw` helper, so only the peek button (floats over the always-dark preview) and
-# the preview canvas / rulers keep fixed config colours. BG = preview letterbox
-# (stays dark); CHIP_BG/ACCENT/HOVER/FG = the peek button.
-from ..config import (BG, HOVER, ACCENT, FG, ICON_SIZE, ICON_DIR, CHIP_BG,
+# `_tw` helper, so only the preview canvas / rulers keep a fixed config colour.
+# BG = preview letterbox (stays dark regardless of theme).
+from ..config import (BG, ICON_SIZE, ICON_DIR,
                       CULL_KEEP_TINT, CULL_REJECT_TINT,
                       CULL_KEEP_TINT_LIGHT, CULL_REJECT_TINT_LIGHT)
 from ..widgets import Tooltip
@@ -358,62 +357,6 @@ class ChromeMixin:
     def toggle_compare(self):
         "Toolbar action: flip the before/after split-line view on/off."
         self._set_compare(not self.compare_mode)
-
-    # --- On-canvas peek button (hold to see the original) -------------------
-
-    PEEK_BG = CHIP_BG
-
-    def _build_peek_button(self):
-        "A small always-on button pinned to the preview's corner: hold = იყო, release = არის."
-        # The peek button is deliberately kept dark in both schemes (it floats over
-        # the always-dark preview), so its eye stays a fixed light — never theme fg.
-        img = self.icon("eye", color=FG)
-        if img is not None:
-            btn = tk.Label(self.preview, image=img, bg=self.PEEK_BG, cursor="hand2",
-                           padx=5, pady=5)
-        else:
-            btn = tk.Label(self.preview, text="👁", bg=self.PEEK_BG, fg=FG,
-                           cursor="hand2", font=("Segoe UI", 11), padx=6, pady=3)
-        btn.bind("<Enter>", lambda e: self._peek_btn_paint(hover=True))
-        btn.bind("<Leave>", lambda e: self._peek_btn_paint(hover=False))
-        btn.bind("<ButtonPress-1>", self._peek_btn_press)
-        btn.bind("<ButtonRelease-1>", self._peek_btn_release)
-        btn._tip = Tooltip(btn, t("Hold to see the original — press for before, release for after"))
-        self.peek_btn = btn
-        self._peek_shown = False
-        self._update_peek_button()
-
-    def _peek_btn_paint(self, hover=False):
-        "Accent while peeking, hover tint on hover, else the resting fill."
-        if not hasattr(self, "peek_btn"):
-            return
-        if self._compare_peek:
-            self.peek_btn.configure(bg=ACCENT)
-        else:
-            self.peek_btn.configure(bg=HOVER if hover else self.PEEK_BG)
-
-    def _peek_btn_press(self, event):
-        "Press the corner button → show the original (იყო)."
-        self._compare_peek_on()
-        self._peek_btn_paint()
-
-    def _peek_btn_release(self, event):
-        "Release → back to the edit (არის)."
-        self._compare_peek_off()
-        self._peek_btn_paint()
-
-    def _update_peek_button(self):
-        "Show the peek button only with a photo loaded; pin it to the bottom-left,"
-        " clear of the left ruler."
-        if not hasattr(self, "peek_btn"):
-            return
-        show = self.current_pil is not None
-        if show and not self._peek_shown:
-            self.peek_btn.place(x=self.RULER_W + 8, rely=1.0, y=-10, anchor="sw")
-            self._peek_shown = True
-        elif not show and self._peek_shown:
-            self.peek_btn.place_forget()
-            self._peek_shown = False
 
     # --- Top info bar -------------------------------------------------------
 
@@ -760,10 +703,6 @@ class ChromeMixin:
         self.preview.bind("<B1-Motion>", self._preview_drag)
         self.preview.bind("<ButtonRelease-1>", self._preview_release)
         self.preview.bind("<Motion>", self._preview_hover)
-
-        # An always-on "hold to see the original" button in the preview's corner —
-        # press = იყო (original), release = არის (edit). Sits over the canvas.
-        self._build_peek_button()
 
         # Fotor-style edit area on the right: section panel + labeled icon rail
         self._build_edit_panel(body)

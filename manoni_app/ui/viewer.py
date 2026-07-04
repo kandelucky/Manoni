@@ -51,6 +51,7 @@ class ViewerMixin:
         self.clone_src = self.clone_offset = None   # clone anchor was for the old photo
         self.crop_rect = None    # drop any pending crop box from the last photo
         self.crop_ratio = None
+        self._filter_anchor = None  # a new photo starts with no filter-trying run
         self._crop_btn_active = None
         self._restyle_crop_chips()
         self._reset_straighten()  # fresh photo → no pending horizon tilt
@@ -387,7 +388,6 @@ class ViewerMixin:
         `_view_base` in place per dab, so it must not hand that live-mutating
         buffer to the worker thread (which would read it while the next dab writes).
         """
-        self._update_peek_button()   # show/hide the corner peek button with the photo
         if self.current_pil is None:
             if self._message:
                 self._draw_message(self._message)

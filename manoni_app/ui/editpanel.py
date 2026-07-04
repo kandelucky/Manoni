@@ -463,15 +463,42 @@ class EditPanelMixin:
         btn._tip = Tooltip(btn, t("Save"))
 
     def _build_panel_actions(self, panel):
-        "The open panel's foot: full-width Restore-original over a full-width Save."
+        "The open panel's foot: View original, over Restore-original, over Save — all full-width."
         wrap = self._tw(tk.Frame(panel), bg="bar")
         # Pin to the panel bottom; the swappable section content expands above it.
         wrap.pack(side="bottom", fill="x", before=self._sec_host)
         self._tw(tk.Frame(wrap, height=1), bg="border").pack(side="top", fill="x")
+        self._build_peek_action(wrap)
         self._wide_action(wrap, "rotate-ccw", t("Restore original"),
                           self.restore_original,
                           tip=t("Discard every edit and reload the original photo"))
         self._wide_action(wrap, "save", t("Save"), self.quick_save, accent=True)
+
+    def _build_peek_action(self, parent):
+        "Full-width panel action: press-and-hold to peek the original, release for the edit."
+        # No click `command` — the interaction is press/release, not a click, so
+        # it binds those events on the button's own canvas instead.
+        btn = tintkit.Button(
+            parent, self.theme, t("View original"), icon="eye",
+            stretch=True, bg="bar", role="neutral", variant="outline")
+        btn.pack(side="top", fill="x", pady=(0, 2))
+        btn.canvas.bind("<ButtonPress-1>", lambda e: self._peek_action_press(btn))
+        btn.canvas.bind("<ButtonRelease-1>", lambda e: self._peek_action_release(btn))
+        tintkit.HoverTip(btn.canvas, self.theme,
+                         t("Hold to see the original — press for before, release for after"))
+        return btn
+
+    def _peek_action_press(self, btn):
+        "Press → show the original (იყო); fill the button to mark it active."
+        self._compare_peek_on()
+        btn.role, btn.variant = "primary", "filled"
+        btn.repaint()
+
+    def _peek_action_release(self, btn):
+        "Release → back to the edit (არის); restore the resting outline."
+        self._compare_peek_off()
+        btn.role, btn.variant = "neutral", "outline"
+        btn.repaint()
 
     def _wide_action(self, parent, icon_name, label, command, accent=False, tip=None):
         "One full-width panel action button (icon left of label). accent = primary."
@@ -780,10 +807,15 @@ class EditPanelMixin:
         self._render_preview()       # ...and snap the photo + histogram to it now
         self._edit_commit()
 
-    def _record_edit(self, before):
+    def _record_edit(self, before, is_filter=False):
         "Push an 'edit' undo entry for the current image if state changed."
+        " Any edit that ISN'T a filter application clears the filter-trying anchor"
+        " (see _apply_filter_values / _filter_remove) — it's no longer just the"
+        " photo's pre-filter state once something else has been done on purpose."
         after = self._edit_state()
         if after != before and self.files:
             self._push_undo({"kind": "edit", "folder": self.folder,
                              "file": self.files[self.index],
                              "before": before, "after": after})
+        if not is_filter:
+            self._filter_anchor = None
