@@ -563,6 +563,18 @@ CATALOG_KA = {
     "File not found": "ფაილი ვერ მოიძებნა",
     "Duplicated → {name}": "დუბლირდა → {name}",
     "Deleted: {name}": "წაიშალა: {name}",
+    # --- Folder tree right-click menu (open in file manager · rename · delete) ---
+    "Open in file manager": "ფაილების მენეჯერში გახსნა",
+    "Rename folder": "ფოლდერის გადარქმევა",
+    "Folder name": "ფოლდერის სახელი",
+    "A folder with that name already exists": "ამ სახელით ფოლდერი უკვე არსებობს",
+    "Renamed to “{name}”": "გადაერქვა სახელი: „{name}“",
+    "Move “{name}” and everything inside it to the Recycle Bin?":
+        "გადავიტანო „{name}“ და მისი შიგთავსი გადაგდებულებში?",
+    "Move “{name}” and everything inside it to the Trash?":
+        "გადავიტანო „{name}“ და მისი შიგთავსი სანაგვე ყუთში?",
+    "Folder not found": "ფოლდერი ვერ მოიძებნა",
+    "Filter folders…": "ფოლდერების ფილტრი…",
     "End of folder": "ფოლდერის ბოლოა",
     "Start of folder": "ფოლდერის დასაწყისია",
     "Can't undo the edit — a different folder is open":

@@ -5,9 +5,11 @@ Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
 """
 
+import json
 import os
 import shutil
 import subprocess
+import sys
 import tkinter as tk
 import tkinter.filedialog as tkfd
 import tkinter.font as tkfont
@@ -632,7 +634,8 @@ class BrowserMixin:
             self.folder_tree = tintkit.FolderTree(
                 self.folder_holder, self.theme, filter_text=t("Filter folders…"),
                 on_row=self._tree_open, on_toggle=self._tree_toggle,
-                on_filter=self._tree_filter_changed)
+                on_filter=self._tree_filter_changed,
+                on_context=self._tree_context_menu)
             self.folder_tree.pack(fill="x")
         self.folder_tree.set_rows(rows)
         self._bind_folder_tree_wheel()       # rows are rebuilt → re-arm wheel scroll
@@ -681,6 +684,152 @@ class BrowserMixin:
             self._bind_folder_tree_wheel()   # new rows → re-arm wheel scroll
             self.folder_holder.update_idletasks()
             self._on_folder_holder_configure()
+
+    # --- Folder tree right-click menu (open in file manager · rename · delete)
+
+    def _tree_context_menu(self, path, event):
+        "Right-click a sidebar folder row."
+        if not path or not os.path.isdir(path):
+            return
+        menu = tk.Menu(self.root, tearoff=0, bg=self.theme["bar"],
+                       fg=self.theme["fg"], bd=0,
+                       activebackground=self.theme["accent"],
+                       activeforeground=self.theme["on_accent"],
+                       font=("Segoe UI", 9))
+        menu.add_command(label=t("Open in file manager"),
+                         command=lambda: self._reveal_path(path))
+        menu.add_command(label=t("Rename"),
+                         command=lambda: self._rename_tree_folder(path))
+        menu.add_separator()
+        menu.add_command(label=t("Delete"), foreground="#ff8a8a",
+                         command=lambda: self._delete_tree_folder(path))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _reveal_path(self, path, select=False):
+        "Show `path` in the OS file manager (Explorer / Finder). `select=True` opens"
+        " the CONTAINING folder with `path` itself highlighted, for a file; plain"
+        " (select=False) just opens `path`, for a folder row."
+        if not os.path.exists(path):
+            self.toast(t("File not found") if select else t("Folder not found"))
+            return
+        try:
+            if sys.platform.startswith("win"):
+                if select:
+                    subprocess.Popen(f'explorer /select,"{os.path.normpath(path)}"')
+                else:
+                    os.startfile(path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", path] if select else ["open", path])
+            else:
+                subprocess.Popen(["xdg-open",
+                                  os.path.dirname(path) if select else path])
+        except Exception as e:
+            self.toast(t("Error: {e}").format(e=e))
+
+    def _rename_tree_folder(self, path):
+        "Rename a sidebar folder on disk, then repoint tree/nav state at the new path."
+        old_name = os.path.basename(path)
+        new_name = self._ask_text(t("Rename folder"), t("Folder name"), old_name)
+        if not new_name or new_name == old_name:
+            return
+        new_path = os.path.join(os.path.dirname(path), new_name)
+        if os.path.exists(new_path):
+            self.toast(t("A folder with that name already exists"))
+            return
+        try:
+            os.rename(path, new_path)
+        except Exception as e:
+            self.toast(t("Error: {e}").format(e=e))
+            return
+        self._retarget_after_folder_change(path, new_path)
+        self.toast(t("Renamed to “{name}”").format(name=new_name))
+
+    def _delete_tree_folder(self, path):
+        "Delete a sidebar folder — moved to the Recycle Bin / Trash, never gone for"
+        " good (matches the app's non-destructive stance elsewhere: culling only"
+        " ever moves files too)."
+        name = os.path.basename(path)
+        msg = (t("Move “{name}” and everything inside it to the Recycle Bin?")
+               if sys.platform.startswith("win") else
+               t("Move “{name}” and everything inside it to the Trash?"))
+        if not self._confirm(msg.format(name=name), ok_label=t("Delete")):
+            return
+        try:
+            self._trash_path(path)
+        except Exception as e:
+            self.toast(t("Error: {e}").format(e=e))
+            return
+        self._retarget_after_folder_change(path, None)
+        self.toast(t("Deleted: {name}").format(name=name))
+
+    def _trash_path(self, path):
+        "Move `path` to the Recycle Bin (Windows) / Trash (macOS); raises on failure."
+        " No plain permanent-delete path on those two — only the 'else' fallback"
+        " (an unsupported OS) has no trash convention to call into."
+        if sys.platform.startswith("win"):
+            import ctypes
+            from ctypes import wintypes
+
+            class SHFILEOPSTRUCTW(ctypes.Structure):
+                _fields_ = [("hwnd", wintypes.HWND), ("wFunc", wintypes.UINT),
+                           ("pFrom", wintypes.LPCWSTR), ("pTo", wintypes.LPCWSTR),
+                           ("fFlags", ctypes.c_uint16),
+                           ("fAnyOperationsAborted", wintypes.BOOL),
+                           ("hNameMappings", ctypes.c_void_p),
+                           ("lpszProgressTitle", wintypes.LPCWSTR)]
+            FO_DELETE = 3
+            FOF_ALLOWUNDO, FOF_NOCONFIRMATION = 0x40, 0x10
+            FOF_SILENT, FOF_NOERRORUI = 0x4, 0x400
+            op = SHFILEOPSTRUCTW()
+            op.wFunc = FO_DELETE
+            # pFrom is a list of NUL-separated names, double-NUL terminated; ctypes
+            # appends its own terminator, so one explicit "\0" here gives the required
+            # double NUL.
+            op.pFrom = os.path.normpath(path) + "\0"
+            op.fFlags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT
+                        | FOF_NOERRORUI)
+            if ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) != 0:
+                raise OSError("SHFileOperationW failed")
+        elif sys.platform == "darwin":
+            # json.dumps quotes/escapes the path exactly the way an AppleScript
+            # string literal needs (both use \" and \\), so it doubles as the
+            # AppleScript quoting without a second escaping scheme.
+            script = ('tell application "Finder" to delete POSIX file '
+                     + json.dumps(os.path.abspath(path)))
+            r = subprocess.run(["osascript", "-e", script],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                raise OSError(r.stderr.strip() or "osascript failed")
+        else:
+            shutil.rmtree(path)
+
+    def _remap_path(self, p, old, new):
+        "`old` -> `new` for `p` (`new=None` when the folder at `old` is gone)."
+        p = os.path.normpath(p)
+        if p == old:
+            return new
+        if p.startswith(old + os.sep):
+            return None if new is None else new + p[len(old):]
+        return p
+
+    def _retarget_after_folder_change(self, old_path, new_path):
+        "After a sidebar rename (`new_path` = the new location) or delete"
+        " (`new_path` = None): reload only if the OPEN folder itself moved or"
+        " vanished, otherwise just drop stale tree state and redraw in place."
+        old = os.path.normpath(old_path)
+        cur = os.path.normpath(self.folder) if self.folder else None
+        target = self._remap_path(cur, old, new_path) if cur else None
+        if cur is not None and target != cur:
+            self.load_folder(target or os.path.dirname(old))
+            return
+        self.folder_expanded = {
+            q for q in (self._remap_path(p, old, new_path)
+                       for p in self.folder_expanded) if q is not None}
+        self._subdir_cache = {}
+        self._refresh_folder_tree(rebuild=True)
 
     def _short_name(self, name):
         "Truncate a filename (keeping its extension) to fit roughly under the thumbnail."
@@ -782,17 +931,11 @@ class BrowserMixin:
         return file, os.path.join(self.folder, file)
 
     def _reveal_in_explorer(self, idx):
-        "Open the file's folder in Explorer with the file itself selected."
+        "Open the file's folder in the OS file manager with the file itself selected."
         file, path = self._thumb_target(idx)
         if path is None:
             return
-        if not os.path.exists(path):
-            self.toast(t("File not found"))
-            return
-        try:
-            subprocess.Popen(f'explorer /select,"{os.path.normpath(path)}"')
-        except Exception as e:
-            self.toast(t("Error: {e}").format(e=e))
+        self._reveal_path(path, select=True)
 
     def _duplicate_photo(self, idx):
         "Copy the file next to itself ('name (1).jpg') without leaving the open photo."

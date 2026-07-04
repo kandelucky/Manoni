@@ -6,11 +6,12 @@ current sliders; applying one just plays those factors back onto the open
 photo (replacing whatever was on the sliders, not blending with it).
 
 Two parts live here. The MANAGER panel (in the edit panel's "filters" section)
-is just the grouped "All filters" list: each group/filter row is clickable
-(applies the look) and carries a … menu (rename / move / delete / export-group,
-plus Move up/down for a custom group) and, for a filter, a grip to drag-reorder
-it within its group. Import is a small icon beside the list's own header (no
-separate button). Create + Undo (undo a run of filter-trying, back to whatever
+is a full-width Import button pinned above the grouped "All filters" list
+(Lasha found the old small header icon too easy to miss, 2026-07-04), then the
+list itself: each group/filter row is clickable (applies the look) and carries
+a … menu (rename / move / delete / export-group, plus Move up/down for a
+custom group) and, for a filter, a grip to drag-reorder it within its group.
+Create + Undo (undo a run of filter-trying, back to whatever
 was there before) live in a PINNED FOOTER (_build_filters_footer) — built once
 in editpanel._build_edit_panel, outside the scrolling section content, so they
 stay reachable no matter how long the list grows; shown only while the filters
@@ -262,9 +263,9 @@ class FiltersMixin:
     # --- The manager panel (shown in the edit panel's "filters" section) ----
 
     def _build_filters_section(self, parent):
-        "Filter MANAGER: just the clickable grouped list (see _build_filter_list)."
-        " Create / Undo live in the panel's pinned filters footer"
-        " (_build_filters_footer); Import is the icon beside the list's header."
+        "Filter MANAGER: the pinned Import button + clickable grouped list (see"
+        " _build_filter_list). Create / Undo live in the panel's pinned filters"
+        " footer (_build_filters_footer)."
         f = self._tw(tk.Frame(parent), bg="bar")
         self._build_filter_list(f)
         return f
@@ -367,6 +368,11 @@ class FiltersMixin:
     def _build_filter_list(self, parent):
         "Scaffold the grouped list (scrolls with the rest of the section, like the"
         " Actions list); rows (+ the header) are filled by _refresh_filter_list."
+        " A pinned full-width Import button sits above it — Lasha found the old"
+        " small header icon too easy to miss (2026-07-04)."
+        self._filter_action(parent, "folder-input", t("Import filters"),
+                            self._filter_import,
+                            t("Load filters from a .json file"))
         holder = self._tw(tk.Frame(parent), bg="bar")
         holder.pack(fill="x", padx=(EDIT_PAD, 0), pady=(12, 8))
 
@@ -391,8 +397,8 @@ class FiltersMixin:
             self._add_flist_group(holder, grp)
 
     def _add_flist_header(self, parent):
-        "The list's own caption: running total + the Import action as an icon"
-        " (no separate full-width button — Import is rare next to Create/Undo)."
+        "The list's own caption: just the running total (Import is the pinned"
+        " full-width button above the list — see _build_filter_list)."
         bar, fg_dim = self.theme["bar"], self.theme["fg_dim"]
         total = len(self.user_filters) + len(self.BUILTIN_FILTERS)
         row = tk.Frame(parent, bg=bar)
@@ -400,10 +406,6 @@ class FiltersMixin:
         tk.Label(row, text=f"{t('All filters')}  ({total})", bg=bar, fg=fg_dim,
                  anchor="w", font=("Segoe UI", 8, "bold")).pack(
                      side="left", fill="x", expand=True)
-        imp = tintkit.IconButton(row, self.theme, "folder-input", w=22, h=22,
-                                 icon_px=13, bg="bar", command=self._filter_import)
-        imp.pack(side="right")
-        tintkit.HoverTip(imp.canvas, self.theme, t("Load filters from a .json file"))
 
     def _add_flist_group(self, parent, grp):
         "A foldable caption (chevron + name + count + … menu); when open, its rows."
