@@ -42,23 +42,9 @@ CATALOG_KA = {
     "Keep (keeper)": "შენახვა (keeper)",
     "Reject": "გადაგდება (reject)",
     "Sorting folders": "დახარისხების ფოლდერები",
-    "Culling — Help": "გადარჩევა — დახმარება",
     "Save as…": "შენახვა როგორც…",
     "Up a folder": "ზემოთ ფოლდერი",
     "No folder open": "ფოლდერი არ არის გახსნილი",
-    "Smaller thumbnails": "პატარა თამბნეილები",
-    "Larger thumbnails": "დიდი თამბნეილები",
-    "Grid view — see many photos at once (for culling)":
-        "ბადე — ბევრი ფოტო ერთად (გადასარჩევად)",
-    "No photos to show": "საჩვენებელი ფოტო არ არის",
-    # --- Grid view drop zones (drag photos onto Good / Bad) ---------------
-    "Good": "კარგი",
-    "Bad": "ცუდი",
-    "(set a folder)": "(მიუთითე ფოლდერი)",
-    "1 photo": "1 ფოტო",
-    "{n} photos": "{n} ფოტო",
-    "Moved {n} → {name}  ·  Ctrl+Z": "{n} გადატანილია → {name}  ·  Ctrl+Z",
-    "Couldn't open the folder: {e}": "ფოლდერი ვერ გაიხსნა: {e}",
 
     # --- Photo navigation (browser.py) ------------------------------------
     "First": "პირველი",
@@ -128,11 +114,6 @@ CATALOG_KA = {
     "Script": "ხელნაწერი",
 
     "Auto level": "ავტო ლეველი",
-    "Auto-correct color balance (each channel stretched separately)":
-        "ფერის ბალანსის ავტო-სწორება (თითო არხი ცალკე იჭიმება)",
-    "Auto contrast": "ავტო კონტრასტი",
-    "Auto-correct contrast (color stays unchanged)":
-        "კონტრასტის ავტო-სწორება (ფერი უცვლელი რჩება)",
     "White balance": "თეთრის ბალანსი",
     "Temperature": "სითბო",
     "Tint": "ტინტი",
@@ -178,7 +159,6 @@ CATALOG_KA = {
     "Split tone": "გაყოფილი ტონი",
     "Highlights tone": "ნათლების ტონი",
     "Shadows tone": "ჩრდილების ტონი",
-    "Soon": "მალე",
     "Open / collapse the panel": "პანელის გახსნა / დაკეცვა",
     "Heal": "შეკეთება",
     "Save": "შენახვა",
@@ -209,20 +189,13 @@ CATALOG_KA = {
     "No filter to undo": "გასაუქმებელი ფილტრი არ არის",
     "Filter undone": "ფილტრი გაუქმდა",
     "Edit": "რედაქტირება",
-    "Rename / refresh / delete saved filters":
-        "შენახული ფილტრების გადარქმევა / განახლება / წაშლა",
     "Import": "იმპორტი",
     "Load filters from a .json file": "ფილტრების ჩამოტვირთვა .json ფაილიდან",
     "Export": "ექსპორტი",
-    "Save filters to a .json file to share":
-        "ფილტრების შენახვა .json ფაილში გასაზიარებლად",
     "My filter": "ჩემი ფილტრი",
     "New filter": "ახალი ფილტრი",
     "Filter name": "ფილტრის სახელი",
     "Filter saved: {name}": "ფილტრი შენახულია: {name}",
-    "No filters saved yet": "ჯერ ფილტრი არ შენახულა",
-    "Edit filters": "ფილტრების რედაქტირება",
-    "No filters left": "ფილტრები აღარ არის",
     "Refresh from current edit": "მიმდინარე ედიტით განახლება",
     "Delete": "წაშლა",
     "Rename": "გადარქმევა",
@@ -232,8 +205,6 @@ CATALOG_KA = {
     "All files": "ყველა ფაილი",
     "Added {n} filter(s)": "დაიმატა {n} ფილტრი",
     "No filters found in the file": "ფაილში ფილტრები ვერ მოიძებნა",
-    "Export filters": "ფილტრების ექსპორტი",
-    "All in one file": "ყველას ერთ ფაილში",
     "Save filters": "ფილტრების შენახვა",
     "Exported {n} filter(s)": "ექსპორტი დასრულდა: {n} ფილტრი",
     "Could not write the file": "ფაილის ჩაწერა ვერ მოხერხდა",
@@ -241,13 +212,16 @@ CATALOG_KA = {
     "Close": "დახურვა",
 
     # --- Filter preview strip (filters.py) --------------------------------
-    "Original": "ორიგინალი",
+    # ctx="strip": the full word here; the plain "Original" (crop chip, below)
+    # stays abbreviated "ორიგინ." for the narrow tab. See i18n.t's ctx arg.
+    "strip\x04Original": "ორიგინალი",
     "Apply filter: {name}": "ფილტრის გამოყენება: {name}",
     "Remove the filter (show the original)":
         "ფილტრის მოხსნა (ორიგინალის ჩვენება)",
 
     # --- The "Last" filter (session-only slot, filters.py) ----------------
-    "Last": "უკანასკნელი",
+    # ctx="filter": the filter slot; the plain "Last" (nav button) stays "ბოლო".
+    "filter\x04Last": "უკანასკნელი",
     "Save as filter…": "ფილტრად შენახვა…",
     "Clear last filter": "უკანასკნელის მოცილება",
 
@@ -316,9 +290,6 @@ CATALOG_KA = {
     "Free": "თავისუფ.",
     "Original": "ორიგინ.",
     "Custom": "საკუთარი",
-    "IG Portrait 4:5": "IG პორტრ. 4:5",
-    "Drag the corners; pick a shape or social network":
-        "ჩავათრიე კუთხეები; აირჩიე ფორმა ან სოც. ქსელი",
     "Shape": "ფორმა",
     "Orientation": "ორიენტაცია",
     "Straighten": "გასწორება",
@@ -348,18 +319,12 @@ CATALOG_KA = {
     "Perspective applied  ·  Save to write it to a file":
         "პერსპექტივა დადებულია  ·  შესანახად დააჭირე Save-ს",
     "Social networks": "სოციალური ქსელები",
-    "⇄ Flip (3:4 ⇄ 4:3)": "⇄ გადატრიალება (3:4 ⇄ 4:3)",
     "Swap the selection's orientation (90°)": "მონიშვნის ორიენტაციის შეცვლა (90°)",
     "Mirror the photo horizontally": "ფოტოს სარკისებური გადაბრუნება ჰორიზონტალურად",
     "Mirror the photo vertically": "ფოტოს სარკისებური გადაბრუნება ვერტიკალურად",
     "Crop": "მოჭრა",
     "Cancel": "გაუქმება",
     "Reset the selection to the whole image": "მონიშვნის სრულ სურათზე დაბრუნება",
-    "Cust.": "საკ.",
-    "Custom size": "საკუთარი ზომა",
-    "Custom ratio": "საკუთარი პროპორცია",
-    "Width : Height  (e.g. 4:5 or 1200:800)":
-        "სიგანე : სიმაღლე  (მაგ. 4:5 ან 1200:800)",
     "Enter two positive numbers": "შეიყვანე ორი დადებითი რიცხვი",
     "Numbers must be positive": "რიცხვები დადებითი უნდა იყოს",
     "Select": "არჩევა",
@@ -389,7 +354,6 @@ CATALOG_KA = {
     "Resize": "ზომის შეცვლა",
     "Size": "ზომა",
     "Dimensions": "ზომები",
-    "Long side": "გრძელი გვერდი",
     "Percent": "პროცენტი",
     "Lock aspect ratio": "პროპორციის დაბლოკვა",
     "Quick sizes (long side)": "სწრაფი ზომები (გრძელი გვერდი)",
@@ -404,7 +368,8 @@ CATALOG_KA = {
     "Soft": "რბილი",
     "Normal": "ნორმალური",
     "Sharp": "მკვეთრი",
-    "Light": "მსუბუქი",
+    # ctx="sharpen": mild sharpening; the plain "Light" (font weight) stays "თხელი".
+    "sharpen\x04Light": "მსუბუქი",
     "Medium": "საშუალო",
     "Strong": "ძლიერი",
     "Soft = smoother · Sharp adds web output-sharpening.":
@@ -429,7 +394,6 @@ CATALOG_KA = {
     "A new subfolder in each folder": "ახალი ქვე-ფოლდერი თითო ფოლდერში",
     "Choose a source folder": "აირჩიე წყარო ფოლდერი",
     "No images in that folder": "ამ ფოლდერში სურათი არ არის",
-    "Resizing folder… {i}/{n}": "ფოლდერის რესიზე… {i}/{n}",
     "Resizing…": "ზომის შეცვლა…",
     "Cancelling…": "უქმდება…",
     "Cancelled — {ok} resized, {fail} failed  ·  {dir}":
@@ -570,18 +534,11 @@ CATALOG_KA = {
     "Sorting folders saved": "დახარისხების ფოლდერები შენახულია",
     "Folders incomplete — culling doesn't work yet":
         "ფოლდერები არასრულია — გადარჩევა ჯერ არ მუშაობს",
-    "Culling photos": "ფოტოების გადარჩევა (culling)",
-    "You browse the photos and sort each into two folders — keep and discard.":
-        "ათვალიერებ ფოტოებს და თითოეულს ანაწილებ ორ ფოლდერში — დასატოვებელი და გადასაგდები.",
     "Moves the current photo to the keep folder.":
         "მიმდინარე ფოტოს გადააქვს დასატოვებელ ფოლდერში.",
     "Moves the current photo to the discard folder.":
         "მიმდინარე ფოტოს გადააქვს გადასაგდებ ფოლდერში.",
     "Settings": "პარამეტრები",
-    "Set these two folders — until you do, the buttons don't work.":
-        "მიუთითე ეს ორი ფოლდერი — სანამ არ მიუთითებ, ღილაკები არ მუშაობს.",
-    "Ctrl+Z undoes any move.": "Ctrl+Z აბრუნებს ნებისმიერ გადატანას.",
-    "Got it": "გასაგებია",
     "Nothing to undo": "გასაუქმებელი არაფერია",
     "Nothing to redo": "გასამეორებელი არაფერია",
     "Error: {e}": "შეცდომა: {e}",
@@ -609,8 +566,6 @@ CATALOG_KA = {
         "გადავიტანო „{name}“ და მისი შიგთავსი სანაგვე ყუთში?",
     "Folder not found": "ფოლდერი ვერ მოიძებნა",
     "Filter folders…": "ფოლდერების ფილტრი…",
-    "End of folder": "ფოლდერის ბოლოა",
-    "Start of folder": "ფოლდერის დასაწყისია",
     "Can't undo the edit — a different folder is open":
         "რედაქტირების გაუქმება შეუძლებელია — სხვა ფოლდერია",
     "Can't undo the edit — the file no longer exists":
@@ -632,8 +587,10 @@ CATALOG_KA = {
 
     # --- About / Authors dialog (about.py) --------------------------------
     "About Manoni": "Manoni-ს შესახებ",
-    "A fast, simple dark photo browser and culler.":
-        "სწრაფი, მარტივი მუქი ფოტო ბრაუზერი და გადამრჩევი.",
+    "A fast, simple photo browser, culler and editor.":
+        "სწრაფი, მარტივი ფოტო ბრაუზერი, გადამრჩევი და რედაქტორი.",
+    "a fast, simple photo browser, culler and editor":
+        "სწრაფი, მარტივი ფოტო ბრაუზერი, გადამრჩევი და რედაქტორი",
     "Author": "ავტორი",
     "Written in Python": "დაწერილია Python-ზე",
     "Built with": "გამოყენებული ტექნოლოგიები",
@@ -704,6 +661,122 @@ CATALOG_KA = {
         "სამუდამოდ წავშალო ფერის პროფილი და მთელი EXIF (GPS მდებარეობის ჩათვლით) "
         "ფაილიდან „{name}“?\n\nპიქსელები უცვლელად რჩება; ეს შეუქცევადია.",
     "Metadata removed → {name}": "მონაცემები წაშლილია → {name}",
+
+    # ======================================================================
+    # Catch-up: strings added after the Help/Settings rewrite. They were used
+    # by the code but had no Georgian, so they showed in English under "ka".
+    # Grouped by area — feel free to reorganise or reword.
+    # ======================================================================
+
+    # --- Browser: photo-nav button tooltips (browser.py) ------------------
+    "Go to the previous photo  ·  ← key": "წინა ფოტოზე  ·  ← ღილაკი",
+    "Go to the next photo  ·  → key": "შემდეგ ფოტოზე  ·  → ღილაკი",
+    "Jump to the first photo of this folder": "ამ ფოლდერის პირველ ფოტოზე გადასვლა",
+    "Jump to the last photo of this folder": "ამ ფოლდერის ბოლო ფოტოზე გადასვლა",
+    "Keep — move this photo to the keeper folder  ·  ↑ key":
+        "შენახვა — ეს ფოტო დასატოვებელ ფოლდერში  ·  ↑ ღილაკი",
+    "Reject — move this photo to the discard folder  ·  ↓ key":
+        "გადაგდება — ეს ფოტო გადასაგდებ ფოლდერში  ·  ↓ ღილაკი",
+
+    # --- Navigation feedback (nav.py) -------------------------------------
+    "Already on the first photo": "უკვე პირველ ფოტოზე ხარ",
+    "Already on the last photo": "უკვე ბოლო ფოტოზე ხარ",
+    "Wrapped around to the first photo": "გადავიდა პირველ ფოტოზე",
+    "Wrapped around to the last photo": "გადავიდა ბოლო ფოტოზე",
+    "no folder set yet — choose it in  ⚙ Settings":
+        "ფოლდერი ჯერ არ არის მითითებული — მიუთითე  ⚙ პარამეტრებში",
+    "saving to  {path}": "ინახება  {path}",
+
+    # --- Settings window (settings.py) ------------------------------------
+    "Interface language": "ინტერფეისის ენა",
+    "Default view": "ნაგულისხმევი ხედი",
+    "Rendering": "რენდერი",
+    "Default format": "ნაგულისხმევი ფორმატი",
+    "File format": "ფაილის ფორმატი",
+    "Convert to sRGB": "sRGB-ში გადაყვანა",
+    "Keep metadata": "მეტამონაცემების შენახვა",
+    "Keep (keeper) folder": "შენახვის (keeper) ფოლდერი",
+    "Reject folder": "გადაგდების ფოლდერი",
+    "Restore defaults": "ნაგულისხმევის დაბრუნება",
+    "Settings restored to defaults": "პარამეტრები დაუბრუნდა ნაგულისხმევს",
+    "Add…": "დამატება…",
+    "Best for the web — keeps colours consistent across browsers.":
+        "საუკეთესო ვებისთვის — ფერები ბრაუზერებში ერთნაირად ჩანს.",
+    "Camera info, date, GPS and the colour profile.":
+        "კამერის ინფო, თარიღი, GPS და ფერის პროფილი.",
+    "Used for JPEG and WEBP (PNG is always lossless).":
+        "გამოიყენება JPEG-სა და WEBP-სთვის (PNG ყოველთვის უდანაკარგოა).",
+    "These are the defaults the Save dialog opens with.":
+        "ეს ნაგულისხმევებია, რომლითაც შენახვის ფანჯარა იხსნება.",
+    "Generate a template, translate it, then import it.":
+        "დააგენერირე შაბლონი, თარგმნე და დააიმპორტირე.",
+    "Switching relaunches Manoni and restores your place.":
+        "გადართვა თავიდან უშვებს Manoni-ს და ინახავს შენს ადგილს.",
+    "Reset the view and export defaults to their original values?\n\nYour language and sorting folders are left unchanged.":
+        "დავაბრუნო ხედისა და ექსპორტის ნაგულისხმევები საწყის მნიშვნელობებზე?\n\nენა და დახარისხების ფოლდერები უცვლელი რჩება.",
+
+    # --- Edit panel: Basic/Full toggle + slider (editpanel.py) ------------
+    "Simple version": "მარტივი ვერსია",
+    "Full version": "სრული ვერსია",
+    "Show every Basic Edit slider": "ყველა ძირითადი სლაიდერის ჩვენება",
+    "Brightness/Fill": "სიკაშკაშე/შევსება",
+
+    # --- Filters panel: reorder (filters.py) ------------------------------
+    "Move up": "ზემოთ ატანა",
+    "Move down": "ქვემოთ ჩამოწევა",
+
+    # --- Metadata labels (metadata.py) ------------------------------------
+    "Metadata": "მეტამონაცემები",
+    "ISO": "ISO",
+
+    # --- Shared: generic sizes / chrome -----------------------------------
+    "Small": "პატარა",
+    "Large": "დიდი",
+    "Sidebar": "გვერდითი პანელი",
+    "Help": "დახმარება",
+    "Your language": "შენი ენა",
+
+    # --- Help window: tab titles & captions (help.py) ---------------------
+    "Manoni is a fast photo browser, culler and editor. The whole workflow, in five steps:":
+        "Manoni სწრაფი ფოტო ბრაუზერი, გადამრჩევი და რედაქტორია. მთელი პროცესი ხუთ ნაბიჯად:",
+    "Each tab on the left explains one part in more detail.":
+        "მარცხნივ თითო ჩანართი დეტალურად ხსნის თითო ნაწილს.",
+    "Sort into two folders": "დაახარისხე ორ ფოლდერში",
+    "One-click looks": "ერთ-დაწკაპუნებიანი ლუქები",
+    "Reuse the last look": "ბოლო ლუქის ხელახლა გამოყენება",
+    "Make your own": "შექმენი შენი",
+    "Share with others": "გააზიარე სხვებთან",
+    "Export your edits": "შენი ედიტების ექსპორტი",
+    "Anytime": "ნებისმიერ დროს",
+    "Browsing  (edit panel closed)": "დათვალიერება  (რედაქტირების პანელი დახურულია)",
+    "On the photo  (mouse)": "ფოტოზე  (თაგვი)",
+    "Faster with keys": "უფრო სწრაფად ღილაკებით",
+
+    # --- Help window: explanatory sentences (help.py) ---------------------
+    "You browse the photos and sort each into a keep folder and a discard folder — nothing is deleted, only moved.":
+        "ათვალიერებ ფოტოებს და თითოეულს ანაწილებ დასატოვებელ და გადასაგდებ ფოლდერში — არაფერი იშლება, მხოლოდ გადააქვს.",
+    "The keep / reject buttons (and the ↑ / ↓ keys) move the current photo into these folders. Ctrl+Z undoes the last move.":
+        "შენახვის / გადაგდების ღილაკები (და ↑ / ↓ ღილაკები) მიმდინარე ფოტოს ამ ფოლდერებში გადააქვს. Ctrl+Z ბოლო გადატანას აუქმებს.",
+    "At the end of a folder Manoni can loop back to the first photo or open the next folder — set this in Settings → Culling.":
+        "ფოლდერის ბოლოს Manoni-ს შეუძლია პირველ ფოტოზე დაბრუნდეს ან შემდეგი ფოლდერი გახსნას — მიუთითე პარამეტრები → გადარჩევაში.",
+    "The chevron on the icon rail (right of the photo) opens and closes the edit panel. The tools:":
+        "ისარი ხატულების ზოლზე (ფოტოს მარჯვნივ) ხსნის და ხურავს რედაქტირების პანელს. ხელსაწყოები:",
+    "Ctrl+Z steps back through your edits; the before/after button compares the result with the original.":
+        "Ctrl+Z ბიჯ-ბიჯ აბრუნებს შენს ედიტებს; იყო/არის ღილაკი შედეგს ორიგინალს ადარებს.",
+    "The strip of previews under the photo shows each filter on the current photo; click one to apply it.":
+        "ფოტოს ქვეშ გადახედვების ზოლი თითო ფილტრს აჩვენებს მიმდინარე ფოტოზე; დააწკაპე გამოსაყენებლად.",
+    "Rename, reorder or delete your filters from the Filters panel.":
+        "გადაარქვი, გადააადგილე ან წაშალე ფილტრები ფილტრების პანელიდან.",
+    "Sharing works per group, not per single filter: export a group, import the file someone sends you.":
+        "გაზიარება ჯგუფურად მუშაობს, თითო ფილტრად არა: დააექსპორტე ჯგუფი, დააიმპორტე ფაილი, რომელსაც სხვა გამოგიგზავნის.",
+    "“Last” lasts only for this session; its … menu can promote it into a permanent named filter, or clear it.":
+        "„უკანასკნელი“ მხოლოდ ამ სესიაშია; მისი … მენიუ მას მუდმივ, დასახელებულ ფილტრად აქცევს ან ასუფთავებს.",
+    "An action is a recorded macro of edits you can replay on other photos.":
+        "მოქმედება ჩაწერილი ედიტების მაკროა, რომელიც სხვა ფოტოებზე შეგიძლია დააკრა.",
+    "Heal strokes are not recorded; everything else — light, colour, crop, text, filters — is.":
+        "შეკეთების მოსმები არ იწერება; დანარჩენი — შუქი, ფერი, მოჭრა, ტექსტი, ფილტრები — კი.",
+    "The info button in the top bar shows the current photo's metadata. The export defaults live in Settings → Export.":
+        "ზედა ზოლის ინფო ღილაკი მიმდინარე ფოტოს მეტამონაცემებს აჩვენებს. ექსპორტის ნაგულისხმევები პარამეტრები → ექსპორტშია.",
 }
 
 # Register the built-in Georgian pack, then any user-imported packs on disk (so a

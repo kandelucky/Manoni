@@ -58,7 +58,7 @@ class AboutMixin:
                  font=("Segoe UI", 17, "bold")), bg="bg", fg="fg").pack()
         self._tw(tk.Label(wrap, text="v" + APP_VERSION,
                  font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(pady=(2, 0))
-        self._tw(tk.Label(wrap, text=t("A fast, simple dark photo browser and culler."),
+        self._tw(tk.Label(wrap, text=t("A fast, simple photo browser, culler and editor."),
                  font=("Segoe UI", 9),
                  justify="center", wraplength=360), bg="bg", fg="fg_dim").pack(pady=(8, 0))
 

@@ -235,7 +235,7 @@ class ResizeMixin:
         self._tw(tk.Label(self._resize_str_block, text=t("Strength"),
                  anchor="w", font=("Segoe UI", 8, "bold")),
                  bg="bar", fg="fg_dim").pack(fill="x", pady=(8, 4))
-        slabels = {"light": t("Light"), "medium": t("Medium"), "strong": t("Strong")}
+        slabels = {"light": t("Light", "sharpen"), "medium": t("Medium"), "strong": t("Strong")}
         self._resize_str_tabs = StretchTabs(
             self._resize_str_block, self.theme,
             [slabels[k] for k in self.RESIZE_STRENGTHS], selected=0, bg="bar",

@@ -1,4 +1,4 @@
-"""Manoni — a fast, simple dark photo browser + culler.
+"""Manoni — a fast, simple photo browser, culler + editor.
 
 Runs on a weak laptop. Pure Python + Tkinter + Pillow (MIT-friendly stack).
 

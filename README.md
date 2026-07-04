@@ -4,7 +4,7 @@
 
 # Manoni
 
-**A fast, simple, dark photo browser, culler & editor — built for a weak laptop.**
+**A fast, simple photo browser, culler & editor — built for a weak laptop.**
 
 Browse a folder → keep the good ones → cull the rest → quick edits → export.
 

@@ -500,7 +500,7 @@ class SettingsMixin:
         self._tw(tk.Label(box, text="Manoni", font=("Segoe UI", 17, "bold")),
                  bg="bg", fg="fg").pack(anchor="w")
         self._tw(tk.Label(box, text="v" + APP_VERSION + "  ·  " +
-                 t("a fast, simple dark photo browser and culler"),
+                 t("a fast, simple photo browser, culler and editor"),
                  font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(
             anchor="w", pady=(2, 0))
         self._tw(tk.Label(box, text="{label}: {name} · {handle}".format(

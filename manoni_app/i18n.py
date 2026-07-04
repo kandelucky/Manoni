@@ -118,8 +118,22 @@ def get_language():
     return _lang
 
 
-def t(msgid):
-    "Translate an English source string to the active language (fallback: source)."
+CTX_SEP = "\x04"  # separates an optional context from the source (gettext msgctxt style)
+
+
+def t(msgid, ctx=None):
+    """Translate an English source string to the active language (fallback: source).
+
+    Pass ctx to disambiguate one English word that needs different translations in
+    different places — e.g. t("Light", "font") vs t("Light", "sharpen"). English is
+    unaffected (both still show "Light"); only a pack keys on the context. Lookup
+    order: context-qualified key, then the plain key, then the source string.
+    """
     if _lang == DEFAULT_LANG:
         return msgid
-    return _catalogs.get(_lang, {}).get(msgid, msgid)
+    cat = _catalogs.get(_lang, {})
+    if ctx is not None:
+        hit = cat.get(ctx + CTX_SEP + msgid)
+        if hit is not None:
+            return hit
+    return cat.get(msgid, msgid)
