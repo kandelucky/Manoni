@@ -43,12 +43,20 @@ from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
 from manoni_app.ui.metadata import MetadataMixin
 from manoni_app.ui.settings import SettingsMixin
+from manoni_app.ui.help import HelpMixin
+
+
+# The very first time Manoni is ever launched (no photo given), it opens this one
+# image, then never again (a one-time flag lives in the state file). Testing hook:
+# an absolute path that only exists on this machine — harmless elsewhere, since the
+# startup check skips it when the file is missing.
+FIRST_RUN_IMAGE = r"C:\Users\likak\Desktop\Manoni\temp\test_chart.png"
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, ResizeMixin, PerspectiveMixin,
              HealMixin, FocusMixin, TextMixin, FiltersMixin, ActionsMixin,
-             AboutMixin, MetadataMixin, SettingsMixin):
+             AboutMixin, MetadataMixin, SettingsMixin, HelpMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -300,6 +308,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.restore_photo = True     # …and land on the last photo (else the first)
         self.confirm_reject = False   # ask before the reject (✗) move
         self.warn_unsaved = True      # offer to save when leaving an edited photo
+        self.first_run_done = False   # flips true after the very first launch ever
         # Where the Save dialog defaults to (Settings → Export → Output):
         #   "subfolder" → a folder named export_subfolder beside each photo,
         #   "fixed"     → one fixed export_fixed_dir for every export.
@@ -466,7 +475,13 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
         if folder:
             self._open_launch_target(folder)
+        elif (not self.first_run_done) and os.path.exists(FIRST_RUN_IMAGE):
+            # Very first launch ever: show the demo image once, then never again.
+            self.first_run_done = True
+            self._save_state()               # persist the flag now (survives a crash)
+            self._open_launch_target(FIRST_RUN_IMAGE)
         else:
+            self.first_run_done = True        # any later launch is no longer "first"
             self._restore_last_session()
 
     # --- Keyboard shortcuts (layout-independent) ----------------------------
@@ -539,6 +554,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "restore_photo": self.restore_photo,
                  "confirm_reject": self.confirm_reject,
                  "warn_unsaved": self.warn_unsaved,
+                 "first_run_done": self.first_run_done,
                  "scheme": self.theme.scheme,   # dark / light interface theme
                  "accent": self.theme.accent,   # highlight colour (accent picker)
                  "language": i18n.get_language()}
@@ -613,7 +629,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "show_filter_strip", "show_histogram",
-                    "basic_full", "fast_preview", "async_render"):
+                    "basic_full", "fast_preview", "async_render", "first_run_done"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)

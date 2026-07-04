@@ -437,14 +437,14 @@ class ChromeMixin:
         self._build_compare_button(center).pack(side="left", padx=4, pady=8)
 
         # RIGHT zone: two app-level controls — a ⚙ gear opening the tabbed
-        # Settings window, and a "?" opening the culling help. These replace the
-        # old single ☰ menu: its other entries (Language · About) now live inside
-        # Settings, so no dropdown is needed here anymore.
+        # Settings window, and a "?" opening the tabbed Help window. These replace
+        # the old single ☰ menu: its other entries (Language · About) now live
+        # inside Settings, so no dropdown is needed here anymore.
         right = self._tw(tk.Frame(bar), bg="bar")
         right.pack(side="right", padx=8)
         # Pack help first so it sits rightmost, gear to its left → reads ⚙ ?.
         self.btn_help = self._tool_button(right, "circle-help",
-                                          self._cull_help_dialog, t("Culling — Help"))
+                                          self._help_dialog, t("Help"))
         self.btn_help.pack(side="right", padx=4, pady=8)
         self.btn_settings = self._tool_button(right, "settings",
                                               self._settings_dialog, t("Settings"))

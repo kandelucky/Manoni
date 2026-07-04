@@ -600,61 +600,6 @@ class NavMixin:
         else:
             self.toast(t("Folders incomplete — culling doesn't work yet"))
 
-    def _cull_help_dialog(self):
-        "Explain the cull workflow: what keep / reject / options do."
-        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
-        dlg = tk.Toplevel(self.root)
-        dlg.title(t("Culling — Help"))
-        dlg.configure(bg=bg)
-        dlg.transient(self.root)
-        dlg.resizable(False, False)
-        wrap = tk.Frame(dlg, bg=bg, padx=24, pady=20)
-        wrap.pack(fill="both", expand=True)
-
-        tk.Label(wrap, text=t("Culling photos"), bg=bg, fg=fg,
-                 font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 4))
-        tk.Label(wrap, text=t("You browse the photos and sort each into two folders — keep and discard."), bg=bg, fg=fg_dim,
-                 font=("Segoe UI", 9), justify="left",
-                 wraplength=360).pack(anchor="w", pady=(0, 12))
-
-        rows = [
-            ("folder-up", "Keep (keeper)",
-             "Moves the current photo to the keep folder.", self._cull_tint("keep")),
-            ("folder-down", "Reject",
-             "Moves the current photo to the discard folder.", self._cull_tint("reject")),
-            ("settings", "Settings",
-             "Set these two folders — until you do, the buttons don't work.", None),
-        ]
-        for icon_name, title, desc, color in rows:
-            r = tk.Frame(wrap, bg=bg)
-            r.pack(fill="x", pady=6)
-            img = self.icon(icon_name, color=color)
-            if img is not None:
-                tk.Label(r, image=img, bg=bg).pack(side="left", padx=(0, 10))
-            col = tk.Frame(r, bg=bg)
-            col.pack(side="left", fill="x", expand=True)
-            tk.Label(col, text=t(title), bg=bg, fg=fg, anchor="w",
-                     font=("Segoe UI", 10, "bold")).pack(anchor="w")
-            tk.Label(col, text=t(desc), bg=bg, fg=fg_dim, anchor="w",
-                     font=("Segoe UI", 9), justify="left",
-                     wraplength=300).pack(anchor="w")
-
-        tk.Label(wrap, text=t("Ctrl+Z undoes any move."), bg=bg,
-                 fg=fg_dim, font=("Segoe UI", 9)).pack(anchor="w", pady=(12, 0))
-
-        brow = tk.Frame(wrap, bg=bg)
-        brow.pack(anchor="e", pady=(16, 0))
-        tintkit.Button(brow, self.theme, t("Got it"), role="primary",
-                       command=dlg.destroy).pack(side="right")
-
-        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
-        dlg.bind("<Escape>", lambda e: dlg.destroy())
-        dlg.bind("<Return>", lambda e: dlg.destroy())
-        self._center_dialog(dlg)
-        dlg.grab_set()
-        dlg.focus_set()
-        self.root.wait_window(dlg)
-
     def _move_current_to(self, dest):
         "Move the current file to `dest`, push an undo entry. Returns True on success."
         file = self.files[self.index]
