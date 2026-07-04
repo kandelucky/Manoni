@@ -358,15 +358,14 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
 
     cached = cache.get(key) if cache is not None else None
     if cached is not None and cached[0] == crop_box:
-        ring_masks = cached[1]
+        ring_masks, fade_mask = cached[1], cached[2]
     else:
         wlcx, wlcy = (cx - bx0) * wf, (cy - by0) * wf   # shape centre, working coords
 
-        def ring_mask(R):
-            "255 at/beyond radius R from the shape edge, 0 inside — a touch of"
-            " blur only to antialias the ring, not to feather it (the ramp"
-            " itself comes from stacking several of these, not this blur)."
-            m = Image.new("L", (ww, wh), 255)
+        def shape_mask(R, fill_inside):
+            "A shape (band for a line, disc for a circle) of radius R around the"
+            " focus edge, drawn with `fill_inside`; the rest is its complement."
+            m = Image.new("L", (ww, wh), 255 - fill_inside)
             draw = ImageDraw.Draw(m)
             Rw = R * wf
             if shape == "line":
@@ -376,19 +375,39 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
                     (wlcx - ux * Lb + nx * Rw, wlcy - uy * Lb + ny * Rw),
                     (wlcx - ux * Lb - nx * Rw, wlcy - uy * Lb - ny * Rw),
                     (wlcx + ux * Lb - nx * Rw, wlcy + uy * Lb - ny * Rw),
-                ], fill=0)
+                ], fill=fill_inside)
             else:
-                draw.ellipse([wlcx - Rw, wlcy - Rw, wlcx + Rw, wlcy + Rw], fill=0)
-            return m.filter(ImageFilter.GaussianBlur(max(0.75, 1.5 * wf)))
+                draw.ellipse([wlcx - Rw, wlcy - Rw, wlcx + Rw, wlcy + Rw],
+                             fill=fill_inside)
+            return m
+
+        def ring_mask(R):
+            "255 at/beyond radius R from the shape edge, 0 inside — a touch of"
+            " blur only to antialias the ring, not to feather it (the ramp"
+            " itself comes from stacking several of these, not this blur)."
+            return shape_mask(R, 0).filter(ImageFilter.GaussianBlur(max(0.75, 1.5 * wf)))
 
         # Thresholds edge0, edge0 + trans/LEVELS, ... up to (but not including)
         # edge0 + trans — the last step's mask still reaches to infinity, so
         # everything beyond the ramp gets the final (full-radius) level.
         ring_masks = [ring_mask(edge0 + (k / FOCUS_BLUR_LEVELS) * trans)
                       for k in range(FOCUS_BLUR_LEVELS)]
+
+        # Hand-off mask for the final paste: 255 across the sharp shape AND the
+        # whole ramp ring, then feathering to 0 out in the pad margin. The ramp
+        # is built on a DOWNSAMPLED crop, so its outer (full-blur) band never
+        # matches the full-res background blur pixel-for-pixel; hard-pasting it
+        # left a faint rectangular seam — the crop box — around the shape. Fading
+        # the paste out inside the pad hands that band back to the real
+        # background blur, so there is no crop-box line. Anchored a fixed step
+        # PAST the ramp end, so the feather can never reach into the sharp shape
+        # however narrow the ramp is.
+        fade_mask = shape_mask(edge0 + trans + pad * 0.5, 255).filter(
+            ImageFilter.GaussianBlur(max(1.0, pad * wf / 6.0)))
+
         if cache is not None:
             cache.clear()            # keep only the latest geometry (single slot)
-            cache[key] = (crop_box, ring_masks)
+            cache[key] = (crop_box, ring_masks, fade_mask)
 
     # The ramp: start from the sharp crop, then repeatedly paste in a slightly
     # MORE blurred copy of it everywhere at/beyond the next ring threshold. The
@@ -405,9 +424,14 @@ def apply_focus_blur(img, focus, scale, src_box, cache=None):
         result = Image.composite(level, result, ring_masks[k - 1])
     if (ww, wh) != (cw, ch):
         result = result.resize((cw, ch), Image.BILINEAR)
+        fade = fade_mask.resize((cw, ch), Image.BILINEAR)
+    else:
+        fade = fade_mask
 
+    # Feathered paste (not a hard rectangular one): the crop's outer full-blur
+    # band fades into the full-res background blur, so no crop-box seam shows.
     blurred_full = img.filter(ImageFilter.GaussianBlur(radius))
-    blurred_full.paste(result, crop_box)
+    blurred_full.paste(result, crop_box, fade)
     return blurred_full
 
 
