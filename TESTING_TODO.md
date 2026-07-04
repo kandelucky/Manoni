@@ -127,6 +127,7 @@
 ## 10. Heal & Clone
 
 - [ ] **(მე)** `heal_region` — blemish clean neighbour-ით იფარება, colour-match.
+- [ ] **(მე)** `heal_region(src=...)` — Alt+click-ით ხელით არჩეული წყარო, colour-match + flip.
 - [ ] **(მე)** `clone_region` — locked offset, feather, opacity, flip (mirror).
 - [ ] **(მე)** Brush size / Strength / Edge softness — მნიშვნელობებზე რეაქცია.
 - [ ] **(მე)** Stroke = ერთი undo step; `_apply_heal_patch` before/after box.

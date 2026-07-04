@@ -34,17 +34,25 @@ def _shift_channels(img, deltas):
     return Image.merge("RGB", bands)
 
 
-def heal_region(img, cx, cy, radius, feather=HEAL_FEATHER, opacity=1.0):
+def heal_region(img, cx, cy, radius, feather=HEAL_FEATHER, opacity=1.0,
+                src=None, flip=False):
     """Spot-heal a round blemish centred at (cx, cy) in full-res pixels.
 
     `opacity` (0..1) is the blend strength: 1.0 fully replaces the spot with the
     clean clone, lower values keep some of the original showing through — a soft,
     partial heal (e.g. fading a wrinkle rather than erasing it).
 
+    `src`, an explicit (src_cx, src_cy) the user picked (Alt+click), clones from
+    there instead of auto-searching the smoothest neighbour — same idea as
+    clone_region, but still colour-matched and feathered like a heal rather than
+    an exact copy. `flip` mirrors that source left-right about its own point,
+    same as clone's Mirror option. Ignored when `src` is None (auto search).
+
     Returns (patched_region, box): the caller pastes `patched_region` at `box`
     into the working image, so only the touched area is rewritten — cheap on a
     big photo and trivial to snapshot for undo. Returns (None, None) when the
-    brush is too small or off the image.
+    brush is too small, off the image, or (with `src`) the source disc falls
+    outside it.
     """
     img = img.convert("RGB")
     iw, ih = img.size
@@ -75,35 +83,51 @@ def heal_region(img, cx, cy, radius, feather=HEAL_FEATHER, opacity=1.0):
         mask = mask.point(lambda v: int(round(v * a)))
     ring = hard.point(lambda x: 255 - x)        # the clean border outside the disc
 
-    # Pick the source: a same-size region offset around the spot, kept only if it
-    # fits fully inside the image; among those, the smoothest (lowest stddev) one,
-    # so we clone flat skin/sky/wall rather than dragging an edge over the spot.
-    d = max(bw, bh)
-    best = None
-    for k in range(HEAL_DIRS):
-        ang = 2.0 * math.pi * k / HEAL_DIRS
-        ox = int(round(cx + d * math.cos(ang) - lx))
-        oy = int(round(cy + d * math.sin(ang) - ly))
-        if ox < 0 or oy < 0 or ox + bw > iw or oy + bh > ih:
-            continue
-        cand = img.crop((ox, oy, ox + bw, oy + bh))
-        score = sum(ImageStat.Stat(cand).stddev)
-        if best is None or score < best[0]:
-            best = (score, cand)
-    if best is None:
-        # Spot in a corner with a big brush: no neighbour fits. Blur the spot
-        # itself — still hides a small blemish, just without borrowed texture.
-        src = target.filter(ImageFilter.GaussianBlur(r))
+    if src is not None:
+        # User-picked source (like clone_region's dst/src pair): the source crop
+        # lines the source point up with the dest disc centre (lx, ly). For flip,
+        # take the window whose centre column maps onto lx after a left-right
+        # flip, so the source point stays put and only the texture mirrors.
+        scx, scy = src
+        sx0 = (int(round(scx - (bw - 1 - lx))) if flip
+               else int(round(scx - lx)))
+        sy0 = int(round(scy - ly))
+        if sx0 < 0 or sy0 < 0 or sx0 + bw > iw or sy0 + bh > ih:
+            return None, None
+        clone = img.crop((sx0, sy0, sx0 + bw, sy0 + bh))
+        if flip:
+            clone = clone.transpose(Image.FLIP_LEFT_RIGHT)
     else:
-        src = best[1]
+        # No source picked: auto-search a same-size region offset around the
+        # spot, kept only if it fits fully inside the image; among those, the
+        # smoothest (lowest stddev) one, so we clone flat skin/sky/wall rather
+        # than dragging an edge over the spot.
+        d = max(bw, bh)
+        best = None
+        for k in range(HEAL_DIRS):
+            ang = 2.0 * math.pi * k / HEAL_DIRS
+            ox = int(round(cx + d * math.cos(ang) - lx))
+            oy = int(round(cy + d * math.sin(ang) - ly))
+            if ox < 0 or oy < 0 or ox + bw > iw or oy + bh > ih:
+                continue
+            cand = img.crop((ox, oy, ox + bw, oy + bh))
+            score = sum(ImageStat.Stat(cand).stddev)
+            if best is None or score < best[0]:
+                best = (score, cand)
+        if best is None:
+            # Spot in a corner with a big brush: no neighbour fits. Blur the spot
+            # itself — still hides a small blemish, just without borrowed texture.
+            clone = target.filter(ImageFilter.GaussianBlur(r))
+        else:
+            clone = best[1]
 
     # Colour-match: shift the source so its mean under the disc equals the clean
     # ring's mean — the cloned centre then blends into the surrounding tone.
     tref = ImageStat.Stat(target, ring).mean
-    sref = ImageStat.Stat(src, hard).mean
-    src = _shift_channels(src, [t - s for t, s in zip(tref, sref)])
+    sref = ImageStat.Stat(clone, hard).mean
+    clone = _shift_channels(clone, [t - s for t, s in zip(tref, sref)])
 
-    return Image.composite(src, target, mask), box
+    return Image.composite(clone, target, mask), box
 
 
 def clone_region(img, dst_cx, dst_cy, src_cx, src_cy, radius,

@@ -2,7 +2,8 @@
 undo:
 
   • Auto heal (heal)  — paint over a blemish and it is cloned away from a
-    clean neighbour, colour-matched (imaging.heal_region).
+    clean neighbour, colour-matched (imaging.heal_region). Alt+click first to
+    pick that neighbour yourself instead of leaving it to the auto search.
   • Clone (clone stamp)  — Alt+click a source, then paint an exact copy of it
     with a locked offset (imaging.clone_region), like Photoshop.
 
@@ -53,20 +54,26 @@ class HealMixin:
                                    bg="bar", fg="fg_dim")
         self._heal_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
-        # Clone-only options (aligned + mirror) — independent on/off toggles, so
-        # checkboxes, not the exclusive segmented control. Shown only in clone
-        # mode (packed / unpacked by _refresh_heal_mode).
+        # Aligned + mirror — independent on/off toggles, so checkboxes, not the
+        # exclusive segmented control. They govern any Alt+click source pick,
+        # in either mode, so both modes show them (set up by _refresh_heal_mode).
         self._clone_opts = self._tw(tk.Frame(f), bg="bar")
         self._chk_aligned = tintkit.Checkbox(
             self._clone_opts, self.theme, t("Aligned"),
             state="on" if self.clone_aligned else "off", bg="bar",
             command=lambda st: self._set_clone_opt("aligned", st == "on"))
         self._chk_aligned.pack(anchor="w", padx=EDIT_PAD, pady=(2, 0))
+        tintkit.HoverTip(self._chk_aligned.canvas, self.theme, t(
+            "On: the source keeps the same offset from the brush across every "
+            "stroke. Off: each new stroke re-anchors to the picked source point."))
         self._chk_flip = tintkit.Checkbox(
             self._clone_opts, self.theme, t("Mirror"),
             state="on" if self.clone_flip else "off", bg="bar",
             command=lambda st: self._set_clone_opt("flip", st == "on"))
         self._chk_flip.pack(anchor="w", padx=EDIT_PAD, pady=(2, 0))
+        tintkit.HoverTip(self._chk_flip.canvas, self.theme, t(
+            "Mirror the source left-right about its point — handy for "
+            "symmetric retouching (e.g. copying from the other eye)."))
 
         # Brush sliders. Each carries its title on its own strip (label + value
         # + reset icon) above a full-width track, so the label never sits on the
@@ -158,7 +165,7 @@ class HealMixin:
         self._render_preview()
 
     def _refresh_heal_mode(self):
-        "Sync the mode toggle, swap the hint, and show clone options in clone mode."
+        "Sync the mode toggle, swap the hint, and sync the aligned/mirror options."
         if hasattr(self, "_heal_mode_tabs"):
             idx = (self._heal_modes.index(self.heal_mode)
                    if self.heal_mode in self._heal_modes else 0)
@@ -168,13 +175,11 @@ class HealMixin:
         if self.heal_mode == "clone":
             self._heal_hint.configure(
                 text=t("Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size."))
-            self._clone_opts.pack(fill="x", pady=(0, 6),
-                                  before=self.s_heal_size.frame)
-            self._sync_clone_opts()
         else:
             self._heal_hint.configure(
-                text=t("Click or drag over a blemish — I erase it with a copy of nearby clean background. The wheel or [ ] changes the brush size."))
-            self._clone_opts.pack_forget()
+                text=t("Click or drag over a blemish — I erase it with nearby clean background, or Alt+click to pick your own source. The wheel or [ ] changes the brush size."))
+        self._clone_opts.pack(fill="x", pady=(0, 6), before=self.s_heal_size.frame)
+        self._sync_clone_opts()
 
     def _enter_heal(self):
         "Open the retouch tool: show the brush cursor and repaint with its ring."
@@ -234,7 +239,8 @@ class HealMixin:
         self.clone_offset = None          # re-align on the next paint dab
         self._heal_cursor = (event.x, event.y)
         self._render_preview()
-        self.toast(t("Source picked — now paint the copy"))
+        self.toast(t("Source picked — now paint the copy") if self.heal_mode == "clone"
+                  else t("Source picked — now paint"))
         return "break"
 
     # --- Painting -----------------------------------------------------------
@@ -243,13 +249,14 @@ class HealMixin:
         "Begin a stroke: snapshot the image so the whole stroke is one undo step."
         if not self._heal_active():
             return
-        if self.heal_mode == "clone":
-            if self.clone_src is None:
-                self.toast(t("First Alt+click a source"))
-                return "break"
+        if self.heal_mode == "clone" and self.clone_src is None:
+            self.toast(t("First Alt+click a source"))
+            return "break"
+        if self.clone_src is not None:
+            # A source has been picked (mandatory for clone, optional for auto
+            # heal). Aligned: lock the offset once and keep it across strokes.
+            # Non-aligned: re-anchor to the source at the start of each stroke.
             if self.clone_offset is None or not self.clone_aligned:
-                # Aligned: lock the offset once and keep it across strokes.
-                # Non-aligned: re-anchor to the source at the start of each stroke.
                 psx, psy = self._scr_to_src(event.x, event.y)
                 self.clone_offset = (psx - self.clone_src[0],
                                      psy - self.clone_src[1])
@@ -291,7 +298,7 @@ class HealMixin:
         self._heal_before_img = None
         self._heal_dirty = None
         self._heal_last = None
-        if self.heal_mode == "clone" and not self.clone_aligned:
+        if not self.clone_aligned:
             self.clone_offset = None      # non-aligned: each stroke restarts at source
         self._view_key = None             # one clean full-res rescale to settle seams
         self._render_preview()
@@ -314,9 +321,12 @@ class HealMixin:
                 self.heal_radius, feather=self.heal_feather,
                 opacity=self.heal_opacity, flip=self.clone_flip)
         else:
+            src = ((sx - self.clone_offset[0], sy - self.clone_offset[1])
+                   if self.clone_offset is not None else None)
             patched, box = imaging.heal_region(
                 self.current_pil, sx, sy, self.heal_radius,
-                feather=self.heal_feather, opacity=self.heal_opacity)
+                feather=self.heal_feather, opacity=self.heal_opacity,
+                src=src, flip=self.clone_flip if src is not None else False)
         if patched is None:
             return
         # Snapshot the un-healed pixels the first time a stroke touches this photo,
@@ -369,8 +379,9 @@ class HealMixin:
                       tags="healcur")
         c.create_line(x - 4, y, x + 4, y, fill=ACCENT, tags="healcur")
         c.create_line(x, y - 4, x, y + 4, fill=ACCENT, tags="healcur")
-        # Clone mode: show where pixels are being sampled from.
-        if self.heal_mode == "clone" and self.clone_src is not None:
+        # A source has been picked (clone always, auto heal optionally): show
+        # where pixels are being sampled from.
+        if self.clone_src is not None:
             if self.clone_offset is not None:    # source tracks the cursor offset
                 ssx, ssy = self._scr_to_src(x, y)
                 px, py = self._src_to_scr(ssx - self.clone_offset[0],

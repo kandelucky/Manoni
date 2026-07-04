@@ -162,9 +162,11 @@ class ViewerMixin:
         return self._crop_press(event)
 
     def _preview_alt_press(self, event):
-        # Alt+click sets the clone source while clone mode is open; otherwise it
-        # behaves like a normal press so crop / heal / focus still work.
-        if self._heal_active() and self.heal_mode == "clone":
+        # Alt+click sets the retouch source while the tool is open — mandatory
+        # before painting in clone mode, optional (in place of the auto-picked
+        # neighbour) in auto heal; otherwise it behaves like a normal press so
+        # crop / focus still work.
+        if self._heal_active():
             return self._clone_set_source(event)
         return self._preview_press(event)
 

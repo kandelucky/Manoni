@@ -476,6 +476,23 @@ def heal_replaces_the_blemish():
 
 
 @check
+def heal_manual_source_clones_from_it():
+    g = solid((128, 128, 128), size=(120, 120))
+    from PIL import ImageDraw
+    ImageDraw.Draw(g).ellipse([54, 54, 66, 66], fill=(255, 0, 0))
+    # Alt+click-style manual source: a clean corner instead of the auto search.
+    patched, box = imaging.heal_region(g, 60, 60, 10, src=(20, 20))
+    assert patched is not None, "manual-source heal returned nothing"
+    lx, ly = 60 - box[0], 60 - box[1]
+    r, gr, bl = patched.getpixel((int(lx), int(ly)))
+    assert r < 200, "manual-source heal left the red blemish in place"
+    fp, _ = imaging.heal_region(g, 60, 60, 10, src=(20, 20), flip=True)
+    assert fp is not None, "manual-source heal flip failed"
+    assert imaging.heal_region(g, 60, 60, 10, src=(500, 500)) == (None, None), \
+        "manual-source heal accepted a source disc off the image"
+
+
+@check
 def clone_copies_the_source():
     img = Image.new("RGB", (120, 60))
     px = img.load()
