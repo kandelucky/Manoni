@@ -6,14 +6,19 @@ current sliders; applying one just plays those factors back onto the open
 photo (replacing whatever was on the sliders, not blending with it).
 
 Two parts live here. The MANAGER panel (in the edit panel's "filters" section)
-offers Create, Remove filter (undo a run of filter-trying back to whatever was
-there before) and Import, plus the grouped "All filters" list: each group/filter
-row is clickable (applies the look) and carries a … menu (rename / move / delete
-/ export-group, plus Move up/down for a custom group) and, for a filter, a grip
-to drag-reorder it within its group. The PREVIEW STRIP (_build_filter_strip) is
-a second, optional way to browse: a horizontal filmstrip under the preview that
-renders each saved filter onto a thumbnail of the current photo (toggled in
-Settings; the manager's list works with or without it).
+is just the grouped "All filters" list: each group/filter row is clickable
+(applies the look) and carries a … menu (rename / move / delete / export-group,
+plus Move up/down for a custom group) and, for a filter, a grip to drag-reorder
+it within its group. Import is a small icon beside the list's own header (no
+separate button). Create + Undo (undo a run of filter-trying, back to whatever
+was there before) live in a PINNED FOOTER (_build_filters_footer) — built once
+in editpanel._build_edit_panel, outside the scrolling section content, so they
+stay reachable no matter how long the list grows; shown only while the filters
+tool is open, Undo only once a filter-trying run is live. The PREVIEW STRIP
+(_build_filter_strip) is a second, optional way to browse: a horizontal
+filmstrip under the preview that renders each saved filter onto a thumbnail of
+the current photo (toggled in Settings; the manager's list works with or
+without it).
 
 Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
@@ -257,41 +262,75 @@ class FiltersMixin:
     # --- The manager panel (shown in the edit panel's "filters" section) ----
 
     def _build_filters_section(self, parent):
-        "Filter MANAGER: Create / Remove filter / Import actions, then the"
-        " clickable grouped list (see _build_filter_list)."
+        "Filter MANAGER: just the clickable grouped list (see _build_filter_list)."
+        " Create / Undo live in the panel's pinned filters footer"
+        " (_build_filters_footer); Import is the icon beside the list's header."
         f = self._tw(tk.Frame(parent), bg="bar")
-
-        self._tw(tk.Label(f, text=t("Save the current edit as a filter, or add ready-made filters from a file."),
-                          anchor="w", justify="left", font=("Segoe UI", 8),
-                          wraplength=self._edit_dpi_w(210)), bg="bar", fg="fg_dim") \
-            .pack(fill="x", padx=EDIT_PAD, pady=(12, 2))
-
-        self.lbl_filter_count = self._tw(
-            tk.Label(f, text="", anchor="w", font=("Segoe UI", 8, "bold")),
-            bg="bar", fg="fg")
-        self.lbl_filter_count.pack(fill="x", padx=EDIT_PAD, pady=(2, 8))
-
-        self._filter_action(f, "plus",         t("Create filter"),
-                            self._filter_create,
-                            t("Saves the current slider values as a filter"))
-        self._filter_action(f, "eraser",       t("Remove filter"),
-                            self._filter_remove,
-                            t("Undoes whatever filter(s) you've tried, back to"
-                              " before the first one"))
-
-        self._tw(tk.Frame(f, height=1), bg="divider").pack(
-            fill="x", padx=EDIT_PAD, pady=(8, 8))
-
-        self._filter_action(f, "folder-input", t("Import"),
-                            self._filter_import,
-                            t("Load filters from a .json file"))
-
-        self._tw(tk.Frame(f, height=1), bg="divider").pack(
-            fill="x", padx=EDIT_PAD, pady=(8, 6))
         self._build_filter_list(f)
-
-        self._refresh_filter_count()
         return f
+
+    # --- The pinned filters footer (Create / Undo) --------------------------
+    # Unlike the per-tool footers other tools build inline at the bottom of
+    # their own section (Done/Remove — see focus.py, perspective.py), the
+    # filters list can grow arbitrarily long, so its actions can't live at the
+    # bottom of the scrolling content — they'd scroll out of reach. This footer
+    # instead sits OUTSIDE the scroll canvas, pinned directly above the panel's
+    # universal Save/Restore footer (same trick as editpanel._build_panel_actions),
+    # built once in editpanel._build_edit_panel and shown only while the filters
+    # tool is open (see editpanel.set_section / _enter_filters).
+
+    def _build_filters_footer(self, panel):
+        "Scaffold the pinned Create/Undo row; hidden until the filters tool opens."
+        wrap = self._tw(tk.Frame(panel), bg="bar")
+        # before=_sec_host: same trick as the universal footer (_build_panel_actions)
+        # — without it, the scroll canvas's fill=both/expand=True claims the cavity
+        # before this footer gets a slice, and it never shows.
+        wrap.pack(side="bottom", fill="x", before=self._sec_host)
+        self._tw(tk.Frame(wrap, height=1), bg="divider").pack(side="top", fill="x")
+        row = self._tw(tk.Frame(wrap), bg="bar")
+        row.pack(fill="x", padx=EDIT_PAD, pady=8)
+        self._filters_footer, self._filters_footer_row = wrap, row
+
+        self._filters_create_btn = tintkit.Button(
+            row, self.theme, t("Create filter"), role="primary", variant="filled",
+            icon="plus", stretch=True, bg="bar", command=self._filter_create)
+        tintkit.HoverTip(self._filters_create_btn.canvas, self.theme,
+                         t("Saves the current slider values as a filter"))
+
+        # "Undo filter", not "Remove filter" — this only undoes a filter TRY,
+        # it never touches the saved list, and "Remove" read like the list's
+        # own Delete to Lasha (2026-07-04). Icon is 'x' per the footer-secondary
+        # standard (rotate-ccw is reserved for the per-slider reset).
+        self._filters_undo_btn = tintkit.Button(
+            row, self.theme, t("Undo filter"), role="neutral", variant="outline",
+            icon="x", stretch=True, bg="bar", command=self._filter_remove)
+        tintkit.HoverTip(self._filters_undo_btn.canvas, self.theme,
+                         t("Undoes whatever filter(s) you've tried, back to"
+                           " before the first one"))
+
+        self._layout_filters_footer()
+        wrap.pack_forget()
+        return wrap
+
+    def _layout_filters_footer(self):
+        "Show Undo next to Create only while a filter-trying run is live."
+        if not hasattr(self, "_filters_create_btn"):
+            return
+        self._filters_create_btn.canvas.pack_forget()
+        self._filters_undo_btn.canvas.pack_forget()
+        if getattr(self, "_filter_anchor", None) is not None:
+            self._filters_create_btn.pack(side="left", fill="x", expand=True,
+                                          padx=(0, 6))
+            self._filters_undo_btn.pack(side="left", fill="x", expand=True)
+        else:
+            self._filters_create_btn.pack(fill="x")
+
+    def _enter_filters(self):
+        "Open the filters tool: show the pinned footer, then repaint normally."
+        self._filters_footer.pack(side="bottom", fill="x", before=self._sec_host)
+        self._layout_filters_footer()
+        self.preview.configure(cursor="")
+        self._render_preview()
 
     def _filter_action(self, parent, icon_name, label, command, tip):
         "One full-width filled action button (icon left, label) for the manager."
@@ -318,14 +357,6 @@ class FiltersMixin:
         btn._tip = Tooltip(btn, tip)
         return btn
 
-    def _refresh_filter_count(self):
-        "Repaint the 'saved: N' caption from the current store."
-        if not hasattr(self, "lbl_filter_count"):
-            return
-        n = len(getattr(self, "user_filters", []))
-        self.lbl_filter_count.configure(
-            text=t("Saved filters: {n}").format(n=n))
-
     # --- The grouped filter list (vertical, inside the manager panel) -------
     # A scrollable, name-only list of EVERY filter, split into foldable groups
     # ('Standard' built-ins + the user's groups) — the same groups as the
@@ -335,12 +366,9 @@ class FiltersMixin:
 
     def _build_filter_list(self, parent):
         "Scaffold the grouped list (scrolls with the rest of the section, like the"
-        " Actions list); rows are filled by _refresh_filter_list."
-        self._tw(tk.Label(parent, text=t("All filters"), anchor="w",
-                          font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim") \
-            .pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        " Actions list); rows (+ the header) are filled by _refresh_filter_list."
         holder = self._tw(tk.Frame(parent), bg="bar")
-        holder.pack(fill="x", padx=(EDIT_PAD, 0), pady=(0, 8))
+        holder.pack(fill="x", padx=(EDIT_PAD, 0), pady=(12, 8))
 
         self.filter_list_holder = holder
         self._filter_list_rows = []     # [{frame,label,vals,active}] for the repaint
@@ -348,8 +376,9 @@ class FiltersMixin:
         self._refresh_filter_list()
 
     def _refresh_filter_list(self):
-        "Rebuild the grouped list: 'Standard' built-ins first, then each non-empty"
-        " user group, every group under a foldable caption."
+        "Rebuild the grouped list: a header (running total + Import), then"
+        " 'Standard' built-ins, then each non-empty user group, every group"
+        " under a foldable caption."
         if not hasattr(self, "filter_list_holder"):
             return
         holder = self.filter_list_holder
@@ -357,8 +386,24 @@ class FiltersMixin:
             w.destroy()
         self._filter_list_rows = []
         self._filter_rows_by_group = {} # group name -> [{key,widget}], per-group band
+        self._add_flist_header(holder)
         for grp in self._strip_groups():
             self._add_flist_group(holder, grp)
+
+    def _add_flist_header(self, parent):
+        "The list's own caption: running total + the Import action as an icon"
+        " (no separate full-width button — Import is rare next to Create/Undo)."
+        bar, fg_dim = self.theme["bar"], self.theme["fg_dim"]
+        total = len(self.user_filters) + len(self.BUILTIN_FILTERS)
+        row = tk.Frame(parent, bg=bar)
+        row.pack(fill="x", pady=(0, 4))
+        tk.Label(row, text=f"{t('All filters')}  ({total})", bg=bar, fg=fg_dim,
+                 anchor="w", font=("Segoe UI", 8, "bold")).pack(
+                     side="left", fill="x", expand=True)
+        imp = tintkit.IconButton(row, self.theme, "folder-input", w=22, h=22,
+                                 icon_px=13, bg="bar", command=self._filter_import)
+        imp.pack(side="right")
+        tintkit.HoverTip(imp.canvas, self.theme, t("Load filters from a .json file"))
 
     def _add_flist_group(self, parent, grp):
         "A foldable caption (chevron + name + count + … menu); when open, its rows."
@@ -668,11 +713,12 @@ class FiltersMixin:
             cell["active"] = active
             cell["frame"].configure(bg=bar)
             cell["label"].configure(bg=bar, fg=accent if active else fg)
+        self._layout_filters_footer()   # Undo shows/hides with the live anchor
 
     def _apply_filter_values(self, vals):
         "Play a filter's factors (FILTER_KEYS + auto mode) onto the photo, undoably."
         " The first application in a run remembers the pre-filter state, so trying"
-        " several filters in a row can all be undone at once via 'Remove filter'."
+        " several filters in a row can all be undone at once via 'Undo filter'."
         if self.current_pil is None:
             return
         before = self._edit_state()
@@ -697,7 +743,7 @@ class FiltersMixin:
         "Undo whatever effect trying filters had this run — back to the state from"
         " right before the first one, no matter how many were tried since."
         if self.current_pil is None or self._filter_anchor is None:
-            self.toast(t("No filter to remove"))
+            self.toast(t("No filter to undo"))
             return
         before = self._edit_state()
         anchor = self._filter_anchor
@@ -715,24 +761,23 @@ class FiltersMixin:
         self._render_preview()
         self._record_edit(before)      # is_filter=False → also clears the anchor
         self._repaint_filter_strip()
-        self.toast(t("Filter removed"))
+        self.toast(t("Filter undone"))
 
     # --- Create -------------------------------------------------------------
 
     def _filter_create(self):
-        "Save the current edit factors as a new named filter."
+        "Save the current edit factors as a new named filter, into a chosen group."
         default = self._unique_filter_name(t("My filter"))
-        name = self._ask_filter_name(t("New filter"), default)
-        if name is None:
+        picked = self._ask_new_filter(t("New filter"), default)
+        if picked is None:
             return
+        name, group = picked
         name = self._unique_filter_name(name)
-        # New filters land in 'My filters' by default; the manager moves them.
-        self.user_filters.append({"name": name,
-                                  "group": self.GROUP_MINE,
+        self._last_new_filter_group = group   # remembered as next time's default
+        self.user_filters.append({"name": name, "group": group,
                                   "values": self._sanitize_filter_values(
                                       self._edit_state())})
         self._save_filters()
-        self._refresh_filter_count()
         self._refresh_filter_strip()
         self.toast(t("Filter saved: {name}").format(name=name))
 
@@ -941,7 +986,6 @@ class FiltersMixin:
                               if g["name"] != name]
         self._normalize_groups()
         self._save_filters()
-        self._refresh_filter_count()
         self._refresh_filter_strip()
         redraw()
 
@@ -976,7 +1020,6 @@ class FiltersMixin:
             self.user_filters.remove(fl)
         self._normalize_groups()
         self._save_filters()
-        self._refresh_filter_count()
         self._refresh_filter_strip()
         redraw()
 
@@ -1112,7 +1155,6 @@ class FiltersMixin:
         if added:
             self._normalize_groups()       # surface any new group ('Others' etc.)
             self._save_filters()
-            self._refresh_filter_count()
             self._refresh_filter_strip()
             self.toast(t("Added {n} filter(s)").format(n=added))
         else:
@@ -1166,9 +1208,100 @@ class FiltersMixin:
 
     # --- Shared dialog helpers ----------------------------------------------
 
-    def _ask_filter_name(self, title, default=""):
-        "Modal dark prompt for a filter name. Returns the trimmed text or None."
-        return self._ask_text(title, t("Filter name"), default)
+    def _ask_new_filter(self, title, default_name):
+        "Modal dialog for creating a filter: a name field + a group dropdown"
+        " (with 'New group…' inline) — defaults to the last group a filter"
+        " was created into. Returns (name, group) or None if cancelled."
+        result = {"val": None}
+        bg, fg, bar = self.theme["bg"], self.theme["fg"], self.theme["bar"]
+        names = [g["name"] for g in self.filter_groups]   # 'Standard' excluded
+        default_group = getattr(self, "_last_new_filter_group", None)
+        if default_group not in names:
+            default_group = self.GROUP_MINE
+        state = {"group": default_group}
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(title)
+        dlg.configure(bg=bg)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+
+        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
+        wrap.pack(fill="both", expand=True)
+        tk.Label(wrap, text=t("Filter name"), bg=bg, fg=fg,
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 8))
+
+        e = tk.Entry(wrap, bg=bar, fg=fg, insertbackground=fg, width=24,
+                     relief="flat", font=("Segoe UI", 11))
+        e.insert(0, default_name)
+        e.pack(anchor="w", ipady=5, fill="x")
+
+        tk.Label(wrap, text=t("Group"), bg=bg, fg=fg,
+                 font=("Segoe UI", 8)).pack(anchor="w", pady=(14, 4))
+
+        # A dropdown-style field: current group + chevron, opening the same
+        # popup-menu widget the … menus use (see _popup_menu), plus an inline
+        # "New group…" row so a brand-new group needs no separate trip.
+        picker = tk.Frame(wrap, bg=bar, cursor="hand2")
+        picker.pack(fill="x")
+        glabel = tk.Label(picker, text=self._group_display(state["group"]),
+                          bg=bar, fg=fg, anchor="w", font=("Segoe UI", 10))
+        glabel.pack(side="left", fill="x", expand=True, padx=(10, 4), pady=8)
+        chev = self.icon("chevron-down", size=13)
+        if chev is not None:
+            gchev = tk.Label(picker, image=chev, bg=bar)
+        else:
+            gchev = tk.Label(picker, text="▾", bg=bar, fg=fg)
+        gchev.pack(side="right", padx=(0, 10))
+
+        def set_group(name):
+            state["group"] = name
+            glabel.configure(text=self._group_display(name))
+
+        def new_group():
+            name = self._ask_text(t("New group"), t("Group name"))
+            if not name:
+                return
+            name = self._unique_group_name(name)
+            self.filter_groups.append({"name": name, "collapsed": False})
+            names.append(name)
+            set_group(name)
+
+        def open_picker():
+            specs = [(None, self._group_display(n), lambda gn=n: set_group(gn))
+                     for n in names]
+            specs.append(("sep",))
+            specs.append(("folder-plus", t("New group…"), new_group))
+            self._popup_menu(picker, specs)
+
+        for w in (picker, glabel, gchev):
+            w.bind("<Button-1>", lambda e: open_picker())
+
+        def confirm():
+            txt = e.get().strip()
+            if txt:
+                result["val"] = (txt, state["group"])
+            dlg.destroy()
+
+        btnrow = tk.Frame(wrap, bg=bg)
+        btnrow.pack(anchor="e", pady=(16, 0))
+        self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(side="right",
+                                                                  padx=(8, 0))
+        self._dialog_btn(btnrow, t("Save"), confirm,
+                         primary=True).pack(side="right")
+
+        dlg.bind("<Return>", lambda e: confirm())
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        e.focus_set()
+        e.select_range(0, "end")
+        # No hard grab here (unlike _place_filter_dialog): the group dropdown
+        # opens its own popup Toplevel, which a grab on this dialog would starve
+        # of clicks. transient() still keeps it on top of / closing with root.
+        center_over(self.root, dlg)
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        dlg.focus_set()
+        self.root.wait_window(dlg)
+        return result["val"]
 
     def _ask_text(self, title, label, default=""):
         "Modal dark text prompt (title + a labelled field). Trimmed text or None."

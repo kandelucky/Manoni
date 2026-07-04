@@ -105,6 +105,7 @@ class EditPanelMixin:
         # are the panel's primary actions and only show while the panel is open
         # (the rail keeps a compact Save for the collapsed state).
         self._build_panel_actions(panel)
+        self._build_filters_footer(panel)   # pinned Create/Undo, filters tool only
 
     def _refresh_histogram(self):
         "Show or hide the panel's live histogram per the General setting."
@@ -598,6 +599,7 @@ class EditPanelMixin:
         if key in ("crop", "heal", "focus", "perspective", "text"):
             self._set_compare(False)  # these warp/drag the canvas — compare can't intercept it
         self.active_section = key
+        self._filters_footer.pack_forget()   # only the filters tool pins its footer
         for k, frame in self.sections.items():
             if k == key:
                 frame.pack(fill="both", expand=True)
@@ -623,6 +625,8 @@ class EditPanelMixin:
             self._enter_text()       # place a default overlay + fit, focus the entry
         elif key == "actions":
             self._enter_actions()    # refresh the recorder + saved-action list
+        elif key == "filters":
+            self._enter_filters()    # show the pinned Create/Undo footer
         else:
             self.preview.configure(cursor="")
             self._render_preview()   # repaint without the crop/heal/focus overlay

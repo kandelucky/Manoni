@@ -199,13 +199,15 @@ CATALOG_KA = {
         "დასაბრუნებელი არაფერია — ცვლილება ჯერ არ არის",
 
     # --- Filters manager (filters.py) -------------------------------------
-    "Save the current edit as a filter, or add ready-made filters from a file.":
-        "შენ შეგიძლია მიმდინარე ედიტი ფილტრად შეინახო, ან მზა ფილტრები ფაილიდან ჩამოამატო.",
-    "Saved filters: {n}": "შენახული ფილტრები: {n}",
     "All filters": "ყველა ფილტრი",
     "Create filter": "ფილტრის შექმნა",
     "Saves the current slider values as a filter":
         "მიმდინარე სლაიდერების მნიშვნელობებს ფილტრად შეინახავს",
+    "Undo filter": "ფილტრის გაუქმება",
+    "Undoes whatever filter(s) you've tried, back to before the first one":
+        "აუქმებს ყველა ფილტრს, რაც სცადე — უბრუნებს პირველი ფილტრის მორგებამდელ მდგომარეობას",
+    "No filter to undo": "გასაუქმებელი ფილტრი არ არის",
+    "Filter undone": "ფილტრი გაუქმდა",
     "Edit": "რედაქტირება",
     "Rename / refresh / delete saved filters":
         "შენახული ფილტრების გადარქმევა / განახლება / წაშლა",
