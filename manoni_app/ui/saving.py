@@ -113,6 +113,7 @@ class SaveMixin:
             self.toast(t("Error: {e}").format(e=e))
             return None
         self._edits_saved = True                   # on disk now → no re-prompt
+        self._capture_last_filter()                # remember this look as "Last"
         return out
 
     def quick_save(self):

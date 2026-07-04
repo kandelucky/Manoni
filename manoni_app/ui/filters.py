@@ -396,6 +396,8 @@ class FiltersMixin:
         self._filter_rows_by_group = {} # group name -> [{key,widget}], per-group band
         self._filter_list_thumbs = []   # row preview PhotoImages, kept alive
         self._add_flist_header(holder)
+        if getattr(self, "_last_filter", None) is not None:
+            self._add_last_row(holder)     # the pinned session slot, above all groups
         for grp in self._strip_groups():
             self._add_flist_group(holder, grp)
 
@@ -570,6 +572,10 @@ class FiltersMixin:
         # drop the look. Then one labelled section per group; a collapsed group
         # shows just its caption (its cells are skipped to save the row width).
         self._add_filter_cell(holder, t("Original"), {})
+        lf = getattr(self, "_last_filter", None)
+        if lf is not None:
+            self._add_strip_separator(holder)
+            self._add_filter_cell(holder, t("Last"), lf["values"])
         for grp in self._strip_groups():
             self._add_strip_separator(holder)
             self._add_group_caption(holder, grp)
@@ -883,6 +889,106 @@ class FiltersMixin:
         self._save_filters()
         self._refresh_filter_strip()
         self.toast(t("Filter saved: {name}").format(name=name))
+
+    # --- The "Last" filter (session-only slot) ------------------------------
+    # After every save, the slider look that was written is remembered as a
+    # single pinned "Last" slot (in the strip + panel list), so it can be
+    # replayed on the next photo without first turning it into a named filter.
+    # It lives only in memory (self._last_filter), so a new session starts
+    # empty. A save that carried NO slider adjustment (only a crop / rotate)
+    # leaves the previous slot untouched — there is nothing new worth keeping.
+    # The slot's … menu can promote it into a permanent named filter, or clear it.
+
+    def _values_neutral(self, vals):
+        "True when every factor sits at its neutral rest value (no real adjustment)."
+        for k in self.FILTER_KEYS:
+            if abs(float(vals.get(k, self._slider_neutral(k)))
+                   - self._slider_neutral(k)) > 1e-6:
+                return False
+        return (vals.get("auto_mode") or None) is None
+
+    def _capture_last_filter(self):
+        "Called after a successful save: remember the saved slider look as 'Last',"
+        " unless the sliders were all neutral (a geometry-only save keeps the"
+        " previous slot). Session-only — never written to the filters store."
+        vals = self._sanitize_filter_values(self._edit_state())
+        if vals is None or self._values_neutral(vals):
+            return
+        self._last_filter = {"values": vals}
+        self._refresh_filter_strip()
+
+    def _add_last_row(self, parent):
+        "The pinned 'Last' row (session slot): the last saved photo's slider look."
+        " Click applies it; the … menu saves it as a permanent filter or clears it."
+        vals = self._last_filter["values"]
+        active = self._filter_active(vals)
+        bar = self.theme["bar"]
+        row = tk.Frame(parent, bg=bar, cursor="hand2")
+        row.pack(fill="x")
+        self._kebab(row, lambda anc: self._last_menu(anc))
+        # No grip (like the built-ins), so take their left indent to line the
+        # preview up with the grip'd user rows.
+        pic = None
+        thumb = self._list_thumb_image(vals)
+        if thumb is not None:
+            self._filter_list_thumbs.append(thumb)
+            pic = tk.Label(row, image=thumb, bg=bar)
+            pic.pack(side="left", padx=(24, 6))
+        tx = tk.Label(row, text=t("Last"), bg=bar,
+                      fg=self.theme["accent"] if active else self.theme["fg"],
+                      anchor="w", font=("Segoe UI", 9))
+        name_lpad = 0 if pic is not None else 26
+        tx.pack(side="left", fill="x", expand=True, padx=(name_lpad, 6), pady=4)
+
+        cell = {"frame": row, "label": tx, "vals": vals, "active": active}
+        self._filter_list_rows.append(cell)
+        parts = (row, tx) if pic is None else (row, pic, tx)
+
+        def enter(_e=None):
+            if not cell["active"]:
+                for w in parts:
+                    w.configure(bg=self.theme["hover"])
+
+        def leave(_e=None):
+            if not cell["active"]:
+                for w in parts:
+                    w.configure(bg=self.theme["bar"])
+        for w in parts:
+            w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
+            w.bind("<Enter>", enter)
+            w.bind("<Leave>", leave)
+        return row
+
+    def _last_menu(self, anchor):
+        "The 'Last' slot's … menu: save it permanently, or clear the session slot."
+        self._popup_menu(anchor, [
+            ("save", t("Save as filter…"), self._save_last_filter),
+            ("sep",),
+            ("x", t("Clear last filter"), self._clear_last_filter),
+        ])
+
+    def _save_last_filter(self):
+        "Promote the 'Last' slot into a permanent, named filter (in a chosen group)."
+        lf = getattr(self, "_last_filter", None)
+        if lf is None:
+            return
+        default = self._unique_filter_name(t("My filter"))
+        picked = self._ask_new_filter(t("New filter"), default)
+        if picked is None:
+            return
+        name, group = picked
+        name = self._unique_filter_name(name)
+        self._last_new_filter_group = group
+        self.user_filters.append({"name": name, "group": group,
+                                  "values": dict(lf["values"])})
+        self._save_filters()
+        self._refresh_filter_strip()
+        self.toast(t("Filter saved: {name}").format(name=name))
+
+    def _clear_last_filter(self):
+        "Drop the session 'Last' slot (it comes back on the next meaningful save)."
+        self._last_filter = None
+        self._refresh_filter_strip()
 
     def _kebab(self, parent, open_menu, icon_name="ellipsis", size=15):
         "A small '…' button on the right of a row that opens its popup menu."

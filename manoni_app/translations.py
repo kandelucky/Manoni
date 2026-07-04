@@ -246,6 +246,11 @@ CATALOG_KA = {
     "Remove the filter (show the original)":
         "ფილტრის მოხსნა (ორიგინალის ჩვენება)",
 
+    # --- The "Last" filter (session-only slot, filters.py) ----------------
+    "Last": "უკანასკნელი",
+    "Save as filter…": "ფილტრად შენახვა…",
+    "Clear last filter": "უკანასკნელის მოცილება",
+
     # --- Built-in filter names (filters.py BUILTIN_FILTERS) ---------------
     # "Clarendon" is a proper name → left in English (falls back to the source).
     "Vivid": "მკვეთრი",

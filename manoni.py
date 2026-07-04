@@ -279,6 +279,11 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # (folder/format/quality), persisted across sessions in the state file.
         self.quick_save_cfg = None    # armed only within this session (never loaded)
         self.last_save = None         # {dir, fmt, quality} remembered for the dialog
+        # The "Last" filter: a session-only slot holding the slider look of the
+        # most recent MEANINGFUL save (one that changed the sliders). A save that
+        # touched only geometry (crop / rotate) leaves the previous slot alone. It
+        # is never written to disk, so every new session starts without one.
+        self._last_filter = None
         # Cull (culling): two destination folders the keep/reject toolbar
         # buttons sort the current photo into. Both must be set (in the ⚙ options
         # dialog) before either button works — see nav._require_cull. Persisted

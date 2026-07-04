@@ -35,6 +35,7 @@ class FakeApp(FiltersMixin, ActionsMixin, ResizeMixin, CropMixin, SaveMixin):
     def __init__(self):
         self.user_filters = []
         self.filter_groups = []
+        self._last_filter = None
         self.user_actions = []
         self.current_pil = None
         self.files = []
@@ -139,6 +140,37 @@ def group_normalize_order_and_others():
     a.user_filters = [{"name": "a", "group": "My filters", "values": {}}]
     a._normalize_groups()
     assert "Others" not in [g["name"] for g in a.filter_groups], "empty Others kept"
+
+
+# ---- the "Last" filter (session-only slot) ---------------------------------
+
+@check
+def last_filter_captured_on_meaningful_save():
+    a = app()
+    a._state["brightness"] = 1.5              # a real slider adjustment
+    a._capture_last_filter()
+    assert a._last_filter is not None, "meaningful save did not fill the slot"
+    assert a._last_filter["values"]["brightness"] == 1.5, "wrong values captured"
+
+
+@check
+def last_filter_kept_on_neutral_save():
+    a = app()
+    a._last_filter = {"values": {"brightness": 1.5}}   # an earlier meaningful save
+    # A geometry-only save: every slider is neutral (_state is all-neutral here).
+    a._capture_last_filter()
+    assert a._last_filter["values"] == {"brightness": 1.5}, \
+        "neutral save clobbered the previous slot"
+
+
+@check
+def last_filter_updates_on_next_meaningful_save():
+    a = app()
+    a._last_filter = {"values": {"brightness": 1.5}}
+    a._state["contrast"] = 1.3                # a new, different adjustment
+    a._capture_last_filter()
+    assert a._last_filter["values"]["contrast"] == 1.3, "slot not updated"
+    assert a._last_filter["values"]["brightness"] == 1.0, "stale value carried over"
 
 
 @check
