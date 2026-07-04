@@ -185,25 +185,30 @@ class CropMixin:
         "Segmented control for the crop kind (free / original / one-off custom)."
         track = self._tw(tk.Frame(parent), bg="bg")   # trough is the darkest surface
         track.pack(fill="x", padx=EDIT_PAD, pady=(0, 5))
-        for icon_name, label, kind in [("maximize", t("Free"), None),
-                                       ("image", t("Orig."), "orig"),
-                                       ("scaling", t("Custom"), "custom")]:
-            self._segment_button(track, icon_name, label, kind)
+        cells = [("maximize", t("Free"), None),
+                 ("image", t("Orig."), "orig"),
+                 ("scaling", t("Custom"), "custom")]
+        # Grid + uniform: every cell is exactly 1/3 wide, regardless of label
+        # length (plain pack/expand only splits the *spare* space evenly).
+        for i in range(len(cells)):
+            track.columnconfigure(i, weight=1, uniform="seg")
+        for i, (icon_name, label, kind) in enumerate(cells):
+            self._segment_button(track, icon_name, label, kind, i)
 
-    def _segment_button(self, track, icon_name, label, kind):
+    def _segment_button(self, track, icon_name, label, kind, col):
         "One segment cell (icon over label); active = filled, like a tab."
         cell = tk.Frame(track, bg=self.theme["bg"], cursor="hand2")
-        cell.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+        cell.grid(row=0, column=col, sticky="ew", padx=2, pady=2)
         img = self.icon(icon_name, size=15)
         if img is not None:
             ic = tk.Label(cell, image=img, bg=self.theme["bg"])
             self._reg_icon(ic, icon_name, size=15, token="fg")   # bg = segment paint's
         else:
             ic = tk.Label(cell, text="□", bg=self.theme["bg"], fg=self.theme["fg"])
-        ic.pack(pady=(6, 1))
+        ic.pack(pady=(4, 1))
         tx = tk.Label(cell, text=label, bg=self.theme["bg"], fg=self.theme["fg_dim"],
                       font=("Segoe UI", 8))
-        tx.pack(pady=(0, 6))
+        tx.pack(pady=(0, 4))
 
         def paint(active):
             bg = self.theme["chip"] if active else self.theme["bg"]
@@ -263,10 +268,10 @@ class CropMixin:
         card.grid(row=0, column=col, sticky="ew", padx=2, pady=2)
         glyph = self._ratio_glyph(card, ratio, box=22, bg=self.theme["chip"],
                                   stroke=self.theme["fg_dim"])
-        glyph.pack(pady=(8, 3))
+        glyph.pack(pady=(5, 2))
         tx = tk.Label(card, text=label, bg=self.theme["chip"], fg=self.theme["fg_dim"],
                       font=("Segoe UI", 8))
-        tx.pack(pady=(0, 7))
+        tx.pack(pady=(0, 5))
 
         def paint(active):
             bg = self.theme["accent"] if active else self.theme["chip"]
