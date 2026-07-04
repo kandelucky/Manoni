@@ -2,7 +2,8 @@
 
 A non-modal Toplevel in the app's dark-blue style: a header bar, then a
 `tintkit.SettingsWindow` (the kit's left tab rail + scrollable pane), then a
-footer (Restore defaults · Done). Tabs: General · Export · Culling · About.
+footer (Restore defaults · Done). Tabs: General · Appearance · Performance ·
+Export · Culling · About.
 
 The rail, the swappable pane, the section headers and setting rows all come
 from the kit now — the same component the TintKit gallery shows — so Settings
@@ -13,11 +14,12 @@ each tab: builders that lay out REAL, already-persisted controls via the pane's
 
 Every control is wired to a REAL setting — there are no dead toggles here. The
 window only gathers settings that live elsewhere into one place:
-  * General  — UI language, view, interface (light mode, accent, strips),
-               performance, launch + confirmation preferences
-  * Export   — the Save dialog's defaults (format / quality / metadata / sRGB /
-               output folder), stored in self.last_save + friends
-  * Culling  — the two keep / reject sort folders + the end-of-folder action
+  * General     — UI language, launch + confirmation preferences
+  * Appearance  — sidebar view, interface (light mode, accent, strips, rulers)
+  * Performance — the fast-preview + off-thread render toggles
+  * Export      — the Save dialog's defaults (format / quality / metadata / sRGB
+                  / output folder), stored in self.last_save + friends
+  * Culling     — the two keep / reject sort folders + the end-of-folder action
 
 Mixin on the Manoni window — every method uses the shared `self`, like the other
 ui mixins.
@@ -47,10 +49,12 @@ from .about import (APP_VERSION, AUTHOR_NAME, AUTHOR_HANDLE, BUILT_WITH,
 # --- tab spec: (key, label-source, icon, builder-method-name) ----------------
 # Labels are translated where the tabs are built (so a language switch retexts).
 _TABS = [
-    ("general", "General", "settings",     "_set_tab_general"),
-    ("export",  "Export",  "upload",       "_set_tab_export"),
-    ("culling", "Culling", "folder-check", "_set_tab_culling"),
-    ("about",   "About",   "info",         "_set_tab_about"),
+    ("general",     "General",     "settings",     "_set_tab_general"),
+    ("appearance",  "Appearance",  "palette",      "_set_tab_appearance"),
+    ("performance", "Performance", "aperture",     "_set_tab_performance"),
+    ("export",      "Export",      "upload",       "_set_tab_export"),
+    ("culling",     "Culling",     "folder-check", "_set_tab_culling"),
+    ("about",       "About",       "info",         "_set_tab_about"),
 ]
 
 
@@ -167,6 +171,26 @@ class SettingsMixin:
                        variant="outline", bg="bg",
                        command=self._language_studio).pack()
 
+        win.group(t("On launch"))
+        r = win.row(t("Reopen the last folder"))
+        tintkit.Toggle(r, self.theme, value=self.restore_session,
+                command=lambda on: self._set_pref("restore_session", on)).pack()
+        r = win.row(t("Jump back to the last photo"))
+        tintkit.Toggle(r, self.theme, value=self.restore_photo,
+                command=lambda on: self._set_pref("restore_photo", on)).pack()
+
+        win.group(t("Confirmations"))
+        r = win.row(t("Ask before rejecting a photo"),
+                    t("A quick confirm before a photo moves to the Reject folder."))
+        tintkit.Toggle(r, self.theme, value=self.confirm_reject,
+                command=lambda on: self._set_pref("confirm_reject", on)).pack()
+        r = win.row(t("Warn about unsaved edits when leaving a photo"))
+        tintkit.Toggle(r, self.theme, value=self.warn_unsaved,
+                command=lambda on: self._set_pref("warn_unsaved", on)).pack()
+
+    # --- Appearance tab -----------------------------------------------------
+
+    def _set_tab_appearance(self, win):
         win.group(t("Sidebar"))
         r = win.row(t("Default view"))
         keys = ["large", "medium", "small", "list"]
@@ -221,7 +245,10 @@ class SettingsMixin:
         tintkit.Toggle(r, self.theme, value=getattr(self, "show_rulers", True),
                 command=pick_rulers).pack()
 
-        win.group(t("Performance"))
+    # --- Performance tab ----------------------------------------------------
+
+    def _set_tab_performance(self, win):
+        win.group(t("Rendering"))
         r = win.row(t("Fast preview while dragging"),
                     t("Skip the heavy filters (clarity, sharpen, denoise, "
                       "dehaze, focus, grain) while a slider is dragged; "
@@ -236,23 +263,6 @@ class SettingsMixin:
                       "off to render on the main thread (the older behaviour)."))
         tintkit.Toggle(r, self.theme, value=getattr(self, "async_render", True),
                 command=lambda on: self._set_pref("async_render", on)).pack()
-
-        win.group(t("On launch"))
-        r = win.row(t("Reopen the last folder"))
-        tintkit.Toggle(r, self.theme, value=self.restore_session,
-                command=lambda on: self._set_pref("restore_session", on)).pack()
-        r = win.row(t("Jump back to the last photo"))
-        tintkit.Toggle(r, self.theme, value=self.restore_photo,
-                command=lambda on: self._set_pref("restore_photo", on)).pack()
-
-        win.group(t("Confirmations"))
-        r = win.row(t("Ask before rejecting a photo"),
-                    t("A quick confirm before a photo moves to the Reject folder."))
-        tintkit.Toggle(r, self.theme, value=self.confirm_reject,
-                command=lambda on: self._set_pref("confirm_reject", on)).pack()
-        r = win.row(t("Warn about unsaved edits when leaving a photo"))
-        tintkit.Toggle(r, self.theme, value=self.warn_unsaved,
-                command=lambda on: self._set_pref("warn_unsaved", on)).pack()
 
     def _set_pref(self, key, val):
         "Set a simple on/off General preference attribute and persist it."
