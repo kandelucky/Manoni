@@ -316,6 +316,11 @@ CATALOG_KA = {
         "ჩავათრიე კუთხეები; აირჩიე ფორმა ან სოც. ქსელი",
     "Shape": "ფორმა",
     "Orientation": "ორიენტაცია",
+    "Straighten": "გასწორება",
+    "Flip & rotate": "გადაბრუნება",
+    "Rotate": "შებრუნება",
+    "Flip H": "სარკე H",
+    "Flip V": "სარკე V",
     "Angle": "კუთხე",
     "Tilt to level the horizon (the crop trims the corners)":
         "დახარე ჰორიზონტის გასასწორებლად (მოჭრა კუთხეებს მოაჭრის)",

@@ -297,46 +297,83 @@ class CropMixin:
         self._crop_register(card, paint)
 
     # --- Orientation: straighten (horizon tilt) + rotate/mirror -------------
-    # Grouped under one header — angle, 90° swap and the two mirrors are all
-    # the same idea (adjust the photo's orientation before committing the crop).
+    # Two framed fields under the one header: a continuous "Straighten" (angle
+    # slider) over a discrete "Flip & rotate" (90° swap + the two mirrors).
+    # Boxing each and giving the transforms labelled tiles reads more clearly
+    # than a slider stacked on a row of bare, unlabelled floating icons.
+
+    def _crop_field(self, parent, title):
+        "A bordered card titled with a small dim caption; returns its content"
+        " frame for the caller to fill."
+        card = self._tw(tk.Frame(parent, highlightthickness=1), bg="bar", hl="border")
+        card.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        inner = self._tw(tk.Frame(card), bg="bar")
+        inner.pack(fill="x", padx=10, pady=(8, 9))
+        self._tw(tk.Label(inner, text=title, font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(anchor="w", pady=(0, 6))
+        return inner
 
     def _build_straighten(self, parent):
-        "A horizon-straighten slider (−45…+45°, 0 = level). It tilts the photo"
-        " live; the crop box auto-fits so a straighten never keeps empty corners."
+        "A horizon-straighten slider (−45…+45°, 0 = level) in its own field. It"
+        " tilts the photo live; the crop box auto-fits so no empty corners stay."
         # A bidirectional TitledSlider (title strip: label · signed angle · reset)
         # over a full-width track, matching every other migrated slider.
+        field = self._crop_field(parent, t("Straighten"))
         self.s_straighten = tintkit.TitledSlider(
-            parent, self.theme, t("Angle"), value=0, lo=-45, hi=45, neutral=0,
+            field, self.theme, t("Angle"), value=0, lo=-45, hi=45, neutral=0,
             bg="bar", command=self._on_straighten, reset_tip=t("Reset this slider"),
             on_reset=lambda: self._reset_straighten(render=True))
-        self.s_straighten.pack(fill="x", padx=EDIT_PAD, pady=2)
+        self.s_straighten.pack(fill="x")
         tintkit.HoverTip(
             self.s_straighten.canvas, self.theme,
             t("Tilt to level the horizon (the crop trims the corners)"))
 
-    # (icon, command-name, tooltip) for the orientation icon row. command-name
-    # is looked up on self at build time so this table stays declarative.
+    # (icon, command-name, tile label, tooltip) for the transform tiles.
+    # command-name is looked up on self at build time so this stays declarative.
     _CROP_TOOL_ROW = [
-        ("rotate-cw-square", "_flip_crop_ratio", "Swap the selection's orientation (90°)"),
-        ("flip-horizontal-2", "mirror_horizontal", "Mirror the photo horizontally"),
-        ("flip-vertical-2", "mirror_vertical", "Mirror the photo vertically"),
+        ("rotate-cw-square", "_flip_crop_ratio", "Rotate",
+         "Swap the selection's orientation (90°)"),
+        ("flip-horizontal-2", "mirror_horizontal", "Flip H",
+         "Mirror the photo horizontally"),
+        ("flip-vertical-2", "mirror_vertical", "Flip V",
+         "Mirror the photo vertically"),
     ]
 
     def _build_orientation_tools(self, parent):
-        "The swap-orientation + mirror-horizontal/vertical icon row. Uses"
-        " tintkit.Button's icon-only ghost variant (permanent chip fill + border)"
-        " rather than the bare IconButton, so it reads as a button at rest, not"
-        " just a floating icon."
-        tools = self._tw(tk.Frame(parent), bg="bar")
-        tools.pack(fill="x", padx=EDIT_PAD, pady=(6, 4))
-        for icon_name, cmd_name, tip in self._CROP_TOOL_ROW:
-            cell = self._tw(tk.Frame(tools), bg="bar")
-            cell.pack(side="left", expand=True)
-            btn = tintkit.Button(cell, self.theme, "", role="neutral", variant="ghost",
-                                 icon=icon_name, min_w=36, h=36, bg="bar",
-                                 command=getattr(self, cmd_name))
-            btn.pack()
-            tintkit.HoverTip(btn.canvas, self.theme, t(tip))
+        "The 90° swap + mirror-h/v transforms as three equal labelled tiles"
+        " (icon over a short word) in their own field — clearer than the old row"
+        " of bare floating icons."
+        field = self._crop_field(parent, t("Flip & rotate"))
+        grid = self._tw(tk.Frame(field), bg="bar")
+        grid.pack(fill="x")
+        for i in range(len(self._CROP_TOOL_ROW)):
+            grid.columnconfigure(i, weight=1, uniform="ot")
+        for i, (icon_name, cmd_name, label, tip) in enumerate(self._CROP_TOOL_ROW):
+            self._orientation_tile(grid, icon_name, t(label),
+                                   getattr(self, cmd_name), t(tip), i)
+
+    def _orientation_tile(self, grid, icon_name, label, command, tip, col):
+        "One transform tile: an icon over a short label; chip fill, border, hover."
+        tile = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1),
+                        bg="chip", hl="border")
+        tile.grid(row=0, column=col, sticky="ew", padx=2)
+        ic = self._icon_label(tile, icon_name, size=16, token="fg", bg="chip")
+        ic.pack(pady=(8, 2))
+        tx = self._tw(tk.Label(tile, text=label, font=("Segoe UI", 8)),
+                      bg="chip", fg="fg_dim")
+        tx.pack(pady=(0, 7))
+        parts = (tile, ic, tx)
+
+        def hover(on):
+            bg = self.theme["hover"] if on else self.theme["chip"]
+            for w in parts:
+                w.configure(bg=bg)
+
+        for w in parts:
+            w.bind("<Button-1>", lambda e: command())
+            w.bind("<Enter>", lambda e: hover(True))
+            w.bind("<Leave>", lambda e: hover(False))
+        tintkit.HoverTip(tile, self.theme, tip)
 
     def _on_straighten(self, deg):
         "Live tilt: set the angle, fit the auto crop box, re-render the preview."
