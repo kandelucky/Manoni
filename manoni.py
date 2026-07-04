@@ -24,6 +24,8 @@ from manoni_app.config import (BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR,
                                ICON_DIR, THEME_DARK)
 from manoni_app import i18n
 from manoni_app import translations  # noqa: F401 — registers language packs on import
+from manoni_app import single_instance
+from manoni_app.storage import save_json
 from manoni_app.ui.chrome import ChromeMixin
 from manoni_app.ui.editpanel import EditPanelMixin
 from manoni_app.ui.saving import SaveMixin
@@ -182,7 +184,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         except Exception:
             pass
         self._tw(self.root, bg="bg")   # outermost surface follows dark<->light too
-        self._center_window(1280, 800)
+        self._center_window(0.9)     # open at ~90% of the screen
 
         self.folder = None
         self.files = []          # image filenames in the folder
@@ -464,8 +466,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.root.bind("<Up>",    lambda e: self._arrow_keep())
         self.root.bind("<Down>",  lambda e: self._arrow_reject())
 
+        self._setup_drag_drop()      # let the user drop an image onto the window
+
         if folder:
-            self.load_folder(folder)
+            self._open_launch_target(folder)
         else:
             self._restore_last_session()
 
@@ -508,21 +512,20 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
     # --- Session state (last folder + image) --------------------------------
 
-    def _center_window(self, want_w, want_h):
-        """Size the window to fit the screen and center it.
+    def _center_window(self, frac=0.9):
+        """Open at `frac` of the screen (minus the taskbar), centered.
 
-        On a small/weak laptop a fixed 1280x800 can spill below the screen edge,
-        hiding the bottom of the window under the taskbar. We clamp the size to
-        the available screen area (leaving a margin for the title bar + taskbar)
-        and place it so the whole window stays visible.
+        A big default window suits a photo editor. We take `frac` of the screen
+        width and of the height above the taskbar, so the window stays clear of
+        the taskbar and scales sensibly on both a big monitor and a small laptop.
         """
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
-        # Leave room: side margins + title bar (~32px) and taskbar (~56px).
-        w = min(want_w, sw - 40)
-        h = min(want_h, sh - 88)
+        usable_h = sh - 56               # keep clear of the taskbar (~56px)
+        w = int(sw * frac)
+        h = int(usable_h * frac)
         x = max(0, (sw - w) // 2)
-        y = max(0, (sh - 88 - h) // 2)
+        y = max(0, (usable_h - h) // 2)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
     def _save_state(self):
@@ -563,11 +566,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             state["folder"] = self.folder
             if self.files and 0 <= self.index < len(self.files):
                 state["file"] = self.files[self.index]
-        try:
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(state, f)
-        except Exception:
-            pass
+        # Atomic write (temp + os.replace) so a crash mid-save can't truncate the
+        # state file and lose the user's prefs/session — same guard as filters/actions.
+        save_json(STATE_FILE, state)
 
     def _snap_thumb_level(self, size, direction=0):
         "Snap a thumbnail size onto THUMB_LEVELS. direction 0 → the nearest level;"
@@ -672,6 +673,64 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                     clean.append({"name": name, "w": w, "h": h})
             self.crop_sizes = clean
 
+    def _open_launch_target(self, path):
+        "Open a launch argument that may be a single image file or a folder."
+        # Windows "Open with Manoni" hands us the image's full path, not its
+        # folder; a folder drop / `manoni C:\photos` still hands us a folder.
+        # A file → open its folder and land on that photo; a folder → as before.
+        path = os.path.abspath(path)
+        if os.path.isfile(path):
+            self.load_folder(os.path.dirname(path), select=os.path.basename(path))
+        else:
+            self.load_folder(path)
+
+    def _handle_external_open(self, path):
+        "A second launch forwarded us a path; open it here instead of a new window."
+        # Come to the front so the user sees this window respond to their click.
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+        if not path:
+            return                       # a bare relaunch just refocuses the window
+        if not self._maybe_prompt_save():
+            return                       # unsaved edits + Cancel → keep current work
+        self._open_launch_target(path)
+
+    def _setup_drag_drop(self):
+        "Let the user drop an image file onto the window to open it (needs tkinterdnd2)."
+        try:
+            from tkinterdnd2 import TkinterDnD, DND_FILES
+            TkinterDnD.require(self.root)   # load tkdnd onto our existing root
+        except Exception:
+            return                          # no tkdnd available → drag & drop stays off
+
+        def on_drop(event):
+            # event.data is a Tcl list of paths (brace-wrapped if they have spaces).
+            try:
+                paths = self.root.tk.splitlist(event.data)
+            except Exception:
+                paths = [event.data]
+            paths = [p for p in paths if p]
+            if paths:
+                # Defer past the OS drag operation, then treat it exactly like an
+                # external "Open with": front + unsaved-guard + load the first file.
+                self.root.after(0, lambda p=paths[0]: self._handle_external_open(p))
+            return event.action
+
+        # The big image area and the thumbnail strip are the natural drop zones;
+        # the root catches drops onto the surrounding chrome.
+        for w in (getattr(self, "preview", None), getattr(self, "canvas", None), self.root):
+            if w is None:
+                continue
+            try:
+                w.drop_target_register(DND_FILES)
+                w.dnd_bind("<<Drop>>", on_drop)
+            except Exception:
+                pass
+
     def _restore_last_session(self):
         "On launch with no folder given, reopen the last session if it still exists."
         if not self.restore_session:
@@ -705,8 +764,26 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
 
 def main():
-    folder = sys.argv[1] if len(sys.argv) > 1 else None
-    app = Manoni(folder)
+    arg = sys.argv[1] if len(sys.argv) > 1 else None
+    if arg:
+        arg = os.path.abspath(arg)       # resolve now, before any forward: the
+                                         # already-running instance may sit in a
+                                         # different working directory
+    server = single_instance.try_become_primary()
+    if server is None:
+        # Another Manoni already owns the window — hand it our file and quit
+        # quietly. If nothing answers (a stale or foreign port holder), fall
+        # through and open a normal window rather than silently doing nothing.
+        if single_instance.forward(arg):
+            return
+        pending = None
+    else:
+        # Start answering forwarded launches immediately, before the (slow) window
+        # build, so a second launch during startup isn't left hanging.
+        pending = single_instance.start_listener(server)
+    app = Manoni(arg)
+    if pending is not None:
+        single_instance.deliver(pending, app.root, app._handle_external_open)
     app.run()
 
 

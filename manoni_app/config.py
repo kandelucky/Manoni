@@ -6,35 +6,56 @@ they stay correct even though this module lives one level down in the package.
 """
 
 import os
+import sys
 
-# Project root = the directory that holds manoni.py (one level above this file).
+# Two kinds of path, resolved differently so Manoni works both from source and as
+# a frozen PyInstaller build:
+#   * READ-ONLY data shipped with the app (icons, the showcase image) — inside the
+#     bundle when frozen, at the project root when run from source.
+#   * WRITABLE user data (session, filters, actions, imported languages) — under
+#     %APPDATA%\Manoni when frozen, because a frozen exe may sit in a read-only
+#     place (Program Files) where writing beside it fails and data would be lost.
 _PKG_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(_PKG_DIR)
+_SOURCE_ROOT = os.path.dirname(_PKG_DIR)   # the folder that holds manoni.py
 
-# Icons live in ./icons at the project root (Lucide, white strokes on transparent).
-ICON_DIR = os.path.join(ROOT_DIR, "icons")
+if getattr(sys, "frozen", False):
+    # PyInstaller sets sys.frozen; _MEIPASS is its bundled-data folder (present in
+    # both one-file and one-folder builds), with the exe's dir as a fallback.
+    _RES_DIR = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    _DATA_DIR = os.path.join(os.environ.get("APPDATA")
+                             or os.path.expanduser("~"), "Manoni")
+    os.makedirs(_DATA_DIR, exist_ok=True)   # must exist before the first save
+else:
+    _RES_DIR = _SOURCE_ROOT
+    _DATA_DIR = _SOURCE_ROOT                 # source run: everything at the root
+
+# Kept as ROOT_DIR because the app-icon lookup (manoni.ico) still references it.
+ROOT_DIR = _RES_DIR
+
+# Icons live in ./icons (Lucide, white strokes on transparent).
+ICON_DIR = os.path.join(_RES_DIR, "icons")
 
 # The fixed showcase image the filter preview strip renders every filter onto
 # (a single reference photo instead of a thumbnail of whatever is open), so a
 # filter's look reads the same regardless of the current photo.
-FILTER_SHOW_IMG = os.path.join(ROOT_DIR, "Filter_Show.jpg")
+FILTER_SHOW_IMG = os.path.join(_RES_DIR, "Filter_Show.jpg")
 SUPPORTED = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff", ".tif"}
 
 # Remembers the last opened folder + image, restored on the next launch.
-STATE_FILE = os.path.join(ROOT_DIR, "manoni_state.json")
+STATE_FILE = os.path.join(_DATA_DIR, "manoni_state.json")
 
 # User-created filters (saved slider/effect presets). Kept in its own file —
 # separate from the session state — so it survives and travels independently.
-FILTERS_FILE = os.path.join(ROOT_DIR, "manoni_filters.json")
+FILTERS_FILE = os.path.join(_DATA_DIR, "manoni_filters.json")
 
 # User-recorded actions (macros): an ordered list of edit + crop steps replayed
 # onto an open photo. Own file (like filters) so it travels independently.
-ACTIONS_FILE = os.path.join(ROOT_DIR, "manoni_actions.json")
+ACTIONS_FILE = os.path.join(_DATA_DIR, "manoni_actions.json")
 
 # User-imported UI language packs (one {code,name,strings} .json per language).
 # Scanned at startup and registered with i18n, so an added language survives the
 # relaunch that a language switch triggers. See i18n.load_user_packs.
-LANG_DIR = os.path.join(ROOT_DIR, "languages")
+LANG_DIR = os.path.join(_DATA_DIR, "languages")
 
 # Dark theme colors
 BG        = "#1b1b1b"   # main background
