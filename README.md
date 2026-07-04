@@ -27,20 +27,28 @@ python -m venv .venv
 
 ## What works now
 
-Browse thumbnails (left panel) · click to open · ◀ ▶ first/last navigation ·
-🗑 delete (moves file to a `_deleted` subfolder — safe, reversible) ·
-📁 move-to-folder (keep good ones) · 📂 open folder · info bar (name, size, date).
+**Browse & cull** — virtualized thumbnail strip (handles thousands of files) ·
+nested folder tree sidebar · click or ←/→ to browse · ↑/↓ to cull into
+configurable keep/reject folders · sort · info bar (name, size, date) ·
+before/after compare · session restored on the next launch.
 
-**Photo editor** (right-side panel, Adobe-Camera-Raw style): live sliders for
-**brightness · contrast · saturation · temperature · blur↔sharpen**, "reset", and
-**save** — the edited full-res copy goes to an `_edited/` subfolder, the original is
-never touched.
+**Photo editor** (right-side rail, Adobe-Camera-Raw style), each a tool section:
+- **Basic** — white balance, tone (highlights/shadows/whites/blacks), detail
+  (clarity/texture/denoise/dehaze/sharpen) and colour (vibrance/saturation).
+- **Colour mixer** — per-hue HSL bands plus gold/skin mini-HSLs.
+- **Crop · Resize · Perspective · Straighten**, with ratio/social presets.
+- **Heal & Clone** (auto or Alt+click source), **Focus blur** (DoF),
+  **Text/Watermark**, **Effects** (vignette · grain · split-tone).
+- **Filters** — saved slider presets with a clickable preview strip.
+- **Actions** — record a macro and replay it on one photo or a whole folder.
+
+Undo/redo · live histogram · dark/light theme + accent colour · Georgian/English
+UI · settings window · metadata keep-or-strip on export. **Save** writes an
+sRGB full-res copy to an `_edited/` subfolder; the original is never touched.
 
 ## Not done yet
 
-Tint · Vignette · Shadows/Highlights · custom filter presets · Resize · Grid view · Menu.
-The toolbar's ☀/🎨 buttons are still stubs (editing lives in the right panel).
-See `spec/03-roadmap.md`.
+Grid view (2×2 library) · RAW support (both deferred — see `spec/03-roadmap.md`).
 
 ## Where to start
 
