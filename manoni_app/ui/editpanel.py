@@ -181,6 +181,7 @@ class EditPanelMixin:
 
         self._group_header(f, t("Tone"))
         self.s_exposure   = self._slider(f, t("Exposure"), "brightness")
+        self.s_exposure_g = self._slider(f, t("Brightness/Fill"), "exposure_g")
         self.s_contrast   = self._slider(f, t("Contrast"), "contrast")
         self.s_highlights = self._slider(f, t("Highlights"), "highlights")
         self.s_shadows    = self._slider(f, t("Shadows"), "shadows")
@@ -198,6 +199,7 @@ class EditPanelMixin:
         self.s_denoise    = self._slider(f, t("Noise reduction"), "denoise",
                                          hi=100, neutral=0)
         self.sliders = {"brightness": self.s_exposure,
+                        "exposure_g": self.s_exposure_g,
                         "contrast": self.s_contrast,
                         "highlights": self.s_highlights,
                         "shadows": self.s_shadows,
@@ -697,7 +699,8 @@ class EditPanelMixin:
 
     def _edit_state(self):
         "Snapshot of the live edit factors."
-        return {"brightness": self.brightness, "contrast": self.contrast,
+        return {"brightness": self.brightness, "exposure_g": self.exposure_g,
+                "contrast": self.contrast,
                 "color": self.color, "temperature": self.temperature,
                 "tint": self.tint, "highlights": self.highlights,
                 "shadows": self.shadows, "whites": self.whites,

@@ -17,6 +17,7 @@ class Edits:
     `apply_edits`. Plain data — no behaviour — so it is trivial to snapshot.
     """
     brightness:  float = 1.0
+    exposure_g:  float = 1.0   # TEST: gamma-based exposure, next to the linear one
     contrast:    float = 1.0
     highlights:  float = 1.0
     shadows:     float = 1.0

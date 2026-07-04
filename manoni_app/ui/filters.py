@@ -40,7 +40,7 @@ class FiltersMixin:
     # The edit factors a filter stores. These mirror _edit_state(): all are live
     # float factors except auto_mode, which is a label (or None). Listed once
     # here so load/import can validate a (possibly hand-edited) file against it.
-    FILTER_KEYS = ("brightness", "contrast", "color", "temperature", "tint",
+    FILTER_KEYS = ("brightness", "exposure_g", "contrast", "color", "temperature", "tint",
                    "highlights", "shadows", "whites", "blacks", "clarity",
                    "vibrance", "texture", "sharpen", "denoise", "dehaze",
                    "sat_red", "sat_orange", "sat_yellow", "sat_green",

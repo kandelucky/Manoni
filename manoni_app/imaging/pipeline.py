@@ -18,7 +18,7 @@ from .text import _apply_texts
 from .effects import (apply_vignette, apply_grain, apply_denoise, apply_split_tone,
                       apply_dehaze, apply_focus_blur, apply_clarity, apply_texture,
                       apply_vibrance, apply_temperature, apply_tint, apply_bw,
-                      apply_sepia, apply_sharpen)
+                      apply_sepia, apply_sharpen, apply_exposure_gamma)
 
 
 def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
@@ -36,11 +36,20 @@ def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
     if auto_luts is not None:
         add((("auto", id(auto_luts)), lambda img: apply_auto_luts(img, auto_luts)))
     if e.brightness != 1.0:
+        # TEST: linear exposure at half strength (deviation from 1.0 halved) so it
+        # can be compared fairly against the gentler gamma exposure beside it.
         add((("brightness", e.brightness),
-             lambda img, f=e.brightness: ImageEnhance.Brightness(img).enhance(f)))
+             lambda img, f=1.0 + (e.brightness - 1.0) * 0.5:
+                 ImageEnhance.Brightness(img).enhance(f)))
+    if e.exposure_g != 1.0:
+        add((("exposure_g", e.exposure_g),
+             lambda img, a=e.exposure_g - 1.0: apply_exposure_gamma(img, a)))
     if e.contrast != 1.0:
+        # Contrast dialled back to 50% strength (deviation from 1.0 x0.5) — the raw
+        # ImageEnhance.Contrast was too aggressive at the slider extremes.
         add((("contrast", e.contrast),
-             lambda img, f=e.contrast: ImageEnhance.Contrast(img).enhance(f)))
+             lambda img, f=1.0 + (e.contrast - 1.0) * 0.5:
+                 ImageEnhance.Contrast(img).enhance(f)))
     lut = tone_lut(e)
     if lut is not None:
         add((("tone", e.highlights, e.shadows, e.whites, e.blacks),

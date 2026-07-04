@@ -25,7 +25,7 @@ MAX_BLUR = 8.0
 # to display pixels in the preview, like blur). Vibrance: max saturation push.
 CLARITY_RADIUS = 24.0   # full-res px; UnsharpMask radius at a full slider
 CLARITY_PCT    = 120    # UnsharpMask percent at a full slider (amount = +1)
-VIBRANCE_MAX   = 130.0  # max saturation add (0–255) for the most-muted pixels
+VIBRANCE_GAIN  = 1.0    # max saturation multiplier boost for the most-muted pixels
 
 # Texture: medium-frequency detail, sitting between sharpen (fine, ~1px) and
 # clarity (broad, ~24px). Positive = crisper surface detail via a small-radius
@@ -363,11 +363,25 @@ def apply_texture(img, amt, scale):
 
 
 def apply_vibrance(img, amt):
-    "Saturation weighted by (1 - s/255): muted colours move most, vivid ones barely."
-    push = amt * VIBRANCE_MAX
+    "Scale saturation, weighted by (1 - s/255) so muted colours move most and vivid"
+    " ones barely. Multiplicative (s x factor), so neutral greys (s=0) stay grey"
+    " instead of picking up the arbitrary hue=0 red cast an additive push gave them."
+    gain = amt * VIBRANCE_GAIN
     h, s, v = img.convert("HSV").split()
-    s = s.point(lambda x: max(0, min(255, int(x + push * (1.0 - x / 255.0)))))
+    s = s.point(lambda x: max(0, min(255, int(x * (1.0 + gain * (1.0 - x / 255.0))))))
     return Image.merge("HSV", (h, s, v)).convert("RGB")
+
+
+def apply_exposure_gamma(img, amt):
+    "TEST exposure: a gamma curve out = 255*(in/255)^gamma, gamma = 2^-amt. Unlike"
+    " the linear ImageEnhance.Brightness multiply, the endpoints are locked (0->0,"
+    " 255->255), so it lifts/lowers the midtones without clipping highlights to"
+    " white or crushing shadows to black."
+    if amt == 0.0:
+        return img
+    gamma = 2.0 ** (-amt)
+    lut = [max(0, min(255, int(round(255.0 * (i / 255.0) ** gamma)))) for i in range(256)]
+    return img.point(lut * len(img.getbands()))
 
 
 def apply_temperature(img, temperature):

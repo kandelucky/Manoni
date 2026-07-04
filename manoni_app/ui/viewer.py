@@ -302,7 +302,8 @@ class ViewerMixin:
     def _edits(self):
         "Snapshot the live slider values as a plain imaging.Edits object."
         return imaging.Edits(
-            brightness=self.brightness, contrast=self.contrast,
+            brightness=self.brightness, exposure_g=self.exposure_g,
+            contrast=self.contrast,
             highlights=self.highlights, shadows=self.shadows,
             whites=self.whites, blacks=self.blacks,
             clarity=self.clarity, texture=self.texture,

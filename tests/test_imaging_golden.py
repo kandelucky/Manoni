@@ -92,6 +92,7 @@ def collect():
     edited("clarity", clarity=1.6)
     edited("texture", texture=1.5)
     edited("vibrance", vibrance=1.6)
+    edited("exposure_gamma", exposure_g=1.6)
     edited("dehaze_plus", dehaze=1.5)
     edited("dehaze_minus", dehaze=0.6)
 

@@ -183,6 +183,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.index = 0           # current image index
         self.current_pil = None  # PIL image currently shown (full res)
         self.brightness = 1.0    # live edit factors (1.0 = unchanged)
+        self.exposure_g = 1.0    # TEST: gamma-based exposure, alongside the linear one
         self.contrast = 1.0
         self.color = 1.0
         self.temperature = 1.0   # >1.0 warmer (more red), <1.0 cooler (more blue)
