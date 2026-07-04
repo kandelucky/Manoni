@@ -294,6 +294,14 @@ class HelpMixin:
         win.note(t("Rename, reorder or delete your filters from the Filters "
                    "panel."))
 
+        win.group(t("Share with others"))
+        self._help_row(win, "share-2", "Export & import a group",
+                       "A filter group's … menu exports the whole group to a "
+                       "small .json file — send it to a friend, and they load it "
+                       "from the Import button pinned atop the Filters panel.")
+        win.note(t("Sharing works per group, not per single filter: export a "
+                   "group, import the file someone sends you."))
+
     # --- Actions tab --------------------------------------------------------
 
     def _help_tab_actions(self, win):

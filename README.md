@@ -26,6 +26,22 @@ Pure **Python + Tkinter + Pillow**. Tiny, MIT-friendly, fully ours to extend.
 
 ---
 
+## Who it's for
+
+For photographers who shoot a lot and work on a modest machine. Manoni is built
+to **cull a big batch fast, make quick but real edits, and hand back clean
+copies** — light enough to stay smooth on a weak laptop, simple enough to stay
+out of your way.
+
+You'll feel at home if you:
+
+- shoot in **volume** and need to sort keepers from rejects quickly;
+- want **real edits** — tone, colour, crop, heal, filters — without a heavy install;
+- work on a **weak or old laptop** and want it to stay fast;
+- care that your **originals are never altered** (culling only *moves* files, edits export copies).
+
+---
+
 ## Run
 
 ```bash
@@ -87,7 +103,7 @@ An Adobe-Camera-Raw-style rail on the right — click a tool to open its panel.
 | <img src="assets/readme/palette.png" width="22" alt=""> | **Color mixer** | Per-hue HSL bands, plus dedicated gold & skin mini-HSLs |
 | <img src="assets/readme/wand-sparkles.png" width="22" alt=""> | **Effects** | Vignette · grain · split-tone |
 | <img src="assets/readme/crop.png" width="22" alt=""> | **Crop** | Trim & straighten, with ratio / social presets |
-| <img src="assets/readme/scaling.png" width="22" alt=""> | **Resize** | Change the pixel dimensions |
+| <img src="assets/readme/scaling.png" width="22" alt=""> | **Resize** | Resize one photo, or every photo in a folder and its subfolders in one batch |
 | <img src="assets/readme/frame.png" width="22" alt=""> | **Perspective** | Fix keystoning, straighten converging lines |
 | <img src="assets/readme/bandage.png" width="22" alt=""> | **Heal & Clone** | Remove blemishes (auto, or <kbd>Alt</kbd>+click a clone source) |
 | <img src="assets/readme/circle-dot.png" width="22" alt=""> | **Focus blur** | Blur the surroundings, keep the subject sharp |
@@ -110,6 +126,11 @@ previews every filter *on the current photo*.
 photo, its edit is pinned as a **"Last"** slot in the strip and the filter list —
 click it to apply the same look to the next photo, no saving needed. "Last" is
 session-only; its `…` menu can promote it into a permanent named filter.
+
+<img src="assets/readme/share-2.png" width="18" alt=""> **Share filters.** A
+filter group's `…` menu exports the whole group to a small `.json` file — send it
+to a friend, and they load it from the **Import** button pinned atop the Filters
+panel. That's how you pass your looks between machines and to other people.
 
 ---
 
@@ -135,13 +156,3 @@ stripped per your choice, and the original is **never touched**.
 
 The <img src="assets/readme/circle-help.png" width="16" alt=""> **Help** button in
 the top bar opens a tabbed guide covering all of the above.
-
----
-
-## Not done yet
-
-Grid view (2×2 library) · RAW support — both deferred, see `spec/03-roadmap.md`.
-
-## Where to start
-
-Read **`spec/00-START-HERE.md`** first. The whole plan lives in `spec/`.
