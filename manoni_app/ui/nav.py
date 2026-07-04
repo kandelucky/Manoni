@@ -694,6 +694,8 @@ class NavMixin:
             return self._apply_edit_state(cmd, cmd["before"])
         if cmd["kind"] == "heal":
             return self._apply_heal_patch(cmd, cmd["before"])
+        if cmd["kind"] == "geometry":
+            return self._apply_geometry_state(cmd, cmd["before"])
         return False
 
     def _reapply(self, cmd):
@@ -711,6 +713,8 @@ class NavMixin:
             return self._apply_edit_state(cmd, cmd["after"])
         if cmd["kind"] == "heal":
             return self._apply_heal_patch(cmd, cmd["after"])
+        if cmd["kind"] == "geometry":
+            return self._apply_geometry_state(cmd, cmd["after"])
         return False
 
     def _apply_edit_state(self, cmd, state):
@@ -734,4 +738,97 @@ class NavMixin:
         self._refresh_auto_buttons()
         self._render_preview()
         self._repaint_filter_strip()          # the active filter cell may have changed
+        return True
+
+    # --- Geometry undo (crop / straighten / rotate / mirror / resize /
+    #     perspective) --------------------------------------------------------
+    # These bake pixels into current_pil, so — unlike an 'edit' (live slider
+    # factors) — they can't be reversed by restoring values. We snapshot the
+    # whole pixel + overlay state before and after the op and swap it back on
+    # undo / redo. Same-image only (like 'heal'): the baked pixels live only in
+    # current_pil, which show_current() reloads from disk on navigation, so
+    # there is nothing left to restore once a different photo is open.
+
+    _GEOM_FLAGS = ("_rotated", "_mirrored", "_cropped", "_resized",
+                   "_perspd", "_healed")
+
+    def _geometry_snapshot(self):
+        "Full copy of every field a geometry op mutates (pixels + overlays + flags)."
+        return {
+            "pil": self.current_pil.copy() if self.current_pil is not None else None,
+            "before_pil": (self._before_pil.copy()
+                           if self._before_pil is not None else None),
+            "focus": dict(self.focus) if self.focus else None,
+            "texts": [dict(ov) for ov in self.texts],
+            "text_sel": self.text_sel,
+            "straighten": getattr(self, "straighten", 0.0),
+            "persp_v": getattr(self, "persp_v", 0.0),
+            "persp_h": getattr(self, "persp_h", 0.0),
+            "flags": {k: getattr(self, k, False) for k in self._GEOM_FLAGS},
+        }
+
+    def _record_geometry(self, before):
+        "Push one 'geometry' undo entry for a just-applied crop / rotate / resize / warp."
+        if not self.files:
+            return
+        self._push_undo({"kind": "geometry", "folder": self.folder,
+                         "file": self.files[self.index],
+                         "before": before, "after": self._geometry_snapshot()})
+
+    def _apply_geometry_state(self, cmd, state):
+        "Swap the whole pixel + overlay state back in. Same-image only (like heal)."
+        if cmd["folder"] != self.folder or not self.files \
+                or self.files[self.index] != cmd["file"]:
+            self.toast(t("Can't undo — a different image is open"))
+            return False
+        # Install copies, never the stored snapshot itself: a later in-place heal
+        # dab must not mutate the buffer this command still needs for a redo.
+        self.current_pil = (state["pil"].copy()
+                            if state["pil"] is not None else None)
+        self._before_pil = (state["before_pil"].copy()
+                            if state["before_pil"] is not None else None)
+        self._before_base_key = None
+        self.focus = dict(state["focus"]) if state["focus"] else None
+        if hasattr(self, "_focus_cache"):
+            self._focus_cache.clear()
+        self.texts = [dict(ov) for ov in state["texts"]]
+        self.text_sel = state["text_sel"]
+        self.straighten = state["straighten"]
+        self.persp_v = state["persp_v"]
+        self.persp_h = state["persp_h"]
+        for k, v in state["flags"].items():
+            setattr(self, k, v)
+        if hasattr(self, "s_straighten"):
+            try:
+                self.s_straighten.set(round(self.straighten))
+            except tk.TclError:
+                pass
+        for slider, val in (("s_persp_v", self.persp_v), ("s_persp_h", self.persp_h)):
+            if hasattr(self, slider):
+                try:
+                    getattr(self, slider).set(round(val))
+                except tk.TclError:
+                    pass
+        # The pending crop box referenced the old pixels — reset it to the
+        # restored full image (or the tilt-fitted box if a straighten survives).
+        if self.current_pil is not None:
+            nw, nh = self.current_pil.size
+            self.crop_rect = [0.0, 0.0, float(nw), float(nh)]
+            self.crop_ratio = None
+            if self.straighten:
+                self._straighten_box()
+        else:
+            self.crop_ratio = None
+        self._crop_btn_active = None
+        self.clone_src = self.clone_offset = None
+        self.fit_mode = True
+        self.pan_x = self.pan_y = 0.0
+        self._view_key = None
+        self._edits_saved = False
+        self._sync_focus_controls()
+        self._sync_text_controls()
+        self._restyle_crop_chips()
+        self._render_preview()
+        self._update_info(os.path.join(self.folder, self.files[self.index]))
+        self._refresh_filter_strip()
         return True

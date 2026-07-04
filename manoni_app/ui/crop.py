@@ -952,6 +952,7 @@ class CropMixin:
         # plain crop step would replay without the tilt — skip recording then.
         if getattr(self, "_recording", False) and not angle:
             self._record_crop_step(box, iw, ih)   # capture as a macro step
+        before_geom = self._geometry_snapshot()   # for one-step undo of the crop
         if angle:                          # bake the tilt, then crop the corners off
             self.current_pil = self._rotate_keep_size(self.current_pil, angle)
         self.current_pil = self.current_pil.crop(box)
@@ -976,6 +977,7 @@ class CropMixin:
         self._view_key = None       # size changed → drop the cached scaled view
         self._render_preview()
         self._update_info(os.path.join(self.folder, self.files[self.index]))
+        self._record_geometry(before_geom)   # crop / straighten is now undoable
         if not playing:
             self.toast(t("Cropped → {w}×{h}px  ·  Save to write it to a file").format(w=nw, h=nh))
 

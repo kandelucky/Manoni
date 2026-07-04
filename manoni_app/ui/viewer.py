@@ -285,6 +285,7 @@ class ViewerMixin:
         "Losslessly transpose current_pil, refit the view, and refresh the info bar."
         if self.current_pil is None:
             return
+        before_geom = self._geometry_snapshot()   # for one-step undo of the turn
         self.current_pil = self.current_pil.transpose(transpose_op)
         if self._before_pil is not None:   # keep the compare "before" aligned to the edit
             self._before_pil = self._before_pil.transpose(transpose_op)
@@ -304,6 +305,7 @@ class ViewerMixin:
         self._render_preview()
         self._refresh_filter_strip()    # the rotated photo needs fresh thumbnails
         self._update_info(os.path.join(self.folder, self.files[self.index]))
+        self._record_geometry(before_geom)   # rotate / mirror is now undoable
 
     def _draw_message(self, text):
         "Clear the canvas and show centered placeholder text (e.g. 'no photos')."

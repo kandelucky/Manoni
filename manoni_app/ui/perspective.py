@@ -135,6 +135,7 @@ class PerspectiveMixin:
             self.toast(t("Move a slider first"))
             return
         v, h = self.persp_v / 100.0, self.persp_h / 100.0
+        before_geom = self._geometry_snapshot()   # for one-step undo of the warp
         from .. import imaging
         self.current_pil = imaging.apply_perspective(self.current_pil, v, h)
         if self._before_pil is not None:   # keep the compare "before" aligned
@@ -158,4 +159,5 @@ class PerspectiveMixin:
         self._render_preview()
         self._update_info(os.path.join(self.folder, self.files[self.index]))
         self._refresh_filter_strip()        # the warped photo needs fresh thumbnails
+        self._record_geometry(before_geom)   # perspective warp is now undoable
         self.toast(t("Perspective applied  ·  Save to write it to a file"))

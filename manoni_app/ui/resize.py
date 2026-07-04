@@ -501,6 +501,7 @@ class ResizeMixin:
         if (nw, nh) == (iw, ih):
             self.toast(t("That's already the current size"))
             return
+        before_geom = self._geometry_snapshot()   # for one-step undo of the resize
         self.current_pil = self._resize_pixels(self.current_pil, (nw, nh))
         if self._before_pil is not None:   # keep the compare "before" aligned
             # Same resample, but no soft/sharp pass — "before" is the reference.
@@ -527,6 +528,7 @@ class ResizeMixin:
         self._refresh_resize_mode()
         self._reset_resize_input()
         self._update_resize_display()
+        self._record_geometry(before_geom)   # resize is now undoable
         self.toast(t("Resized → {w}×{h}px  ·  Save to write it to a file").format(
             w=nw, h=nh))
 
