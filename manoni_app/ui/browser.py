@@ -846,13 +846,24 @@ class BrowserMixin:
         sel = (i == self.index)
         cell = self._tw(tk.Frame(self.thumb_holder), bg="sidebar")
         box = max(1, self.thumb_size)
+        # The thumbnail fills `box`, so the selection ring has to sit in an extra
+        # `ring` px OUTSIDE it: otherwise a square (box×box) photo paints right over
+        # the ring and the selection disappears — only a letterboxed photo leaves a
+        # gap for it to peek through. Sizing the holder box+2*ring keeps the accent
+        # frame visible on all four sides at every aspect ratio.
+        ring = self.THUMB_SEL_RING
         holder = self._tw(
-            tk.Frame(cell, highlightthickness=2, width=box, height=box,
+            tk.Frame(cell, highlightthickness=ring,
+                     width=box + 2 * ring, height=box + 2 * ring,
                      highlightbackground=self.theme["accent"] if sel
                      else self.theme["sidebar"]), bg="sidebar")
         holder.pack_propagate(False)     # fixed square box → uniform rows for windowing
         holder.pack(pady=(2, 0))
-        lbl = self._tw(tk.Label(holder, cursor="hand2"), bg="sidebar")
+        # bd/padx/pady/highlightthickness zeroed so the label is EXACTLY the image
+        # size — the tk.Label default 2px padding would otherwise spill over the
+        # holder's ring and re-hide the selection on a box-filling (square) thumbnail.
+        lbl = self._tw(tk.Label(holder, cursor="hand2", bd=0,
+                                highlightthickness=0, padx=0, pady=0), bg="sidebar")
         lbl.place(relx=0.5, rely=0.5, anchor="center")   # center the image in the box
         name = self._tw(tk.Label(cell, text=self._short_name(file),
                                  font=("Segoe UI", 7)), bg="sidebar", fg="fg_dim")

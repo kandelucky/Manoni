@@ -68,6 +68,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     THUMB_PAD   = 16    # a grid cell's width beyond the image (padding + border)
     THUMB_NAME_H = 20   # px reserved under a grid thumbnail for its (one-line) name
     THUMB_CELL_V = 12   # a grid cell's height beyond the image + name (border + gaps)
+    THUMB_SEL_RING = 2  # accent selection ring, drawn OUTSIDE the image so it never
+                        # gets covered by a square (box-filling) thumbnail
     LIST_ROW_H  = 44    # fixed height of one list-view row (px)
     SIDEBAR_MIN = 110   # narrowest the sidebar can be dragged
     SIDEBAR_MAX = 720   # widest the sidebar can be dragged
