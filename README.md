@@ -54,30 +54,8 @@ python -m venv .venv
 .venv\Scripts\python manoni.py "C:\path\to\photos"
 ```
 
-- Python 3.14 is installed on this machine and works.
+- Requires Python 3.14.
 - The only dependency is **Pillow**. `tkinter` ships with Python.
-- If you capture console output and paths contain Georgian/Unicode, set
-  `PYTHONUTF8=1` (the Windows console is cp1252 and cannot *print* Georgian —
-  the app itself handles Georgian paths fine via Pillow).
-
----
-
-## The top bar
-
-<table>
-<tr>
-<td align="center"><img src="assets/readme/folder-open.png" width="22" alt=""></td><td>Open a folder</td>
-<td align="center"><img src="assets/readme/save.png" width="22" alt=""></td><td>Save as…</td>
-<td align="center"><img src="assets/readme/undo.png" width="22" alt=""></td><td>Undo</td>
-<td align="center"><img src="assets/readme/redo.png" width="22" alt=""></td><td>Redo</td>
-</tr>
-<tr>
-<td align="center"><img src="assets/readme/hand.png" width="22" alt=""></td><td>Pan the photo</td>
-<td align="center"><img src="assets/readme/square-split-horizontal.png" width="22" alt=""></td><td>Before / after</td>
-<td align="center"><img src="assets/readme/settings.png" width="22" alt=""></td><td>Settings</td>
-<td align="center"><img src="assets/readme/circle-help.png" width="22" alt=""></td><td>Help</td>
-</tr>
-</table>
 
 ---
 
@@ -95,7 +73,7 @@ undoes any move.
 
 ## The editor
 
-An Adobe-Camera-Raw-style rail on the right — click a tool to open its panel.
+A tool rail on the right — click a tool to open its panel.
 
 | | Tool | What it does |
 |:--:|---|---|
