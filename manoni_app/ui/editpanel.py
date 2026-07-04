@@ -99,6 +99,11 @@ class EditPanelMixin:
         # settle the initial scroll extent once the panel has a real height.
         for frame in self.sections.values():
             self._bind_section_wheel(frame)
+        # The dynamic lists (filters / actions) rebuild their rows after this
+        # one-time sweep, so they re-arm the wheel on the fresh rows themselves.
+        # This flag lets them skip that during the initial build (the sweep above
+        # already covers the first rows) so those rows aren't double-bound.
+        self._sections_wheel_armed = True
         self.root.after_idle(self._sync_section_scroll)
 
         # Panel foot: a full-width Restore-original over a full-width Save. These

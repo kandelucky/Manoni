@@ -400,6 +400,11 @@ class FiltersMixin:
             self._add_last_row(holder)     # the pinned session slot, above all groups
         for grp in self._strip_groups():
             self._add_flist_group(holder, grp)
+        # The rows are rebuilt after the panel's one-time wheel sweep, so re-arm the
+        # wheel on the fresh rows (the sweep already covered the first build).
+        if getattr(self, "_sections_wheel_armed", False):
+            for c in holder.winfo_children():
+                self._bind_section_wheel(c)
 
     def _add_flist_header(self, parent):
         "The list's own caption: just the running total (Import is the pinned"
@@ -571,11 +576,11 @@ class FiltersMixin:
         # "Original" is pinned first: a neutral reference and a one-click way to
         # drop the look. Then one labelled section per group; a collapsed group
         # shows just its caption (its cells are skipped to save the row width).
-        self._add_filter_cell(holder, t("Original"), {})
+        self._add_filter_cell(holder, t("Original", "strip"), {})
         lf = getattr(self, "_last_filter", None)
         if lf is not None:
             self._add_strip_separator(holder)
-            self._add_filter_cell(holder, t("Last"), lf["values"])
+            self._add_filter_cell(holder, t("Last", "filter"), lf["values"])
         for grp in self._strip_groups():
             self._add_strip_separator(holder)
             self._add_group_caption(holder, grp)
@@ -934,7 +939,7 @@ class FiltersMixin:
             self._filter_list_thumbs.append(thumb)
             pic = tk.Label(row, image=thumb, bg=bar)
             pic.pack(side="left", padx=(24, 6))
-        tx = tk.Label(row, text=t("Last"), bg=bar,
+        tx = tk.Label(row, text=t("Last", "filter"), bg=bar,
                       fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
         name_lpad = 0 if pic is not None else 26
@@ -1593,6 +1598,9 @@ class FiltersMixin:
         self._dialog_btn(wrap, t("Close"), dlg.destroy).pack(anchor="e",
                                                                pady=(12, 0))
         dlg.bind("<Escape>", lambda e: dlg.destroy())
+        # Wheel anywhere in the dialog scrolls the (fixed-height) list body.
+        dlg.bind("<MouseWheel>", lambda e: canvas.yview_scroll(
+            int(-e.delta / 120), "units"))
         return dlg, body
 
     def _make_scrollbar(self, parent, canvas):

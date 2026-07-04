@@ -546,8 +546,10 @@ class CropMixin:
         self._rebuild_my_sizes_list()
 
     def _bind_sizes_wheel(self, widget):
-        "Wheel over the saved-size list scrolls it (and not the photo behind it)."
+        "Wheel over the saved-size list (its rows included) scrolls it, not the photo."
         widget.bind("<MouseWheel>", self._sizes_wheel)
+        for c in widget.winfo_children():
+            self._bind_sizes_wheel(c)
 
     def _sizes_wheel(self, e):
         "Scroll the saved-size list if it overflows; swallow the event either way."
@@ -568,10 +570,12 @@ class CropMixin:
                           wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD - 10)),
                           bg="bar", fg="fg_dim")
             ph.pack(fill="x", pady=(2, 4))
-            self._bind_sizes_wheel(ph)
         else:
             for i, sz in enumerate(self.crop_sizes):
                 self._size_row(inner, i, sz)
+        # Arm the wheel on the fresh rows/placeholder so hovering a row scrolls too.
+        for c in inner.winfo_children():
+            self._bind_sizes_wheel(c)
         inner.update_idletasks()
 
     def _size_row(self, parent, idx, sz):

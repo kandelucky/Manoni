@@ -552,9 +552,14 @@ class ActionsMixin:
             self._tw(tk.Label(self._actions_list, text=t("No actions yet"),
                      font=("Segoe UI", 8), anchor="w"), bg="bar", fg="fg_dim") \
                 .pack(fill="x", pady=(2, 4))
-            return
-        for act in list(self.user_actions):
-            self._action_row(act)
+        else:
+            for act in list(self.user_actions):
+                self._action_row(act)
+        # The rows are rebuilt after the panel's one-time wheel sweep, so re-arm the
+        # wheel on the fresh rows (the sweep already covered the first build).
+        if getattr(self, "_sections_wheel_armed", False):
+            for c in self._actions_list.winfo_children():
+                self._bind_section_wheel(c)
 
     def _action_row(self, act):
         "One saved action: a play area (icon + name) + rename / delete icons."
