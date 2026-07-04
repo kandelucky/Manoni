@@ -646,18 +646,18 @@ class ChromeMixin:
         self._build_sidebar_footer(side)
 
         self.canvas = self._tw(tk.Canvas(side, highlightthickness=0), bg="sidebar")
-        # The scrollbar drives a wrapper, not canvas.yview directly, so dragging it
-        # also realizes the newly-visible cells (the strip is virtualized).
+        # The scrollbar is driven entirely by hand (browser._render_window / the
+        # _thumb_yview / _on_wheel below) via self._scroll_row (row units, not
+        # pixels) — the strip's own canvas scrollregion is kept tiny (bounded to the
+        # realized viewport window, not the whole folder) to stay under Tk's
+        # ~32,767 px canvas coordinate ceiling, so it can't drive the scrollbar
+        # itself the way a normal canvas + scrollbar pairing would.
         sb = ttk.Scrollbar(side, orient="vertical", command=self._thumb_yview,
                            style="Sidebar.Vertical.TScrollbar")
         self._thumb_scrollbar = sb     # folder list packs just above this
         self.thumb_holder = self._tw(tk.Frame(self.canvas), bg="sidebar")
-        self.thumb_holder.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self._thumb_window = self.canvas.create_window(
             (0, 0), window=self.thumb_holder, anchor="nw")
-        self.canvas.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
         # Keep the grid wrapped to the visible width, and reflow on resize.
@@ -714,13 +714,31 @@ class ChromeMixin:
         self._build_filter_strip(body)
 
     def _on_wheel(self, event):
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
+        "Mouse wheel over the strip: nudge self._scroll_row (row units) directly —"
+        " never the canvas's own yview, which browser.py deliberately keeps tiny"
+        " (see _render_window) so it never nears Tk's canvas coordinate ceiling."
+        notches = -event.delta / 120
+        self._scroll_row = getattr(self, "_scroll_row", 0.0) \
+            + notches * self.THUMB_WHEEL_ROWS
         self._render_window()        # realize cells that scrolled into view
         return "break"
 
     def _thumb_yview(self, *args):
-        "Scrollbar command: scroll the strip, then realize the newly-visible cells."
-        self.canvas.yview(*args)
+        "Scrollbar command: translate the native moveto/scroll protocol into a row"
+        " offset (self._scroll_row), then realize the newly-visible cells. Never lets"
+        " the canvas's own (deliberately tiny) yview drive this — see"
+        " browser._render_window."
+        cell_w, cell_h, cols = self._cell_metrics()
+        n = len(self.files)
+        total_rows = (n + cols - 1) // cols if cols else 0
+        visible_rows = max(1.0, self._canvas_view_h() / cell_h)
+        row = getattr(self, "_scroll_row", 0.0)
+        if args[0] == "moveto":
+            row = float(args[1]) * total_rows
+        elif args[0] == "scroll":
+            amount = int(args[1])
+            row += amount * visible_rows if args[2] == "pages" else amount
+        self._scroll_row = max(0.0, min(row, max(0.0, total_rows - visible_rows)))
         self._render_window()
 
     # --- Sidebar top section: the auto-height sub-folder list ---------------
@@ -1166,7 +1184,7 @@ class ChromeMixin:
         cols = self._calc_cols(width)
         changed = cols != getattr(self, "_thumb_cols", 0)
         self._thumb_cols = cols
-        self._layout_strip()                  # content height + holder width for the new size
+        self._layout_strip()                  # only resets things if the folder is empty
         if changed or self.view_mode == "list":
             self._clear_cells()               # positions/widths moved → rebuild the window
         self._render_window()

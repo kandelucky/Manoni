@@ -93,6 +93,11 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # rows of buffer above and below) are ever realized + decoded, so cost is bound
     # to the screen, not the folder size. See browser._render_window.
     THUMB_BUFFER_ROWS = 3
+    # Rows to move per mouse-wheel notch in the strip. Scrolling is row-based (not
+    # raw pixels) so the strip's own Tk canvas never has to represent an absolute
+    # position that could exceed Tk's ~32,767 px canvas coordinate ceiling — see
+    # browser._render_window.
+    THUMB_WHEEL_ROWS = 3
 
     # The top sub-folder list never grows past min(FOLDER_LIST_MAX, a fraction of
     # the sidebar height) — so on a short laptop screen it can't crowd the photo
@@ -144,6 +149,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.root.tk.call("encoding", "system", "utf-8")
         except tk.TclError:
             pass
+        # Fixes typed (not just programmatic) Georgian/non-Latin text — see
+        # win_unicode_keys.py for why the line above isn't enough on its own.
+        from manoni_app import win_unicode_keys
+        win_unicode_keys.install(self.root)
         # Give TintKit Manoni's own palette + icon set BEFORE the Theme is built,
         # so any panel migrated onto TintKit widgets matches the rest of the app
         # exactly (same colours) and finds the same Lucide icons.

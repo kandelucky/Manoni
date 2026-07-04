@@ -317,58 +317,89 @@ class BrowserMixin:
             cell_h = self.thumb_size + self.THUMB_NAME_H + self.THUMB_CELL_V
         return cell_w, cell_h, cols
 
-    def _layout_strip(self):
-        "Size the inner holder to the full content height so the scrollbar reflects all"
-        " files even though only the visible cells exist."
-        cell_w, cell_h, cols = self._cell_metrics()
-        n = len(self.files)
-        rows = (n + cols - 1) // cols if cols else 0
-        content_h = max(1, rows * cell_h)
-        view_w = max(1, self.canvas.winfo_width())
-        try:
-            self.canvas.itemconfigure(self._thumb_window, width=view_w,
-                                      height=content_h)
-            self.canvas.configure(scrollregion=(0, 0, view_w, content_h))
-        except tk.TclError:
-            pass
-
-    def _visible_range(self, cell_h, cols):
-        "First/last file index inside the viewport, padded by THUMB_BUFFER_ROWS rows."
-        n = len(self.files)
-        if n == 0 or cols <= 0:
-            return 0, -1
+    def _canvas_view_h(self):
+        "The strip canvas's current height in px, falling back to a screenful before"
+        " the widget has been laid out (e.g. at startup)."
         try:
             self.canvas.update_idletasks()
-            view_h = self.canvas.winfo_height()
-            top = self.canvas.canvasy(0)
+            h = self.canvas.winfo_height()
         except tk.TclError:
-            view_h, top = 0, 0
-        if view_h <= 1:
-            view_h = 600                 # canvas not laid out yet → assume a screenful
-        first_row = max(0, int(top // cell_h) - self.THUMB_BUFFER_ROWS)
-        last_row = int((top + view_h) // cell_h) + self.THUMB_BUFFER_ROWS
-        first = first_row * cols
-        last = min(n - 1, (last_row + 1) * cols - 1)
-        return first, max(first - 1, last)
+            h = 0
+        return h if h > 1 else 600
+
+    def _layout_strip(self):
+        "Reset the strip when the folder is empty; otherwise a no-op. _render_window"
+        " (below) sizes the canvas for real, to a window bounded by the viewport —"
+        " never the full folder — so it stays well under Tk's canvas coordinate"
+        " ceiling (~32,767 px; a Frame/window placed past that clips or breaks)"
+        " regardless of file count or thumbnail size."
+        if self.files:
+            return
+        view_w = max(1, self.canvas.winfo_width())
+        try:
+            self.canvas.itemconfigure(self._thumb_window, width=view_w, height=1)
+            self.canvas.configure(scrollregion=(0, 0, view_w, 1))
+            self._thumb_scrollbar.set(0.0, 1.0)
+        except tk.TclError:
+            pass
 
     # --- Realize / recycle the visible window ------------------------------------
 
     def _render_window(self):
         "Create the cells now in the viewport, destroy those that scrolled out, and"
         " request decodes for the freshly-visible ones. Cheap to call on every scroll."
+        " Cells are placed relative to the current row window (self._thumb_row_base),"
+        " and the canvas is sized to just that window — NOT to the full folder — so"
+        " its scrollregion never approaches Tk's ~32,767 px coordinate ceiling no"
+        " matter how many files there are. self._scroll_row (row units, not pixels)"
+        " is the single source of truth for scroll position; the scrollbar's thumb is"
+        " set by hand from it, since it must track position across every file, not"
+        " just the (deliberately tiny) realized window."
         if not hasattr(self, "thumb_holder") or not self.files:
             return
         cell_w, cell_h, cols = self._cell_metrics()
         self._thumb_cols = cols
-        first, last = self._visible_range(cell_h, cols)
+        n = len(self.files)
+        total_rows = (n + cols - 1) // cols
+        view_w = max(1, self.canvas.winfo_width())
+        visible_rows = max(1.0, self._canvas_view_h() / cell_h)
+        max_scroll = max(0.0, total_rows - visible_rows)
+        self._scroll_row = max(0.0, min(getattr(self, "_scroll_row", 0.0), max_scroll))
+
+        first_row = max(0, int(self._scroll_row) - self.THUMB_BUFFER_ROWS)
+        last_row = min(total_rows - 1,
+                       int(self._scroll_row + visible_rows) + self.THUMB_BUFFER_ROWS)
+        first = first_row * cols
+        last = min(n - 1, (last_row + 1) * cols - 1)
         want = set(range(first, last + 1))
+
         for i in list(self._cells):
             if i not in want:
                 self._destroy_cell(i)
+        self._thumb_row_base = first_row     # _make_cell_at places relative to this
         for i in range(first, last + 1):
             if i not in self._cells:
                 self._make_cell_at(i, cell_w, cell_h, cols)
+            else:
+                row, _col = divmod(i, cols)
+                try:                          # already realized → just re-seat it
+                    self._cells[i].place_configure(y=(row - first_row) * cell_h)
+                except tk.TclError:
+                    pass
             self._request_decode(i)
+
+        window_h = max(1, (last_row - first_row + 1) * cell_h)
+        try:
+            self.canvas.itemconfigure(self._thumb_window, width=view_w,
+                                      height=window_h)
+            self.canvas.configure(scrollregion=(0, 0, view_w, window_h))
+            frac = (self._scroll_row - first_row) * cell_h / window_h
+            self.canvas.yview_moveto(max(0.0, min(1.0, frac)))
+            self._thumb_scrollbar.set(self._scroll_row / total_rows,
+                                      min(1.0, (self._scroll_row + visible_rows)
+                                          / total_rows))
+        except tk.TclError:
+            pass
         self._ensure_poll()
 
     def _clear_cells(self):
@@ -395,16 +426,19 @@ class BrowserMixin:
         self._cell_failed.discard(i)
 
     def _make_cell_at(self, i, cell_w, cell_h, cols):
-        "Build one placeholder cell for file index i and place it at its fixed slot."
+        "Build one placeholder cell for file index i and place it at its slot, relative"
+        " to self._thumb_row_base (see _render_window — the strip rebases rather than"
+        " placing at the file's true row, which could land past Tk's coordinate limit)."
         file = self.files[i]
         row, col = divmod(i, cols)
+        y = (row - self._thumb_row_base) * cell_h
         if self.view_mode == "list":
             cell = self._make_list_cell(i, file)
-            cell.place(x=col * cell_w + 2, y=row * cell_h + 1,
+            cell.place(x=col * cell_w + 2, y=y + 1,
                        width=cell_w - 4, height=cell_h - 2)
         else:
             cell = self._make_grid_cell(i, file)
-            cell.place(x=col * cell_w, y=row * cell_h,
+            cell.place(x=col * cell_w, y=y,
                        width=cell_w, height=cell_h)
         self._cells[i] = cell
         if i in self._cell_imgs:         # survived a relayout → re-show its image
@@ -871,24 +905,21 @@ class BrowserMixin:
 
     def _scroll_to_thumb(self):
         "Scroll so the current photo's row is visible, then realize the new window."
+        " Works in row units (self._scroll_row), never raw pixels — see"
+        " _render_window for why the strip can't track a giant folder by pixel."
         n = len(self.files)
         if not (0 <= self.index < n):
             self._render_window()
             return
         cell_w, cell_h, cols = self._cell_metrics()
-        rows = (n + cols - 1) // cols if cols else 0
-        total = max(1, rows * cell_h)
-        y = (self.index // max(1, cols)) * cell_h
-        try:
-            self.canvas.update_idletasks()
-            view_h = self.canvas.winfo_height()
-            if view_h <= 1:
-                view_h = 600
-            top = self.canvas.canvasy(0)
-            if y < top:                              # row above the viewport → scroll up
-                self.canvas.yview_moveto(max(0.0, y / total))
-            elif y + cell_h > top + view_h:          # below → scroll down
-                self.canvas.yview_moveto(max(0.0, (y + cell_h - view_h) / total))
-        except tk.TclError:
-            pass
+        total_rows = (n + cols - 1) // cols
+        row = self.index // max(1, cols)
+        visible_rows = max(1.0, self._canvas_view_h() / cell_h)
+        scroll_row = getattr(self, "_scroll_row", 0.0)
+        if row < scroll_row:                          # above the viewport → scroll up
+            scroll_row = float(row)
+        elif row >= scroll_row + visible_rows:        # below → scroll down
+            scroll_row = row - visible_rows + 1
+        max_scroll = max(0.0, total_rows - visible_rows)
+        self._scroll_row = max(0.0, min(scroll_row, max_scroll))
         self._render_window()
