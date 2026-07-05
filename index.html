@@ -132,6 +132,40 @@
   .toolnote{margin-top:20px;color:var(--dim);font-size:14px;text-align:center}
   .toolnote b{color:var(--fg2);font-weight:600}
 
+  /* ---------------- tool info modal ---------------- */
+  button.tool{width:100%;text-align:left;font:inherit;color:inherit}
+  .tool .more{margin-top:12px;font-size:12.5px;font-weight:600;color:var(--acc);
+    display:inline-flex;align-items:center;gap:5px;opacity:.85;transition:opacity .18s}
+  .tool:hover .more{opacity:1}
+  .modal{position:fixed;inset:0;z-index:50;display:none;
+    align-items:center;justify-content:center;padding:24px;
+    background:color-mix(in srgb,#000 62%,transparent);backdrop-filter:blur(6px)}
+  .modal.open{display:flex}
+  .modal .dialog{background:var(--panel);border:var(--hair) solid var(--border2);
+    border-radius:var(--r-card);box-shadow:var(--shadow);
+    width:min(560px,100%);max-height:min(84vh,760px);overflow:auto;
+    animation:pop .18s ease}
+  @keyframes pop{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  .dialog .dhead{display:flex;align-items:center;gap:14px;padding:22px 24px 0}
+  .dialog .dhead .ic{width:44px;height:44px;border-radius:var(--r-ctrl);
+    background:var(--chip);display:grid;place-items:center;flex:none}
+  .dialog .dhead .ic img{width:23px;height:23px}
+  .dialog .dhead h3{font-size:19px;font-weight:640;letter-spacing:-.01em}
+  .dialog .x{margin-left:auto;width:34px;height:34px;border-radius:var(--r-ctrl);
+    display:grid;place-items:center;color:var(--dim);font-size:16px;flex:none}
+  .dialog .x:hover{background:var(--hover);color:var(--fg)}
+  .dialog .dbody{padding:16px 24px 26px}
+  .dialog .dbody p{color:var(--fg2);font-size:14.5px;margin:0 0 14px}
+  .dialog .dbody h4{font-size:11.5px;font-family:var(--mono);letter-spacing:.14em;
+    text-transform:uppercase;color:var(--dim);margin:20px 0 13px;font-weight:600}
+  .dialog .dbody ul{margin:0;padding:0;list-style:none;
+    display:flex;flex-direction:column;gap:11px}
+  .dialog .dbody li{position:relative;padding-left:20px;color:var(--fg2);
+    font-size:14px;line-height:1.5}
+  .dialog .dbody li::before{content:"";position:absolute;left:2px;top:8px;
+    width:6px;height:6px;border-radius:50%;background:var(--acc)}
+  .dialog .dbody b{color:var(--fg);font-weight:600}
+
   /* ---------------- three-up band ---------------- */
   .band{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
   .cell .ic{width:38px;height:38px;border-radius:var(--r-ctrl);background:var(--chip);
@@ -185,7 +219,7 @@
     .section{padding:56px 0}
   }
   @media (prefers-reduced-motion:reduce){
-    *{transition:none!important}html{scroll-behavior:auto}
+    *{transition:none!important;animation:none!important}html{scroll-behavior:auto}
     .reveal{opacity:1;transform:none}
   }
 </style>
@@ -267,23 +301,23 @@
       <div class="head reveal">
         <div class="eyebrow">The editor</div>
         <h2>Twelve tools on one rail</h2>
-        <p>Click a tool on the right-hand rail to open its panel. Every edit is non-destructive — with undo, redo and a live histogram.</p>
+        <p>Click a tool on the right-hand rail to open its panel — click any card below to see exactly what it does. Every edit is non-destructive, with undo, redo and a live histogram.</p>
       </div>
       <div class="tools reveal">
-        <div class="tool"><div class="ic"><img src="assets/readme/sliders-horizontal.png" alt=""></div><h3>Basic</h3><p>White balance, tone, and detail — clarity, texture, denoise, dehaze, sharpen — plus vibrance and saturation.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/palette.png" alt=""></div><h3>Color mixer</h3><p>Per-hue HSL bands, plus dedicated gold and skin mini-HSLs so only that material moves.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/wand-sparkles.png" alt=""></div><h3>Effects</h3><p>Vignette, grain and split-tone for finishing a look.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/crop.png" alt=""></div><h3>Crop</h3><p>Trim, straighten a tilted horizon, rotate and flip — with ratio and social presets.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/scaling.png" alt=""></div><h3>Resize</h3><p>Resize one photo, or every photo in a folder and its subfolders in one batch.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/frame.png" alt=""></div><h3>Perspective</h3><p>Fix keystoning and straighten converging lines.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/bandage.png" alt=""></div><h3>Heal &amp; Clone</h3><p>Remove blemishes automatically, or Alt-click to pick a clone source.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/circle-dot.png" alt=""></div><h3>Focus blur</h3><p>Blur the surroundings and keep your subject sharp.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/type.png" alt=""></div><h3>Text &amp; Watermark</h3><p>Live text overlays — many per photo, snapped to any corner.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/image.png" alt=""></div><h3>Logo</h3><p>Drop a transparent PNG — with size, opacity, tint, flip and corner-snap.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/blend.png" alt=""></div><h3>Filters</h3><p>Saved slider presets, previewed live on the current photo in a clickable strip.</p></div>
-        <div class="tool"><div class="ic"><img src="assets/readme/circle-play.png" alt=""></div><h3>Actions</h3><p>Record a macro and replay it on one photo — or a whole folder.</p></div>
+        <button class="tool" type="button" data-tool="basic"><div class="ic"><img src="assets/readme/sliders-horizontal.png" alt=""></div><h3>Basic</h3><p>White balance, tone, and detail — clarity, texture, denoise, dehaze, sharpen — plus vibrance and saturation.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="color"><div class="ic"><img src="assets/readme/palette.png" alt=""></div><h3>Color mixer</h3><p>Per-hue HSL bands, plus dedicated gold and skin mini-HSLs so only that material moves.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="effects"><div class="ic"><img src="assets/readme/wand-sparkles.png" alt=""></div><h3>Effects</h3><p>Vignette, grain and split-tone for finishing a look.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="filters"><div class="ic"><img src="assets/readme/blend.png" alt=""></div><h3>Filters</h3><p>Saved slider presets, previewed live on the current photo in a clickable strip.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="crop"><div class="ic"><img src="assets/readme/crop.png" alt=""></div><h3>Crop</h3><p>Trim, straighten a tilted horizon, rotate and flip — with ratio and social presets.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="resize"><div class="ic"><img src="assets/readme/scaling.png" alt=""></div><h3>Resize</h3><p>Resize one photo, or every photo in a folder and its subfolders in one batch.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="perspective"><div class="ic"><img src="assets/readme/frame.png" alt=""></div><h3>Perspective</h3><p>Fix keystoning and straighten converging lines.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="heal"><div class="ic"><img src="assets/readme/bandage.png" alt=""></div><h3>Heal &amp; Clone</h3><p>Remove blemishes automatically, or Alt-click to pick a clone source.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="focus"><div class="ic"><img src="assets/readme/circle-dot.png" alt=""></div><h3>Focus blur</h3><p>Blur the surroundings and keep your subject sharp.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="text"><div class="ic"><img src="assets/readme/type.png" alt=""></div><h3>Text &amp; Watermark</h3><p>Live text overlays — many per photo, snapped to any corner.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="logo"><div class="ic"><img src="assets/readme/image.png" alt=""></div><h3>Logo</h3><p>Drop a transparent PNG — with size, opacity, tint, flip and corner-snap.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="actions"><div class="ic"><img src="assets/readme/circle-play.png" alt=""></div><h3>Actions</h3><p>Record a macro and replay it on one photo — or a whole folder.</p><span class="more">Details →</span></button>
       </div>
-      <p class="toolnote reveal">Undo / redo · live histogram · dark &amp; light theme with an accent colour · a <b>Georgian / English</b> interface.</p>
+      <p class="toolnote reveal">Undo / redo · live histogram · dark &amp; light theme with an accent colour · an <b>English, Georgian &amp; Polish</b> interface.</p>
     </div>
   </section>
 
@@ -301,7 +335,7 @@
         <div class="cell">
           <div class="ic"><img src="assets/readme/blend.png" alt=""></div>
           <h3>Filters &amp; the “Last” slot</h3>
-          <p>A filter is a saved slider preset — one click applies the whole look. Save a photo and its edit is pinned as <b>“Last”</b> for the next shot. Export a filter group to a small <b>.json</b> and share your looks between machines and friends.</p>
+          <p>A filter is a saved slider preset — one click applies the whole look. Save a photo and its edit is pinned as <b>“Last”</b> for the next shot. Export a filter group to a small <b>.mnf</b> file and share your looks between machines and friends.</p>
         </div>
         <div class="cell">
           <div class="ic"><img src="assets/readme/upload.png" alt=""></div>
@@ -345,8 +379,8 @@
   <section class="section" id="lang">
     <div class="wrap">
       <div class="lang reveal">
-        <div class="big">EN · ქართული · +</div>
-        <p>The interface ships in <b>English and Georgian</b> — and adding your own needs no code and no rebuild. Settings generates a template of every phrase; translate the ones you want and import it back. Anything left untranslated simply stays English, so even a half-finished pack works the moment you load it.</p>
+        <div class="big">EN · ქართული · Polski · +</div>
+        <p>The interface ships in <b>English, Georgian and Polish</b> — and adding your own needs no code and no rebuild. Settings generates a template of every phrase; translate the ones you want and import it back. Anything left untranslated simply stays English, so even a half-finished pack works the moment you load it.</p>
       </div>
     </div>
   </section>
@@ -363,12 +397,115 @@
   </div>
 </footer>
 
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+  <div class="dialog">
+    <div class="dhead">
+      <div class="ic"><img id="mic" src="" alt=""></div>
+      <h3 id="mtitle"></h3>
+      <button class="x" type="button" id="mx" aria-label="Close">✕</button>
+    </div>
+    <div class="dbody" id="mbody"></div>
+  </div>
+</div>
+
 <script>
   var root=document.documentElement;
   var tt=document.getElementById('tt');
   tt.onclick=function(){
     root.setAttribute('data-theme', root.getAttribute('data-theme')==='light'?'dark':'light');
   };
+  // ---------------- tool info modal ----------------
+  var IC='assets/readme/';
+  var TOOLS={
+    basic:{icon:IC+'sliders-horizontal.png',title:'Basic',body:
+      '<p>White balance, tone and detail on one panel — the everyday adjustments you reach for on almost every photo.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>White balance</b> — temperature and tint, or pick a neutral to set it.</li>'+
+      '<li><b>Tone</b> — exposure, contrast, highlights, shadows, whites and blacks.</li>'+
+      '<li><b>Detail</b> — clarity, texture, denoise, dehaze and sharpen.</li>'+
+      '<li><b>Colour</b> — vibrance and saturation.</li></ul>'},
+    color:{icon:IC+'palette.png',title:'Color mixer',body:
+      '<p>A full HSL mixer that moves one colour without dragging the rest with it.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Eight per-hue bands</b> — shift the saturation of each colour family on its own.</li>'+
+      '<li><b>Gold &amp; skin mini-HSLs</b> — dedicated controls for the two tones that matter most.</li>'+
+      '<li>Each band is <b>gated by hue and saturation</b>, so only that material moves — skin stays put when you push the golds.</li></ul>'},
+    effects:{icon:IC+'wand-sparkles.png',title:'Effects',body:
+      '<p>Finishing touches that give a photo its final character.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Vignette</b> — darken or lighten the edges to draw the eye in.</li>'+
+      '<li><b>Grain</b> — add texture for a filmic feel.</li>'+
+      '<li><b>Split-tone</b> — tint highlights and shadows separately.</li></ul>'},
+    crop:{icon:IC+'crop.png',title:'Crop',body:
+      '<p>Reframe and level a shot without ever touching the original file.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Trim</b> the frame freely or to a fixed ratio.</li>'+
+      '<li><b>Straighten</b> a tilted horizon.</li>'+
+      '<li><b>Rotate and flip</b> in one place.</li>'+
+      '<li><b>Ratio &amp; social presets</b> for common sizes.</li></ul>'},
+    resize:{icon:IC+'scaling.png',title:'Resize',body:
+      '<p>Scale a photo down to a target size — one image or a whole shoot.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li>Resize <b>one photo</b> to an exact width, height or long edge.</li>'+
+      '<li><b>Batch</b> every photo in a folder <b>and its subfolders</b> in one pass.</li>'+
+      '<li>Originals are left untouched — resized copies are written out.</li></ul>'},
+    perspective:{icon:IC+'frame.png',title:'Perspective',body:
+      '<p>Correct the geometry of a shot taken looking up or off-axis.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Fix keystoning</b> — make a leaning building stand up straight.</li>'+
+      '<li><b>Straighten converging lines</b>, horizontally and vertically.</li></ul>'},
+    heal:{icon:IC+'bandage.png',title:'Heal &amp; Clone',body:
+      '<p>Clean up blemishes and stray objects, then blend the fix into the surroundings.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Heal</b> — click a spot and it\'s patched from nearby texture automatically.</li>'+
+      '<li><b>Clone</b> — <b>Alt-click</b> to set a source, then paint from it.</li>'+
+      '<li>Size the brush with <b>[</b> and <b>]</b>.</li></ul>'},
+    focus:{icon:IC+'circle-dot.png',title:'Focus blur',body:
+      '<p>Draw attention to your subject by softening everything around it.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Blur the surroundings</b> while the subject stays sharp.</li>'+
+      '<li>Adjustable strength and falloff for a natural depth-of-field look.</li></ul>'},
+    text:{icon:IC+'type.png',title:'Text &amp; Watermark',body:
+      '<p>Live text and watermark overlays, rendered right on the photo.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Many texts per photo</b> — add, edit and delete each independently.</li>'+
+      '<li>Control <b>font, size, colour, opacity and shadow</b>.</li>'+
+      '<li><b>Snap to any corner</b>, or place it freely.</li></ul>'},
+    logo:{icon:IC+'image.png',title:'Logo',body:
+      '<p>Stamp a transparent-PNG logo or signature onto the photo.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li>Drop in any <b>transparent PNG</b>.</li>'+
+      '<li>Control <b>size, opacity, tint and flip</b>, and <b>snap to a corner</b>.</li>'+
+      '<li>Keep your logos as <b>presets</b> for one-click reuse.</li></ul>'},
+    filters:{icon:IC+'blend.png',title:'Filters',body:
+      '<p>A filter is a <b>saved slider preset</b> — one click applies the whole look at once.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>One-click looks</b> — the strip of previews under the photo shows each filter on the current photo; click one to apply it.</li>'+
+      '<li><b>The “Last” slot</b> — the moment you save a photo, its edit is pinned as “Last”, so you can apply the same look to the next shot with no saving. It lasts for the session; its … menu can make it a permanent filter or clear it.</li>'+
+      '<li><b>Make your own</b> — dial in an edit you like and save it as a filter; rename, reorder or delete from the Filters panel.</li>'+
+      '<li><b>Share a group</b> — a group’s … menu exports it to a small <b>.mnf</b> file; a friend loads it from the Import button atop the panel. Sharing works per group, not per single filter.</li></ul>'},
+    actions:{icon:IC+'circle-play.png',title:'Actions',body:
+      '<p>Record a sequence of edits once, then replay it anywhere.</p>'+
+      '<h4>What it does</h4><ul>'+
+      '<li><b>Record</b> a macro of your steps as you work.</li>'+
+      '<li><b>Replay</b> it on the current photo — or the <b>whole folder</b> as a batch.</li></ul>'}
+  };
+  var modal=document.getElementById('modal');
+  var mic=document.getElementById('mic'), mtitle=document.getElementById('mtitle'), mbody=document.getElementById('mbody');
+  function openTool(id){
+    var t=TOOLS[id]; if(!t) return;
+    mic.src=t.icon; mtitle.innerHTML=t.title; mbody.innerHTML=t.body;
+    modal.classList.add('open'); document.body.style.overflow='hidden';
+    document.getElementById('mx').focus();
+  }
+  function closeTool(){ modal.classList.remove('open'); document.body.style.overflow=''; }
+  document.querySelectorAll('.tool').forEach(function(b){
+    b.addEventListener('click',function(){ openTool(b.getAttribute('data-tool')); });
+  });
+  document.getElementById('mx').addEventListener('click',closeTool);
+  modal.addEventListener('click',function(e){ if(e.target===modal) closeTool(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape' && modal.classList.contains('open')) closeTool(); });
+
   // subtle scroll reveal (skipped when reduced motion is preferred)
   if(!matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window){
     var io=new IntersectionObserver(function(es){
