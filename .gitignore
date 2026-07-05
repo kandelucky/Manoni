@@ -11,6 +11,8 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+# PyInstaller build logs dropped in the repo root (build_<version>.log)
+build_*.log
 # Inno Setup installer output (compiled Setup.exe)
 installer/
 
