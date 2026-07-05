@@ -91,8 +91,8 @@ A tool rail on the right — click a tool to open its panel.
 | <img src="assets/readme/blend.png" width="22" alt=""> | **Filters** | Saved slider presets with a clickable preview strip |
 | <img src="assets/readme/circle-play.png" width="22" alt=""> | **Actions** | Record a macro and replay it on one photo or a whole folder |
 
-Undo / redo · a live histogram · dark / light theme with an accent colour · a
-Georgian / English UI.
+Undo / redo · a live histogram · dark / light theme with an accent colour · an
+English, Georgian & Polish UI.
 
 ---
 
@@ -147,7 +147,7 @@ the top bar opens a tabbed guide covering all of the above.
 
 ## Any language
 
-The interface ships in **English and Georgian**, and adding your own is easy —
+The interface ships in **English, Georgian and Polish**, and adding your own is easy —
 no code, no rebuild. **Settings → General → Add your language** generates a
 template listing every phrase in the app; translate the ones you want, then
 import it back. Anything you leave untranslated simply stays English, so even a
@@ -163,12 +163,12 @@ Planned work, roughly in order. Full detail in
 
 - [x] **`.mnf` / `.mnl` file types** — filters export as `.mnf`, languages as
   `.mnl`; opening or dropping one on the window imports it *(done)*.
-- [ ] **Register the file types with Windows** — double-click a `.mnf` / `.mnl`
-  to open Manoni, with their own file icons *(part of the installer)*.
+- [x] **Register the file types with Windows** — double-click a `.mnf` / `.mnl`
+  opens Manoni, with their own file icons *(done — in the installer)*.
+- [x] **Windows installer** — single-instance, "Open with Manoni", drag & drop, a
+  PyInstaller build and an Inno Setup installer *(done — ships as Setup.exe)*.
 - [ ] **Sharing website** — a place to share `.mnf` / `.mnl` files: free hosting
   (Supabase), uploads **moderated** before they go public, driven from inside the
   app (share / receive buttons).
-- [ ] **Windows installer** — single-instance, "Open with Manoni", drag & drop, a
-  PyInstaller build, then an Inno Setup installer.
 - [ ] **RAW support** — an optional add-on (installer tick-box or on-demand
   download) so the base app stays light; export as JPEG or 16-bit TIFF.
