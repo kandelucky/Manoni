@@ -133,9 +133,15 @@ stripped per your choice, and the original is **never touched**.
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo *(or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>)* |
 | <kbd>Ctrl</kbd>+<kbd>R</kbd> | Show / hide the pixel rulers |
 | <kbd>[</kbd> / <kbd>]</kbd> | Shrink / grow the heal brush |
+| <kbd>R</kbd> | Start / stop recording an action |
+| <kbd>Esc</kbd> | Cancel recording |
+| <kbd>P</kbd> | Replay the highlighted action on the current photo |
+| <kbd>Shift</kbd>+<kbd>P</kbd> | Replay it over the whole folder |
 
 The arrow keys work whether the edit panel is open or closed; leaving a photo
-with unsaved edits prompts you to save first.
+with unsaved edits prompts you to save first. <kbd>P</kbd> replays the last
+action you recorded or played — the one shown highlighted in the Actions panel;
+the action keys pause while you're typing a name.
 
 The <img src="assets/readme/circle-help.png" width="16" alt=""> **Help** button in
 the top bar opens a tabbed guide covering all of the above.

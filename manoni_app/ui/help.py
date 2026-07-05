@@ -247,6 +247,13 @@ class HelpMixin:
         win.group(t("Heal & Clone"))
         self._help_key_row(win, "[   ]", "Shrink / grow the brush.")
 
+        win.group(t("Actions"))
+        self._help_key_row(win, "R", "Start / stop recording an action.")
+        self._help_key_row(win, "Esc", "Cancel recording (throw the steps away).")
+        self._help_key_row(win, "P", "Replay the highlighted action on the "
+                                     "open photo.")
+        self._help_key_row(win, "Shift + P", "Replay it over the whole folder.")
+
         win.group(t("On the photo  (mouse)"))
         self._help_row(win, "hand", "Hand / pan",
                        "Toggle the hand in the top bar, then drag to move the photo.")
@@ -330,6 +337,16 @@ class HelpMixin:
                        "whole folder.")
         win.note(t("Heal strokes are not recorded; everything else — light, "
                    "colour, crop, text, filters — is."))
+
+        win.group(t("Keyboard"))
+        self._help_key_row(win, "R", "Start / stop recording an action.")
+        self._help_key_row(win, "Esc", "Cancel recording (throw the steps away).")
+        self._help_key_row(win, "P", "Replay the highlighted action on the "
+                                     "open photo.")
+        self._help_key_row(win, "Shift + P", "Replay it over the whole folder.")
+        win.note(t("P uses the last action you recorded or played — shown in "
+                   "the panel in the accent colour. These keys pause while you "
+                   "type a name."))
 
     # --- Save & Export tab --------------------------------------------------
 

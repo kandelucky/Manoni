@@ -243,10 +243,21 @@ class ActionsMixin:
         if name is None:
             return
         name = self._unique_action_name(name)
-        self.user_actions.append({"name": name, "steps": steps})
+        act = {"name": name, "steps": steps}
+        self.user_actions.append(act)
+        self._last_action = act          # a fresh action becomes the P target
         self._save_actions()
         self._refresh_action_list()
         self.toast(t("Action saved: {name}").format(name=name))
+
+    def _cancel_recording(self):
+        "Esc while recording: disarm and throw away what was captured (no save)."
+        if not getattr(self, "_recording", False):
+            return
+        self._recording = False
+        self._record_steps = []
+        self._refresh_action_recorder()
+        self.toast(t("Recording cancelled"))
 
     # --- Playback (current photo only) --------------------------------------
 
@@ -258,6 +269,8 @@ class ActionsMixin:
         if self._recording:
             self.toast(t("Stop recording first"))
             return
+        self._last_action = action       # this is what P now replays
+        self._refresh_action_list()      # move the highlight to it
         before = self._edit_state()
         self._playing = True
         try:
@@ -333,6 +346,28 @@ class ActionsMixin:
             img = imaging.apply_edits(img, e, auto_luts=luts)
         return img
 
+    def _active_action(self):
+        "The action the P shortcut targets: the last one used, else the only one."
+        last = getattr(self, "_last_action", None)
+        if last in self.user_actions:
+            return last
+        if len(self.user_actions) == 1:
+            return self.user_actions[0]
+        return None
+
+    def _play_active_action(self, folder=False):
+        "P / Shift+P: replay the active action on the photo (or over the folder)."
+        act = self._active_action()
+        if act is None:
+            self.toast(t("Pick an action in the panel first")
+                       if self.user_actions
+                       else t("No actions yet — press R to record one"))
+            return
+        if folder:
+            self._play_action_folder(act)
+        else:
+            self._play_action(act)
+
     def _play_action_folder(self, action):
         "Apply an action to every photo in the open folder, saving each result."
         if self._recording:
@@ -341,6 +376,8 @@ class ActionsMixin:
         if not self.files or not self.folder:
             self.toast(t("Open a folder first"))
             return
+        self._last_action = action       # this is what Shift+P now replays
+        self._refresh_action_list()      # move the highlight to it
         cfg = self._ask_batch_config(len(self.files))
         if cfg is None:
             return
@@ -498,6 +535,15 @@ class ActionsMixin:
                                     font=("Segoe UI", 8)), bg="bar", fg="fg_dim")
         self._rec_status.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
 
+        # A one-line reminder of the keyboard shortcuts (P replays the highlighted
+        # action — the accent-coloured row below). The full list lives in Help.
+        self._tw(tk.Label(
+            f, text=t("Keys:  R record · Esc cancel · P play the highlighted "
+                      "action · Shift+P whole folder"),
+            anchor="w", justify="left", font=("Segoe UI", 8),
+            wraplength=self._edit_dpi_w(210)), bg="bar", fg="fg_dim").pack(
+                fill="x", padx=EDIT_PAD, pady=(0, 6))
+
         self._tw(tk.Frame(f, height=1), bg="divider").pack(
             fill="x", padx=EDIT_PAD, pady=(4, 8))
 
@@ -572,8 +618,12 @@ class ActionsMixin:
         else:
             pic = self._tw(tk.Label(row, text="▶"), bg="chip", fg="accent")
         pic.pack(side="left", padx=(8, 8), pady=7)
+        # The active row (what P replays) reads in the accent colour, bold — both
+        # survive the hover restyle below, which only swaps the row's background.
+        active = self._active_action() is act
         nm = self._tw(tk.Label(row, text=act["name"], anchor="w",
-                      font=("Segoe UI", 9)), bg="chip", fg="fg")
+                      font=("Segoe UI", 9, "bold" if active else "normal")),
+                      bg="chip", fg="accent" if active else "fg")
         nm.pack(side="left", fill="x", expand=True)
         # batch / rename / delete on the right (own clicks; don't trigger play)
         self._action_icon(row, "trash-2", lambda: self._delete_action(act),

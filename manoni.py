@@ -436,6 +436,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._recording = False        # is the recorder armed?
         self._record_steps = []        # steps captured in the current recording
         self._playing = False          # an action is currently replaying
+        self._last_action = None       # action the P shortcut replays (last used)
 
         # Undo/redo: stacks of command dicts. A command is either
         #   {'kind': 'move', 'file', 'src', 'dest'}            (delete / move-to)
@@ -473,7 +474,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         #   Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo, Ctrl+R toggle rulers,
         #   Ctrl+S quick save, Ctrl+O open folder.
         self.root.bind("<Control-KeyPress>", self._on_ctrl_shortcut)
-        #   [ / ] resize the heal brush (Photoshop-style), only while it is open.
+        #   [ / ] resize the heal brush (Photoshop-style), only while it is open;
+        #   R record an action, Esc cancel it, P replay it, Shift+P over the folder.
         self.root.bind("<KeyPress>", self._on_plain_key)
 
         # Browse-mode arrow keys (active whether or not the edit panel is open;
@@ -504,6 +506,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # VK code in event.keycode and it does NOT change with the keyboard layout,
     # so we use it as a fallback when a non-Latin layout hides the keysym.
     _VK_Z, _VK_Y, _VK_R, _VK_S, _VK_O = 90, 89, 82, 83, 79
+    _VK_P = 80
     _VK_LBRACKET, _VK_RBRACKET = 219, 221
 
     def _on_ctrl_shortcut(self, event):
@@ -532,15 +535,34 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         return None
 
     def _on_plain_key(self, event):
-        "Unmodified [ / ] resize the heal brush (a no-op while it is closed)."
+        """Unmodified keys: [ / ] resize the heal brush, and the action-macro
+        shortcuts — R record/stop, Esc cancel, P replay, Shift+P over the folder.
+
+        The heal brush works anywhere; the action keys are ignored while a text
+        field has focus (so typing a name / caption never trips them)."""
         if event.state & 0x0004:        # Control held → not ours
             return None
         ks = event.keysym
         kc = event.keycode
         if ks == "bracketleft" or kc == self._VK_LBRACKET:
             self._heal_brush_key(-1)
-        elif ks == "bracketright" or kc == self._VK_RBRACKET:
+            return None
+        if ks == "bracketright" or kc == self._VK_RBRACKET:
             self._heal_brush_key(1)
+            return None
+        if isinstance(self.root.focus_get(), (tk.Entry, tk.Text)):
+            return None                 # typing a name / caption → keys aren't ours
+        if ks == "Escape":
+            if getattr(self, "_recording", False):
+                self._cancel_recording()
+                return "break"
+            return None                 # let other Escape handlers run
+        if ks.lower() == "r" or kc == self._VK_R:
+            self._toggle_recording()
+            return "break"
+        if ks.lower() == "p" or kc == self._VK_P:
+            self._play_active_action(folder=bool(event.state & 0x0001))  # Shift = folder
+            return "break"
         return None
 
     # --- Session state (last folder + image) --------------------------------
