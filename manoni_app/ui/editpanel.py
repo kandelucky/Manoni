@@ -116,6 +116,18 @@ class EditPanelMixin:
         self._build_crop_footer(panel)      # pinned Crop/Cancel, crop tool only
         self._build_resize_footer(panel)    # pinned Resize/Reset, resize tool only
 
+    def toggle_histogram(self):
+        "Show/hide the edit panel's live histogram. Remembered across sessions."
+        self.show_histogram = not getattr(self, "show_histogram", False)
+        # The histogram sits at the top of the edit panel, so turning it on while
+        # the panel is collapsed would add it out of sight. Open the panel too, so
+        # the graph actually appears.
+        if self.show_histogram:
+            self.open_panel()
+        self._refresh_histogram()
+        self._repaint_view_toggles()      # keep the toolbar toggle in sync
+        self._save_state()
+
     def _refresh_histogram(self):
         "Show or hide the panel's live histogram per the General setting."
         hist = getattr(self, "histogram", None)

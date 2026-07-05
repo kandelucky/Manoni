@@ -496,7 +496,7 @@ class ChromeMixin:
             self.toggle_histogram, t("Histogram — show or hide"), glyph="▁▃▅")
         self.btn_toggle_hist.pack(side="left", padx=3, pady=8)
         self.btn_toggle_filters = self._build_toggle_button(
-            left, "gallery-horizontal",
+            left, "blend",
             lambda: getattr(self, "show_filter_strip", False),
             self.toggle_filter_strip, t("Filter strip — show or hide"), glyph="▦")
         self.btn_toggle_filters.pack(side="left", padx=3, pady=8)

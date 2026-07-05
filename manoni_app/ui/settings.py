@@ -220,29 +220,27 @@ class SettingsMixin:
                     t("The row of filter previews under the photo."))
 
         def pick_filters(on):
-            self.show_filter_strip = on
-            self._save_state()
-            self._refresh_filter_strip()         # show / hide the strip live
-        tintkit.Toggle(r, self.theme, value=getattr(self, "show_filter_strip", True),
+            if on != getattr(self, "show_filter_strip", False):
+                self.toggle_filter_strip()       # flips, re-renders, syncs the toolbar
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_filter_strip", False),
                 command=pick_filters).pack()
 
         r = win.row(t("Show histogram"),
                     t("The live tonal graph at the top of the edit panel."))
 
         def pick_histogram(on):
-            self.show_histogram = on
-            self._save_state()
-            self._refresh_histogram()            # show / hide the graph live
-        tintkit.Toggle(r, self.theme, value=getattr(self, "show_histogram", True),
+            if on != getattr(self, "show_histogram", False):
+                self.toggle_histogram()          # flips, re-renders, syncs the toolbar
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_histogram", False),
                 command=pick_histogram).pack()
 
         r = win.row(t("Show pixel rulers"),
                     t("The top and left rulers over the photo (Ctrl+R)."))
 
         def pick_rulers(on):
-            if on != getattr(self, "show_rulers", True):
+            if on != getattr(self, "show_rulers", False):
                 self.toggle_rulers()             # re-renders + persists itself
-        tintkit.Toggle(r, self.theme, value=getattr(self, "show_rulers", True),
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_rulers", False),
                 command=pick_rulers).pack()
 
     # --- Performance tab ----------------------------------------------------
@@ -567,12 +565,13 @@ class SettingsMixin:
                 ok_label=t("Restore defaults")):
             return
         self.set_view("large")                       # default sidebar view
-        if not getattr(self, "show_rulers", True):   # rulers default = on
+        if getattr(self, "show_rulers", False):      # rulers default = off
             self.toggle_rulers()
-        self.show_filter_strip = True                # filter strip default = on
+        self.show_filter_strip = False               # filter strip default = off
         self._refresh_filter_strip()
-        self.show_histogram = True                   # histogram default = on
+        self.show_histogram = False                  # histogram default = off
         self._refresh_histogram()
+        self._repaint_view_toggles()                 # sync the toolbar toggles
         self.fast_preview = True                      # fast preview default = on
         self.last_save = {"dir": "", "fmt": "JPEG", "quality": 95,
                           "keep_meta": True, "to_srgb": False}

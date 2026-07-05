@@ -748,8 +748,9 @@ class ViewerMixin:
 
     def toggle_rulers(self):
         "Show/hide the top + left rulers (Ctrl+R). Remembered across sessions."
-        self.show_rulers = not getattr(self, "show_rulers", True)
+        self.show_rulers = not getattr(self, "show_rulers", False)
         self._render_preview()
+        self._repaint_view_toggles()      # keep the toolbar toggle in sync
         self._save_state()
 
     @staticmethod

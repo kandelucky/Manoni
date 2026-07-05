@@ -403,9 +403,13 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self._preview_scheduled = False  # a coalesced render is queued for the next idle
         self._checker_img = None    # cached transparency checkerboard (grows with view)
         self._checker_size = (0, 0)
-        self.show_rulers = True  # top + left pixel rulers (Ctrl+R); persisted
-        self.show_filter_strip = True  # the filter-preview filmstrip; persisted
-        self.show_histogram = True  # the edit panel's live histogram; persisted
+        # These three view elements are toggled from the toolbar (and Settings /
+        # Ctrl+R). All default OFF so a fresh install opens with a clean, minimal
+        # canvas; the choice then persists across sessions (an existing state file
+        # keeps whatever the user last set).
+        self.show_rulers = False  # top + left pixel rulers (Ctrl+R); persisted
+        self.show_filter_strip = False  # the filter-preview filmstrip; persisted
+        self.show_histogram = False  # the edit panel's live histogram; persisted
         self.basic_full = False  # Basic Edits: show all sliders vs the simple 7; persisted
         self.fast_preview = True  # drop heavy filters during a slider drag; persisted
         self.async_render = True  # render off the UI thread so a heavy edit can't

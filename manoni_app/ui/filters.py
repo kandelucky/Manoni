@@ -550,6 +550,13 @@ class FiltersMixin:
         # covers both, since _refresh_filter_strip also refreshes the panel list.
         self.theme.subscribe(self._refresh_filter_strip)
 
+    def toggle_filter_strip(self):
+        "Show/hide the filter-preview filmstrip. Remembered across sessions."
+        self.show_filter_strip = not getattr(self, "show_filter_strip", False)
+        self._refresh_filter_strip()
+        self._repaint_view_toggles()      # keep the toolbar toggle in sync
+        self._save_state()
+
     def _refresh_filter_strip(self):
         "Rebuild the strip for the current photo: 'Original', then each non-empty"
         " group ('Standard' built-ins + the user's groups) under a foldable caption."
