@@ -106,6 +106,14 @@ class TextMixin:
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_text_slider("opacity"))
         self.s_text_opacity.pack(fill="x", padx=EDIT_PAD, pady=2)
+        # Rotation: −180…180° (0 = upright). Positive turns clockwise.
+        self.s_text_rotation = tintkit.TitledSlider(
+            f, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
+            bg="bar", command=self._set_text_rotation,
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: f"{v}°",
+            on_reset=lambda: self._reset_text_slider("rotation"))
+        self.s_text_rotation.pack(fill="x", padx=EDIT_PAD, pady=2)
 
         # Colour swatch + a shadow checkbox, side by side.
         row = self._tw(tk.Frame(f), bg="bar")
@@ -221,7 +229,7 @@ class TextMixin:
         return {"text": "", "cx": iw / 2.0, "cy": ih / 2.0,
                 "size": max(12.0, min(iw, ih) * 0.08),
                 "color": "#ffffff", "opacity": 1.0, "font": "Sans",
-                "align": "center", "shadow": True}
+                "align": "center", "shadow": True, "angle": 0.0}
 
     def _add_text(self):
         "‘Add text’: drop ONE new, real, editable text element on the photo and"
@@ -317,6 +325,8 @@ class TextMixin:
             short = max(1, min(self.current_pil.size))
             self.s_text_size.set(round(ov.get("size", 0.0) / short * 100))
         self.s_text_opacity.set(round((ov.get("opacity", 1.0) if has else 1.0) * 100))
+        if hasattr(self, "s_text_rotation"):
+            self.s_text_rotation.set(round(ov.get("angle", 0.0)) if has else 0)
         self._text_swatch.configure(bg=ov.get("color", "#ffffff") if has else "#ffffff")
         active_font = imaging.resolve_font_family(ov.get("font", "Sans") if has else "Sans")
         if hasattr(self, "_text_font_dd"):
@@ -388,6 +398,14 @@ class TextMixin:
         self._edits_saved = False
         self._schedule_preview()
 
+    def _set_text_rotation(self, v):
+        "Slider: text rotation in degrees, −180..180 (live, no undo step)."
+        if self.text_overlay is None:
+            return
+        self.text_overlay = {**self.text_overlay, "angle": float(int(v))}
+        self._edits_saved = False
+        self._schedule_preview()
+
     def _reset_text_slider(self, which):
         "Return one text slider to neutral on the selected element (one undo step)."
         if self.text_overlay is None or self.current_pil is None:
@@ -398,6 +416,9 @@ class TextMixin:
             self.text_overlay = {**self.text_overlay,
                                  "size": max(self.TEXT_MIN_SIZE, 8 / 100.0 * short)}
             self.s_text_size.set(8)
+        elif which == "rotation":
+            self.text_overlay = {**self.text_overlay, "angle": 0.0}
+            self.s_text_rotation.set(0)
         else:
             self.text_overlay = {**self.text_overlay, "opacity": 1.0}
             self.s_text_opacity.set(100)

@@ -38,6 +38,7 @@ from manoni_app.ui.perspective import PerspectiveMixin
 from manoni_app.ui.heal import HealMixin
 from manoni_app.ui.focus import FocusMixin
 from manoni_app.ui.text import TextMixin
+from manoni_app.ui.logo import LogoMixin
 from manoni_app.ui.filters import FiltersMixin
 from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
@@ -55,8 +56,8 @@ FIRST_RUN_IMAGE = r"C:\Users\likak\Desktop\Manoni\temp\test_chart.png"
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, ResizeMixin, PerspectiveMixin,
-             HealMixin, FocusMixin, TextMixin, FiltersMixin, ActionsMixin,
-             AboutMixin, MetadataMixin, SettingsMixin, HelpMixin):
+             HealMixin, FocusMixin, TextMixin, LogoMixin, FiltersMixin,
+             ActionsMixin, AboutMixin, MetadataMixin, SettingsMixin, HelpMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -131,7 +132,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # the 0-neutral ones here so reset / "is edited" use the right rest point.
     # auto_mode is not a slider; its rest is None (no auto correction active).
     SLIDER_NEUTRAL = {"bw": 0.0, "sepia": 0.0, "grain": 0.0, "denoise": 0.0,
-                      "focus": None, "auto_mode": None, "texts": []}
+                      "focus": None, "auto_mode": None, "texts": [], "logos": []}
 
     def __init__(self, folder=None):
         # DPI awareness is declared the moment tintkit is imported (its
@@ -263,6 +264,14 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.texts = []
         self.text_sel = None
         self._text_drag = None   # in-progress move/resize drag state, or None
+        # Logo / sticker overlays: the picture sibling of the text overlays, same
+        # LIVE non-destructive model. `logos` is a LIST of dicts {path, cx, cy,
+        # size (source px), opacity, flip_h/v, angle, tint}; `logo_sel` is the
+        # selected index (or None). The `logo_overlay` PROPERTY (see LogoMixin)
+        # exposes the selected element. Added via a preset click or "Choose PNG…".
+        self.logos = []
+        self.logo_sel = None
+        self._logo_drag = None   # in-progress move/resize drag state, or None
         # Auto tone (Photoshop "Auto Levels" / "Auto Contrast"). One mode at a
         # time: "levels" stretches each RGB channel (fixes a colour cast),
         # "contrast" stretches luminance only (keeps colour balance). The per-band

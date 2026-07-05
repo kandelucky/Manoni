@@ -157,6 +157,8 @@ class ViewerMixin:
             return self._focus_press(event)
         if self._text_active():
             return self._text_press(event)
+        if self._logo_active():
+            return self._logo_press(event)
         if self._heal_active():
             return self._heal_press(event)
         return self._crop_press(event)
@@ -179,6 +181,8 @@ class ViewerMixin:
             return self._focus_move(event)
         if self._text_active():
             return self._text_move(event)
+        if self._logo_active():
+            return self._logo_move(event)
         if self._heal_active():
             return self._heal_move(event)
         return self._crop_move(event)
@@ -192,6 +196,8 @@ class ViewerMixin:
             return self._focus_release(event)
         if self._text_active():
             return self._text_release(event)
+        if self._logo_active():
+            return self._logo_release(event)
         if self._heal_active():
             return self._heal_release(event)
         return self._crop_release(event)
@@ -205,6 +211,8 @@ class ViewerMixin:
             return self._focus_hover(event)
         if self._text_active():
             return self._text_hover(event)
+        if self._logo_active():
+            return self._logo_hover(event)
         if self._heal_active():
             return self._heal_hover(event)
         return self._crop_hover(event)
@@ -297,6 +305,7 @@ class ViewerMixin:
             self._rotated = True        # rotation is an edit worth offering to save
         self._clear_focus_for_geometry()  # source-px circle no longer maps after a rotate
         self._clear_text_for_geometry()   # …and the source-px text position no longer maps
+        self._clear_logo_for_geometry()   # …and the source-px logo position no longer maps
         self._edits_saved = False
         if not mirror:                  # a 90° turn swaps the aspect ratio; a mirror doesn't
             self.fit_mode = True
@@ -343,7 +352,8 @@ class ViewerMixin:
             # on the worker thread) reads a stable snapshot even if the UI thread
             # keeps dragging the shape / caption underneath it.
             focus=dict(self.focus) if self.focus else None,
-            texts=[dict(ov) for ov in self.texts])
+            texts=[dict(ov) for ov in self.texts],
+            logos=[dict(ov) for ov in self.logos])
 
     def _apply_edits(self, img, scale=1.0, src_box=None, full_size=None, fast=False):
         "Apply the live edit factors via the pure imaging module."
@@ -526,6 +536,8 @@ class ViewerMixin:
             self._draw_focus_overlay()
         elif self._text_active():
             self._draw_text_overlay()
+        elif self._logo_active():
+            self._draw_logo_overlay()
         if getattr(self, "show_rulers", True):
             self._draw_rulers(req["vw"], req["vh"], scale, off_x, off_y)
         if self.compare_mode and not self._compare_peek:

@@ -77,3 +77,7 @@ class Edits:
     # opacity, font key, alignment and an optional drop shadow. Drawn in list
     # order (later = on top). See apply_text_overlay.
     texts:       object = None
+    # Logo / sticker overlays. None or [] = off, else a LIST of dicts, each a PNG
+    # path with its centre + width in SOURCE px, opacity, flip flags and an
+    # optional flat-colour tint. Drawn after the texts (on top). See apply_logo_overlay.
+    logos:       object = None

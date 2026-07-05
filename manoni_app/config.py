@@ -57,6 +57,13 @@ ACTIONS_FILE = os.path.join(_DATA_DIR, "manoni_actions.json")
 # relaunch that a language switch triggers. See i18n.load_user_packs.
 LANG_DIR = os.path.join(_DATA_DIR, "languages")
 
+# Logo / watermark overlays. Two folders are scanned into the Logo tool's preset
+# strip: LOGO_PRESET_DIR ships with the app (read-only, like icons), LOGO_DIR
+# holds the PNGs the user imports (writable, so an imported logo is remembered
+# and offered again next time). See imaging.logo + ui.logo.
+LOGO_PRESET_DIR = os.path.join(_RES_DIR, "logos")
+LOGO_DIR = os.path.join(_DATA_DIR, "my_logos")
+
 # Dark theme colors
 BG        = "#1b1b1b"   # main background
 BAR       = "#262626"   # toolbar / info bar

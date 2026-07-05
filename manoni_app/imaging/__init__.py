@@ -15,6 +15,7 @@ This package used to be one big `imaging.py`; it is split by topic now, and this
     colormix.py  the HSL colour mixer (per-hue bands + gold/skin mini-HSLs)
     effects.py   the slider-effect passes (vignette, grain, denoise, clarity, …)
     text.py      text / watermark overlays + font handling
+    logo.py      logo / sticker overlays (a transparent PNG laid over the photo)
     display.py   view-only helpers (transparency checkerboard, live histogram)
     retouch.py   destructive bakes: spot heal / clone stamp + perspective
     pipeline.py  composes the effects in order into `apply_edits`
@@ -27,6 +28,7 @@ from .colormix import (HSL_BANDS, apply_color_mixer,                 # noqa: F40
                        color_mixer_active)
 from .text import (TEXT_FONTS, resolve_font_family, text_extent,     # noqa: F401
                    apply_text_overlay)
+from .logo import load_logo, logo_extent, apply_logo_overlay         # noqa: F401
 from .display import has_alpha, checkerboard, histogram_image        # noqa: F401
 from .retouch import (HEAL_FEATHER, heal_region, clone_region,       # noqa: F401
                       perspective_coeffs, apply_perspective)

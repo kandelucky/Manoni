@@ -734,6 +734,7 @@ class NavMixin:
                 self.sliders[attr].set(round(val * 100))
         self._sync_focus_controls()           # focus has its own (non-factor) sliders
         self._sync_text_controls()            # text overlay has its own (non-factor) controls
+        self._sync_logo_controls()            # logo overlay has its own (non-factor) controls
         self._recompute_auto()
         self._refresh_auto_buttons()
         self._render_preview()
@@ -761,6 +762,8 @@ class NavMixin:
             "focus": dict(self.focus) if self.focus else None,
             "texts": [dict(ov) for ov in self.texts],
             "text_sel": self.text_sel,
+            "logos": [dict(ov) for ov in self.logos],
+            "logo_sel": self.logo_sel,
             "straighten": getattr(self, "straighten", 0.0),
             "persp_v": getattr(self, "persp_v", 0.0),
             "persp_h": getattr(self, "persp_h", 0.0),
@@ -793,6 +796,9 @@ class NavMixin:
             self._focus_cache.clear()
         self.texts = [dict(ov) for ov in state["texts"]]
         self.text_sel = state["text_sel"]
+        self.logos = [dict(ov) for ov in state.get("logos", [])]
+        self.logo_sel = state.get("logo_sel")
+        self._logo_drag = None
         self.straighten = state["straighten"]
         self.persp_v = state["persp_v"]
         self.persp_h = state["persp_h"]
@@ -827,6 +833,7 @@ class NavMixin:
         self._edits_saved = False
         self._sync_focus_controls()
         self._sync_text_controls()
+        self._sync_logo_controls()
         self._restyle_crop_chips()
         self._render_preview()
         self._update_info(os.path.join(self.folder, self.files[self.index]))

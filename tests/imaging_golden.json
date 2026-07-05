@@ -41,6 +41,7 @@
     "gold_sat": 1.0,
     "grain": 0.0,
     "highlights": 1.0,
+    "logos": null,
     "sat_aqua": 1.0,
     "sat_blue": 1.0,
     "sat_green": 1.0,
@@ -92,7 +93,7 @@
   "skin": "20f7348c9b676ca3",
   "split_tone": "f03cbfaea85e7965",
   "temperature": "8aec03c08586b30c",
-  "text": "f11c4de70f83f406",
+  "text": "9a01792b911d056f",
   "text_extent": [
     161,
     36

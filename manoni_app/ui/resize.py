@@ -511,6 +511,7 @@ class ResizeMixin:
         self._resized = True
         self._clear_focus_for_geometry()   # source-px focus shape no longer maps
         self._clear_text_for_geometry()    # …and the source-px text position no longer maps
+        self._clear_logo_for_geometry()    # …and the source-px logo position no longer maps
         self._reset_straighten()           # pending tilt was for the old size
         self.clone_src = self.clone_offset = None   # clone anchor was for the old size
         # The crop box was in old source px — reset it to the new full image.

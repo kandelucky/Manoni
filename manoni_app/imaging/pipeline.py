@@ -15,6 +15,7 @@ from PIL import ImageEnhance
 from .levels import apply_auto_luts, tone_lut, contrast_lut
 from .colormix import apply_color_mixer, color_mixer_active, _mixer_sig
 from .text import _apply_texts
+from .logo import _apply_logos
 from .effects import (apply_vignette, apply_grain, apply_denoise, apply_split_tone,
                       apply_dehaze, apply_focus_blur, apply_clarity, apply_texture,
                       apply_vibrance, apply_temperature, apply_tint, apply_bw,
@@ -107,6 +108,10 @@ def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
         sig_texts = tuple(tuple(sorted(ov.items())) for ov in e.texts)
         add((("texts", scale, src_box, sig_texts),
              lambda img, ts=e.texts, s=scale, sb=src_box: _apply_texts(img, ts, s, sb)))
+    if e.logos:
+        sig_logos = tuple(tuple(sorted(ov.items())) for ov in e.logos)
+        add((("logos", scale, src_box, sig_logos),
+             lambda img, ls=e.logos, s=scale, sb=src_box: _apply_logos(img, ls, s, sb)))
     return stages
 
 

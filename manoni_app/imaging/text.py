@@ -7,6 +7,8 @@ full-res save: the only difference is `scale`, which multiplies the position
 AND the font size together. Pure Pillow, no Tk / state.
 """
 
+import math
+
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -75,7 +77,8 @@ def _hex_to_rgb(value, default=(255, 255, 255)):
 
 def text_extent(overlay):
     "Width/height of the overlay text in SOURCE px (0,0 when empty). For the UI"
-    " hit-box and corner snapping — measured at the un-scaled source font size."
+    " hit-box and corner snapping — measured at the un-scaled source font size,"
+    " grown to the rotated bounding box so the box encloses a turned caption."
     text = (overlay or {}).get("text") or ""
     if not text.strip():
         return (0.0, 0.0)
@@ -84,47 +87,101 @@ def text_extent(overlay):
     d = ImageDraw.Draw(Image.new("L", (1, 1)))
     bbox = d.multiline_textbbox((0, 0), text, font=font,
                                 align=overlay.get("align", "center"))
-    return (bbox[2] - bbox[0], bbox[3] - bbox[1])
+    w, h = (bbox[2] - bbox[0], bbox[3] - bbox[1])
+    angle = float((overlay or {}).get("angle", 0.0))
+    if angle:
+        c, s = abs(math.cos(math.radians(angle))), abs(math.sin(math.radians(angle)))
+        return (w * c + h * s, w * s + h * c)
+    return (w, h)
+
+
+# Finished caption tiles (glyphs drawn + rotated), keyed by every input EXCEPT
+# position — so dragging a caption AROUND reuses the same tile instead of
+# re-drawing the glyphs and re-rotating them each frame (rotation is the costly bit).
+_tile_cache = {}
+
+
+def _text_tile(overlay, scale):
+    "The ready-to-paste RGBA tile for this caption at this scale (cached), or None."
+    text = (overlay.get("text") or "")
+    if not text.strip():
+        return None
+    opacity = max(0.0, min(1.0, float(overlay.get("opacity", 1.0))))
+    if opacity <= 0.0:
+        return None
+    px = max(1.0, overlay.get("size", 48.0) * scale)
+    family = overlay.get("font", "Sans")
+    align = overlay.get("align", "center")
+    color = overlay.get("color", "#ffffff")
+    angle = float(overlay.get("angle", 0.0))
+    shadow = bool(overlay.get("shadow"))
+    a = int(round(opacity * 255))
+    key = (text, family, round(px), align, color, a, shadow, round(angle, 1))
+    tile = _tile_cache.get(key)
+    if tile is not None:
+        return tile
+
+    font = _load_font(family, px)
+    rgb = _hex_to_rgb(color)
+    # Draw onto a TIGHT tile with the text's INK box centred in it, so the tile
+    # can be rotated about that centre. (Manual centering, not anchor="mm" —
+    # multiline anchors vary across Pillow.)
+    scratch = ImageDraw.Draw(Image.new("L", (1, 1)))
+    bbox = scratch.multiline_textbbox((0, 0), text, font=font, align=align)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    if tw <= 0 or th <= 0:
+        return None
+    # A soft dark drop-shadow lifts light text off a bright photo; its offset
+    # scales with the font so it reads the same on preview and full-res.
+    off = max(1, int(round(px * 0.07))) if shadow else 0
+    m = off + 2                              # margin so the shadow + AA edges never clip
+    tile = Image.new("RGBA", (int(tw + 2 * m), int(th + 2 * m)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(tile)
+    ox, oy = m - bbox[0], m - bbox[1]        # ink box lands at (m, m) → centred in the tile
+    if off:
+        d.multiline_text((ox + off, oy + off), text, font=font,
+                         fill=(0, 0, 0, int(a * 0.6)), align=align)
+    d.multiline_text((ox, oy), text, font=font,
+                     fill=(rgb[0], rgb[1], rgb[2], a), align=align)
+
+    # Rotate about the tile centre (positive = clockwise), expanding so no glyph
+    # is clipped; the ink centre stays at the rotated tile's centre.
+    if angle:
+        tile = tile.rotate(-angle, resample=Image.BICUBIC, expand=True)
+
+    if len(_tile_cache) > 48:                # a size / rotate drag spawns one per step
+        _tile_cache.clear()
+    _tile_cache[key] = tile
+    return tile
 
 
 def apply_text_overlay(img, overlay, scale, src_box):
     "Draw the overlay's text centred on its source-px point, scaled to display px."
-    text = (overlay.get("text") or "")
-    if not text.strip():
+    tile = _text_tile(overlay, scale)
+    if tile is None:
         return img
-    opacity = max(0.0, min(1.0, float(overlay.get("opacity", 1.0))))
-    if opacity <= 0.0:
-        return img
-    px = max(1.0, overlay.get("size", 48.0) * scale)
-    font = _load_font(overlay.get("font", "Sans"), px)
+
     sx0, sy0, _sx1, _sy1 = src_box
     cx = (overlay["cx"] - sx0) * scale
     cy = (overlay["cy"] - sy0) * scale
-    align = overlay.get("align", "center")
-    rgb = _hex_to_rgb(overlay.get("color", "#ffffff"))
-    a = int(round(opacity * 255))
+    pw, ph = tile.size
+    x, y = int(round(cx - pw / 2)), int(round(cy - ph / 2))
 
-    # Paint onto a transparent layer the size of `img`, then alpha-composite —
-    # so partial opacity blends with the photo instead of overwriting it.
+    # Composite ONLY the caption's bounding box, not the whole frame. Pasting onto
+    # a copy of `img` with the tile's own alpha as the mask is byte-identical to a
+    # full-frame alpha_composite on an opaque RGB base, but skips the two
+    # whole-image RGBA<->RGB conversions — the cost that made dragging / rotating a
+    # caption over a big photo stutter. paste clips a partly-off-canvas box. Copy
+    # first: `img` may be a cached pipeline stage we must not mutate in place.
+    if img.mode == "RGB":
+        out = img.copy()
+        out.paste(tile, (x, y), tile)
+        return out
+    # Transparent (RGBA/other) base: full-layer composite. Rare — the preview and
+    # save bases are RGB.
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    # Centre the text's INK box on (cx, cy) by drawing at the matching top-left.
-    # (Manual centering, not anchor="mm" — multiline anchors vary across Pillow.)
-    bbox = d.multiline_textbbox((0, 0), text, font=font, align=align)
-    tlx = cx - (bbox[2] - bbox[0]) / 2 - bbox[0]
-    tly = cy - (bbox[3] - bbox[1]) / 2 - bbox[1]
-    if overlay.get("shadow"):
-        # A soft dark drop-shadow lifts light text off a bright photo. Offset
-        # scales with the font so it looks the same on preview and full-res.
-        off = max(1, int(round(px * 0.07)))
-        d.multiline_text((tlx + off, tly + off), text, font=font,
-                         fill=(0, 0, 0, int(a * 0.6)), align=align)
-    d.multiline_text((tlx, tly), text, font=font,
-                     fill=(rgb[0], rgb[1], rgb[2], a), align=align)
-
-    base = img.convert("RGBA")
-    out = Image.alpha_composite(base, layer)
-    return out.convert("RGB") if img.mode == "RGB" else out
+    layer.paste(tile, (x, y))
+    return Image.alpha_composite(img.convert("RGBA"), layer)
 
 
 def _apply_texts(img, texts, scale, src_box):

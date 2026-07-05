@@ -28,6 +28,7 @@ class EditPanelMixin:
                       "heal": "Heal & Clone", "focus": "Focus blur",
                       "color": "Color mixer",
                       "effects": "Effects", "text": "Text & Watermark",
+                      "logo": "Logo",
                       "filters": "Filters",
                       "actions": "Actions"}
 
@@ -91,6 +92,7 @@ class EditPanelMixin:
             "color":   self._build_color_section(self.section_content),
             "effects": self._build_effects_section(self.section_content),
             "text":    self._build_text_section(self.section_content),
+            "logo":    self._build_logo_section(self.section_content),
             "filters": self._build_filters_section(self.section_content),
             "actions": self._build_actions_section(self.section_content),
         }
@@ -422,7 +424,8 @@ class EditPanelMixin:
              ("perspective", "frame",          "Perspective")],
             [("heal",    "bandage",            "Heal"),
              ("focus",   "circle-dot",         "Blur")],
-            [("text",    "type",               "Text")],
+            [("text",    "type",               "Text"),
+             ("logo",    "image",              "Logo")],
             [("actions", "circle-play",        "Actions")],
         ]
         for gi, group in enumerate(rail_groups):
@@ -603,7 +606,7 @@ class EditPanelMixin:
         if key not in self.sections:
             return
         self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
-        if key in ("crop", "heal", "focus", "perspective", "text"):
+        if key in ("crop", "heal", "focus", "perspective", "text", "logo"):
             self._set_compare(False)  # these warp/drag the canvas — compare can't intercept it
         self.active_section = key
         self._filters_footer.pack_forget()   # only the filters tool pins its footer
@@ -632,6 +635,8 @@ class EditPanelMixin:
             self._enter_focus()      # place the focus circle + fit to see it all
         elif key == "text":
             self._enter_text()       # place a default overlay + fit, focus the entry
+        elif key == "logo":
+            self._enter_logo()       # refresh presets + controls, fit the photo
         elif key == "actions":
             self._enter_actions()    # refresh the recorder + saved-action list
         elif key == "filters":
@@ -738,8 +743,12 @@ class EditPanelMixin:
         self.texts = []              # …and every text / watermark overlay
         self.text_sel = None
         self._text_drag = None
+        self.logos = []              # …and every logo / sticker overlay
+        self.logo_sel = None
+        self._logo_drag = None
         self._sync_focus_controls()
         self._sync_text_controls()
+        self._sync_logo_controls()
         self._recompute_auto()
         self._refresh_auto_buttons()
 
@@ -794,6 +803,9 @@ class EditPanelMixin:
                 # (text_sel) is transient UI state and is deliberately excluded.
                 "texts": [dict(ov) for ov in self.texts
                           if (ov.get("text") or "").strip()],
+                # A logo always carries a path, so every one is a real edit —
+                # unlike a blank text box, there is nothing empty to skip.
+                "logos": [dict(ov) for ov in self.logos if ov.get("path")],
                 "auto_mode": self.auto_mode}
 
     def _edit_snapshot(self):
