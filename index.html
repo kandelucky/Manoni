@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ka">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manoni — ფოტოს დამთვალიერებელი, culler და რედაქტორი</title>
+<meta name="description" content="Manoni — სწრაფი, მარტივი ფოტოს დამთვალიერებელი, culler და რედაქტორი, აწყობილი სუსტი ლეპტოპისთვის. Python + Tkinter + Pillow.">
+<link rel="icon" href="manoni-icon.png">
+<style>
+  /* ---- tokens: Manoni dark + TintKit light, driven by data-theme ---- */
+  :root{
+    --bg:#1b1b1b; --panel:#262626; --sidebar:#1e1e1e; --hover:#3a3a3a;
+    --chip:#2f2f2f; --border:#3a3a3a; --divider:#333333;
+    --fg:#e6e6e6; --dim:#9a9a9a;
+    --acc:#4aa3ff; --acc-h:#5ab0ff; --on-acc:#f4f9ff;
+    --keep:#7dc98a; --rej:#e08a84;
+    --r-ctrl:4px; --r-card:8px; --hair:1px;
+    --shadow:0 30px 70px -36px rgba(0,0,0,.85);
+    --sans:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    --mono:"Cascadia Code",ui-monospace,Consolas,"SFMono-Regular",monospace;
+    --geo:"BPG Nino Mtavruli","Segoe UI",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:light){
+    :root{
+      --bg:#f4f4f3; --panel:#ffffff; --sidebar:#ececea; --hover:#e4e4e1;
+      --chip:#e9e9e6; --border:#d3d3cf; --divider:#dcdcd8;
+      --fg:#1c1c1c; --dim:#6a6a66; --keep:#2e7d32; --rej:#c62828;
+      --shadow:0 30px 70px -40px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1b1b1b; --panel:#262626; --sidebar:#1e1e1e; --hover:#3a3a3a;
+    --chip:#2f2f2f; --border:#3a3a3a; --divider:#333333;
+    --fg:#e6e6e6; --dim:#9a9a9a; --keep:#7dc98a; --rej:#e08a84;
+    --shadow:0 30px 70px -36px rgba(0,0,0,.85);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f4f3; --panel:#ffffff; --sidebar:#ececea; --hover:#e4e4e1;
+    --chip:#e9e9e6; --border:#d3d3cf; --divider:#dcdcd8;
+    --fg:#1c1c1c; --dim:#6a6a66; --keep:#2e7d32; --rej:#c62828;
+    --shadow:0 30px 70px -40px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;
+    transition:background .25s ease,color .25s ease}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+
+  /* ---- top bar ---- */
+  .top{position:sticky;top:0;z-index:5;
+    background:color-mix(in srgb,var(--bg) 86%,transparent);
+    backdrop-filter:blur(10px);border-bottom:var(--hair) solid var(--border)}
+  .top .wrap{display:flex;align-items:center;gap:16px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px}
+  .brand img{width:26px;height:26px;border-radius:6px}
+  .spacer{flex:1}
+  .nav{display:flex;align-items:center;gap:4px}
+  .nav a{padding:7px 11px;border-radius:var(--r-ctrl);font-size:14px;color:var(--dim)}
+  .nav a:hover{background:var(--hover);color:var(--fg)}
+  .swatches{display:flex;gap:6px;padding:0 8px;
+    border-left:var(--hair) solid var(--border);margin-left:4px}
+  .sw{width:15px;height:15px;border-radius:50%;border:2px solid transparent;padding:0}
+  .sw[aria-pressed="true"]{border-color:var(--fg)}
+  .tt{width:34px;height:34px;border-radius:var(--r-ctrl);
+    display:grid;place-items:center;font-size:15px}
+  .tt:hover{background:var(--hover)}
+
+  /* ---- hero ---- */
+  .hero{padding:66px 0 40px;max-width:760px}
+  .eye{font-family:var(--mono);font-size:12px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--acc)}
+  h1{font-size:clamp(32px,5vw,52px);line-height:1.04;letter-spacing:-.015em;
+    font-weight:700;margin:.35em 0 .35em;text-wrap:balance}
+  .lead{font-family:var(--geo);color:var(--dim);font-size:18px;max-width:56ch;margin:0 0 28px}
+  .btns{display:flex;gap:11px;flex-wrap:wrap;align-items:center}
+  .cta{background:var(--acc);color:var(--on-acc);font-weight:600;font-size:14px;
+    padding:12px 22px;border-radius:var(--r-ctrl);transition:background .15s}
+  .cta:hover{background:var(--acc-h)}
+  .btn2{border:var(--hair) solid var(--border);padding:12px 20px;
+    border-radius:var(--r-ctrl);font-size:14px;color:var(--fg)}
+  .btn2:hover{background:var(--hover)}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:20px}
+
+  /* ---- screenshot ---- */
+  .shot{border:var(--hair) solid var(--border);border-radius:var(--r-card);
+    overflow:hidden;box-shadow:var(--shadow);background:var(--panel)}
+  .shot img{width:100%}
+
+  /* ---- features ---- */
+  .feats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:52px 0 8px}
+  .card{background:var(--panel);border:var(--hair) solid var(--border);
+    border-radius:var(--r-card);padding:20px 18px}
+  .card .ic{width:32px;height:32px;border-radius:var(--r-ctrl);background:var(--chip);
+    display:grid;place-items:center;margin-bottom:12px;color:var(--acc);font-size:16px}
+  .card h3{font-size:15px;margin:0 0 6px;font-weight:600}
+  .card p{font-family:var(--geo);font-size:14px;color:var(--dim);margin:0;line-height:1.5}
+
+  /* ---- why strip ---- */
+  .why{margin:44px 0 0;padding:30px;border:var(--hair) solid var(--border);
+    border-radius:var(--r-card);background:var(--panel)}
+  .why h2{font-size:20px;margin:0 0 14px;font-weight:600}
+  .why ul{margin:0;padding:0;list-style:none;display:grid;
+    grid-template-columns:1fr 1fr;gap:10px 30px}
+  .why li{font-family:var(--geo);color:var(--dim);font-size:14.5px;
+    padding-left:22px;position:relative}
+  .why li::before{content:"✓";position:absolute;left:0;color:var(--keep);font-weight:700}
+
+  /* ---- footer ---- */
+  .foot{border-top:var(--hair) solid var(--border);margin-top:52px;padding:28px 0 48px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:var(--dim);font-size:13px}
+  .foot .mono{font-family:var(--mono);font-size:12px}
+
+  @media (max-width:760px){
+    .feats{grid-template-columns:repeat(2,1fr)}
+    .why ul{grid-template-columns:1fr}
+    .nav .hide{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important};html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><img src="manoni-icon.png" alt="Manoni"> Manoni</div>
+    <div class="spacer"></div>
+    <nav class="nav">
+      <a href="#features" class="hide">ფუნქციები</a>
+      <a href="https://github.com/kandelucky/Manoni" class="hide">GitHub</a>
+      <div class="swatches" id="sw" role="group" aria-label="აქცენტის ფერი">
+        <button class="sw" style="background:#4aa3ff" data-acc="#4aa3ff" data-h="#5ab0ff" title="Blue" aria-label="Blue"></button>
+        <button class="sw" style="background:#24b1a6" data-acc="#24b1a6" data-h="#33c2b6" title="Teal" aria-label="Teal"></button>
+        <button class="sw" style="background:#45b36b" data-acc="#45b36b" data-h="#55c17b" title="Green" aria-label="Green"></button>
+        <button class="sw" style="background:#9b87f5" data-acc="#9b87f5" data-h="#ab97ff" title="Purple" aria-label="Purple"></button>
+        <button class="sw" style="background:#ef8a53" data-acc="#ef8a53" data-h="#ff9a63" title="Orange" aria-label="Orange"></button>
+      </div>
+      <button class="tt" id="tt" title="თემის გადართვა" aria-label="თემის გადართვა">◐</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="eye">Browse · cull · edit · export</div>
+    <h1>ბევრი კადრი. სწრაფად. სუსტ ლეპტოპზეც.</h1>
+    <p class="lead">Manoni — მარტივი ფოტოს დამთვალიერებელი, culler და რედაქტორი. ორიგინალს არასდროს ცვლის: culling მხოლოდ ალაგებს ფაილებს, რედაქტირება კი ინახავს ასლს.</p>
+    <div class="btns">
+      <a class="cta" href="https://github.com/kandelucky/Manoni/releases">ჩამოტვირთვა · Windows</a>
+      <a class="btn2" href="https://github.com/kandelucky/Manoni">GitHub</a>
+    </div>
+    <div class="meta">v0.9 · Python + Tkinter + Pillow · MIT</div>
+  </section>
+
+  <div class="shot">
+    <img src="assets/screenshot.jpg" width="2256" height="1432"
+         alt="Manoni-ს ფანჯარა: მარცხნივ საქაღალდის ხე და thumbnail-ები, ცენტრში ფოტო, მარჯვნივ რედაქტირების ხელსაწყოების რიგი, ქვემოთ ფილტრების ზოლი.">
+  </div>
+
+  <section class="feats" id="features">
+    <div class="card"><div class="ic">▤</div><h3>დათვალიერება</h3><p>საქაღალდის ხე და thumbnail-ები — ათასობით ფაილიც სწრაფად.</p></div>
+    <div class="card"><div class="ic">✓</div><h3>Culling</h3><p>დატოვე კარგი, დააარქივე დანარჩენი — ღილაკით ან ისრებით.</p></div>
+    <div class="card"><div class="ic">◐</div><h3>რედაქტირება</h3><p>ტონი, ფერი, crop, heal, ფილტრები — ნამდვილი, მაგრამ მსუბუქი.</p></div>
+    <div class="card"><div class="ic">↥</div><h3>ექსპორტი</h3><p>სუფთა ასლები, შენახული metadata — ორიგინალი ხელუხლებელი.</p></div>
+  </section>
+
+  <section class="why">
+    <h2>ვისთვის არის</h2>
+    <ul>
+      <li>ვინც <b>ბევრს</b> იღებს და keeper-ებს სწრაფად ეძებს</li>
+      <li>ვისაც <b>ნამდვილი</b> რედაქტირება უნდა — მძიმე პროგრამის გარეშე</li>
+      <li>ვინც <b>სუსტ ან ძველ</b> ლეპტოპზე მუშაობს და სისწრაფე უნდა</li>
+      <li>ვისთვისაც <b>ორიგინალი ხელუხლებელი</b> უნდა დარჩეს</li>
+    </ul>
+  </section>
+
+  <footer class="foot">
+    <span>Manoni</span>
+    <span class="spacer" style="flex:1"></span>
+    <a href="https://github.com/kandelucky/Manoni">GitHub</a>
+    <span class="mono">made in Georgia · © 2026</span>
+  </footer>
+</main>
+
+<script>
+  var root=document.documentElement;
+  var tt=document.getElementById('tt');
+  function cur(){
+    var t=root.getAttribute('data-theme');
+    if(t)return t;
+    return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  }
+  tt.onclick=function(){root.setAttribute('data-theme',cur()==='dark'?'light':'dark');};
+  var sw=document.getElementById('sw');
+  sw.addEventListener('click',function(e){
+    var b=e.target.closest('.sw'); if(!b)return;
+    root.style.setProperty('--acc',b.dataset.acc);
+    root.style.setProperty('--acc-h',b.dataset.h);
+    sw.querySelectorAll('.sw').forEach(function(x){x.setAttribute('aria-pressed',x===b);});
+  });
+  sw.querySelector('.sw').setAttribute('aria-pressed','true');
+</script>
+</body>
+</html>
