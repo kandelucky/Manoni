@@ -172,4 +172,3 @@ Planned work, roughly in order. Full detail in
   PyInstaller build, then an Inno Setup installer.
 - [ ] **RAW support** — an optional add-on (installer tick-box or on-demand
   download) so the base app stays light; export as JPEG or 16-bit TIFF.
-- [ ] **Grid view** — a 2×2 library for faster culling *(longer-term)*.
