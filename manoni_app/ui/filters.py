@@ -1332,7 +1332,7 @@ class FiltersMixin:
             except tk.TclError:
                 pass
 
-    def _confirm(self, message, ok_label=None):
+    def _confirm(self, message, ok_label=None, cancel_label=None):
         "A small modal yes/no over the main window. Returns True if confirmed."
         result = {"ok": False}
         bg, fg = self.theme["bg"], self.theme["fg"]
@@ -1352,8 +1352,8 @@ class FiltersMixin:
             dlg.destroy()
         btnrow = tk.Frame(wrap, bg=bg)
         btnrow.pack(anchor="e", pady=(16, 0))
-        self._dialog_btn(btnrow, t("Cancel"), dlg.destroy).pack(side="right",
-                                                                  padx=(8, 0))
+        self._dialog_btn(btnrow, cancel_label or t("Cancel"), dlg.destroy).pack(
+            side="right", padx=(8, 0))
         self._dialog_btn(btnrow, ok_label or t("OK"), ok,
                          primary=True).pack(side="right")
         dlg.bind("<Escape>", lambda e: dlg.destroy())

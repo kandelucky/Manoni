@@ -803,6 +803,7 @@ class NavMixin:
                             if state["before_pil"] is not None else None)
         self._before_base_key = None
         self.focus = dict(state["focus"]) if state["focus"] else None
+        self._focus_auto = False        # a restored focus is committed, not auto
         if hasattr(self, "_focus_cache"):
             self._focus_cache.clear()
         self.texts = [dict(ov) for ov in state["texts"]]

@@ -63,7 +63,7 @@ class FocusMixin:
         # Done (close the tool, keep the live effect) + Remove (turn it off).
         done = tintkit.Button(
             f, self.theme, t("Done"), role="primary", variant="filled",
-            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
+            stretch=True, bg="bar", command=self._focus_done)
         done.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
 
         remove = tintkit.Button(
@@ -86,10 +86,16 @@ class FocusMixin:
         s.pack(fill="x", padx=EDIT_PAD, pady=2)
         return s
 
+    def _focus_done(self):
+        "Done button: commit the blur (no leave prompt) and return to Basic."
+        self._focus_auto = False
+        self.set_section("basic")
+
     def _reset_focus_slider(self, which):
         "Zero just the blur or feather slider (one undoable step), keeping the shape."
         if self.focus is None:
             return
+        self._focus_auto = False
         before = self._edit_state()
         self.focus = {**self.focus, which: 0.0}
         s = self.s_focus_blur if which == "blur" else self.s_focus_feather
@@ -106,6 +112,7 @@ class FocusMixin:
             return
         if self.focus and self.focus.get("shape") == shape:
             return
+        self._focus_auto = False
         before = self._edit_state()
         blur = self.focus.get("blur", 0.6) if self.focus else 0.6
         feather = self.focus.get("feather", 0.4) if self.focus else 0.4
@@ -155,11 +162,27 @@ class FocusMixin:
             return
         if self.focus is None:
             self.focus = self._default_focus("circle")
+            self._focus_auto = True       # untouched auto-default: ask before leaving
             self._edits_saved = False
         self._refresh_focus_mode()
         self._sync_focus_controls()
         self.preview.configure(cursor="crosshair")
         self.fit_view()          # fit so the whole photo is visible to place it
+
+    def _prompt_keep_focus_if_untouched(self):
+        "Leaving the focus tool with the auto-applied default still untouched: ask"
+        " whether to keep the blur. Any edit or the Done button clears _focus_auto,"
+        " so this only fires when the user opened the tool and changed nothing."
+        if self.focus is None or not getattr(self, "_focus_auto", False):
+            return
+        self._focus_auto = False          # decided now — don't ask again this pass
+        # Nothing was changed, so removal is the likely intent: make it the primary
+        # (Enter) button. Escape / the secondary button keeps the blur.
+        remove = self._confirm(
+            t("Blur was added automatically. Remove it?"),
+            ok_label=t("Remove blur"), cancel_label=t("Keep blur"))
+        if remove:
+            self._remove_focus()
 
     def _focus_active(self):
         "True when the focus tool is open with a live shape (drives overlay + clicks)."
@@ -181,6 +204,7 @@ class FocusMixin:
         "Slider: blur strength (0 = off, 100 = max background blur)."
         if self.focus is None:
             return
+        self._focus_auto = False
         self.focus = {**self.focus, "blur": max(0.0, min(1.0, int(v) / 100.0))}
         self._edits_saved = False
         self._schedule_preview()
@@ -189,6 +213,7 @@ class FocusMixin:
         "Slider: how soft the sharp→blurred transition is (0 = crisp edge)."
         if self.focus is None:
             return
+        self._focus_auto = False
         self.focus = {**self.focus, "feather": max(0.0, min(1.0, int(v) / 100.0))}
         self._edits_saved = False
         self._schedule_preview()
@@ -259,6 +284,7 @@ class FocusMixin:
         hit = self._focus_hit(event.x, event.y)
         if hit is None:
             return "break"
+        self._focus_auto = False         # dragging the shape counts as editing it
         self._edit_gesture_start()       # snapshot so the whole drag is one undo
         sx, sy = self._scr_to_src(event.x, event.y)
         if hit == "move":

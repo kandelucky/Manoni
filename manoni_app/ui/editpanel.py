@@ -606,6 +606,8 @@ class EditPanelMixin:
         "Open a tool section: swap the panel content, update header + rail highlight."
         if key not in self.sections:
             return
+        if self.active_section == "focus" and key != "focus":
+            self._prompt_keep_focus_if_untouched()  # untouched auto-blur → ask to keep
         self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
         if key in ("crop", "heal", "focus", "perspective", "text", "logo"):
             self._set_compare(False)  # these warp/drag the canvas — compare can't intercept it
@@ -741,6 +743,7 @@ class EditPanelMixin:
             s.set(round(n * 100))
         self.auto_mode = None        # auto correction is part of the edit too
         self.focus = None            # the selective focus blur resets too
+        self._focus_auto = False
         self.texts = []              # …and every text / watermark overlay
         self.text_sel = None
         self._text_drag = None

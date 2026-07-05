@@ -306,6 +306,7 @@ class ActionsMixin:
         am = state.get("auto_mode")
         self.auto_mode = am if am in self.AUTO_MODES else None
         self.focus = self._focus_from_rel(state.get("focus"))
+        self._focus_auto = False        # a replayed focus is committed, not auto
         self._sync_focus_controls()
         self._recompute_auto()
         self._refresh_auto_buttons()

@@ -48,6 +48,8 @@
     "Blur strength": "ბლურის სიძლიერე",
     "Transition softness": "გადასვლის სიფაფუკე",
     "Remove blur": "ბლურის მოშორება",
+    "Blur was added automatically. Remove it?": "ბლური ავტომატურად დაემატა. მოვაშორო?",
+    "Keep blur": "ბლურის დატოვება",
     "Turn the focus blur off": "ფოკუსის ბლურის გამორთვა",
     "Done": "დასრულება",
     "Text": "ტექსტი",

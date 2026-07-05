@@ -255,6 +255,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.focus = None
         self._focus_cache = {}   # geometry key -> mask; reused across blur drags
         self._focus_drag = None  # in-progress circle drag state, or None
+        self._focus_auto = False  # True while the auto-applied default blur is
+        # still untouched (no slider / shape / drag edit, no Done) — leaving the
+        # tool then asks whether to keep it (see focus._prompt_keep_focus…).
         # Text / watermark overlays: LIVE non-destructive effects like the focus
         # blur. `texts` is a LIST of dicts {text, cx, cy, size (all source px),
         # color, opacity, font, align, shadow}; `text_sel` is the index of the
