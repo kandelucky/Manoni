@@ -1,208 +1,383 @@
 <!doctype html>
-<html lang="ka">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manoni — ფოტოს დამთვალიერებელი, culler და რედაქტორი</title>
-<meta name="description" content="Manoni — სწრაფი, მარტივი ფოტოს დამთვალიერებელი, culler და რედაქტორი, აწყობილი სუსტი ლეპტოპისთვის. Python + Tkinter + Pillow.">
+<title>Manoni — a fast, simple photo browser, culler & editor</title>
+<meta name="description" content="Manoni is a fast, simple photo browser, culler & editor built for a weak laptop. Cull a big batch fast, make quick but real edits, and keep every original. Pure Python + Tkinter + Pillow.">
 <link rel="icon" href="manoni-icon.png">
 <style>
-  /* ---- tokens: Manoni dark + TintKit light, driven by data-theme ---- */
+  /* ============ tokens — dark by default (Manoni), light via toggle ============ */
   :root{
-    --bg:#1b1b1b; --panel:#262626; --sidebar:#1e1e1e; --hover:#3a3a3a;
-    --chip:#2f2f2f; --border:#3a3a3a; --divider:#333333;
-    --fg:#e6e6e6; --dim:#9a9a9a;
+    --bg:#161616; --bg2:#1b1b1b; --panel:#232323; --panel2:#282828;
+    --sidebar:#1e1e1e; --hover:#333333; --chip:#2c2c2c;
+    --border:#343434; --border2:#3f3f3f; --divider:#2e2e2e;
+    --fg:#ededed; --fg2:#c4c4c4; --dim:#8f8f8f;
     --acc:#4aa3ff; --acc-h:#5ab0ff; --on-acc:#f4f9ff;
     --keep:#7dc98a; --rej:#e08a84;
-    --r-ctrl:4px; --r-card:8px; --hair:1px;
-    --shadow:0 30px 70px -36px rgba(0,0,0,.85);
-    --sans:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    --r-ctrl:5px; --r-card:10px; --hair:1px;
+    --shadow:0 30px 80px -40px rgba(0,0,0,.9);
+    --glow:color-mix(in srgb, var(--acc) 20%, transparent);
+    --sans:"Segoe UI Variable","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
     --mono:"Cascadia Code",ui-monospace,Consolas,"SFMono-Regular",monospace;
-    --geo:"BPG Nino Mtavruli","Segoe UI",system-ui,sans-serif;
-  }
-  @media (prefers-color-scheme:light){
-    :root{
-      --bg:#f4f4f3; --panel:#ffffff; --sidebar:#ececea; --hover:#e4e4e1;
-      --chip:#e9e9e6; --border:#d3d3cf; --divider:#dcdcd8;
-      --fg:#1c1c1c; --dim:#6a6a66; --keep:#2e7d32; --rej:#c62828;
-      --shadow:0 30px 70px -40px rgba(0,0,0,.4);
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#1b1b1b; --panel:#262626; --sidebar:#1e1e1e; --hover:#3a3a3a;
-    --chip:#2f2f2f; --border:#3a3a3a; --divider:#333333;
-    --fg:#e6e6e6; --dim:#9a9a9a; --keep:#7dc98a; --rej:#e08a84;
-    --shadow:0 30px 70px -36px rgba(0,0,0,.85);
+    --maxw:1120px;
   }
   :root[data-theme="light"]{
-    --bg:#f4f4f3; --panel:#ffffff; --sidebar:#ececea; --hover:#e4e4e1;
-    --chip:#e9e9e6; --border:#d3d3cf; --divider:#dcdcd8;
-    --fg:#1c1c1c; --dim:#6a6a66; --keep:#2e7d32; --rej:#c62828;
-    --shadow:0 30px 70px -40px rgba(0,0,0,.4);
+    --bg:#f6f6f4; --bg2:#f0f0ee; --panel:#ffffff; --panel2:#fafaf8;
+    --sidebar:#ececea; --hover:#e6e6e2; --chip:#ececea;
+    --border:#dcdcd6; --border2:#cfcfc9; --divider:#e4e4de;
+    --fg:#1a1a1a; --fg2:#3a3a38; --dim:#6a6a66;
+    --keep:#2e7d32; --rej:#c62828;
+    --shadow:0 30px 80px -46px rgba(0,0,0,.42);
+    --glow:color-mix(in srgb, var(--acc) 14%, transparent);
   }
 
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
-    line-height:1.55;-webkit-font-smoothing:antialiased;
-    transition:background .25s ease,color .25s ease}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+    line-height:1.6;font-size:16px;-webkit-font-smoothing:antialiased;
+    transition:background .3s ease,color .3s ease}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
   button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
   a{color:inherit;text-decoration:none}
   img{max-width:100%;display:block}
-
-  /* ---- top bar ---- */
-  .top{position:sticky;top:0;z-index:5;
-    background:color-mix(in srgb,var(--bg) 86%,transparent);
-    backdrop-filter:blur(10px);border-bottom:var(--hair) solid var(--border)}
-  .top .wrap{display:flex;align-items:center;gap:16px;height:60px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px}
-  .brand img{width:26px;height:26px;border-radius:6px}
-  .spacer{flex:1}
-  .nav{display:flex;align-items:center;gap:4px}
-  .nav a{padding:7px 11px;border-radius:var(--r-ctrl);font-size:14px;color:var(--dim)}
-  .nav a:hover{background:var(--hover);color:var(--fg)}
-  .swatches{display:flex;gap:6px;padding:0 8px;
-    border-left:var(--hair) solid var(--border);margin-left:4px}
-  .sw{width:15px;height:15px;border-radius:50%;border:2px solid transparent;padding:0}
-  .sw[aria-pressed="true"]{border-color:var(--fg)}
-  .tt{width:34px;height:34px;border-radius:var(--r-ctrl);
-    display:grid;place-items:center;font-size:15px}
-  .tt:hover{background:var(--hover)}
-
-  /* ---- hero ---- */
-  .hero{padding:66px 0 40px;max-width:760px}
-  .eye{font-family:var(--mono);font-size:12px;letter-spacing:.16em;
+  h1,h2,h3{margin:0}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;
     text-transform:uppercase;color:var(--acc)}
-  h1{font-size:clamp(32px,5vw,52px);line-height:1.04;letter-spacing:-.015em;
-    font-weight:700;margin:.35em 0 .35em;text-wrap:balance}
-  .lead{font-family:var(--geo);color:var(--dim);font-size:18px;max-width:56ch;margin:0 0 28px}
-  .btns{display:flex;gap:11px;flex-wrap:wrap;align-items:center}
-  .cta{background:var(--acc);color:var(--on-acc);font-weight:600;font-size:14px;
-    padding:12px 22px;border-radius:var(--r-ctrl);transition:background .15s}
-  .cta:hover{background:var(--acc-h)}
-  .btn2{border:var(--hair) solid var(--border);padding:12px 20px;
-    border-radius:var(--r-ctrl);font-size:14px;color:var(--fg)}
-  .btn2:hover{background:var(--hover)}
-  .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:20px}
+  .section{padding:74px 0}
+  .section > .head{max-width:640px;margin-bottom:34px}
+  .section > .head h2{font-size:clamp(24px,3.4vw,34px);letter-spacing:-.02em;
+    font-weight:650;margin:.35em 0 .2em;text-wrap:balance}
+  .section > .head p{color:var(--dim);font-size:17px;margin:0}
+  .rule{height:var(--hair);background:var(--divider);max-width:var(--maxw);
+    margin:0 auto}
 
-  /* ---- screenshot ---- */
-  .shot{border:var(--hair) solid var(--border);border-radius:var(--r-card);
+  /* ---------------- top bar ---------------- */
+  .top{position:sticky;top:0;z-index:20;
+    background:color-mix(in srgb,var(--bg) 82%,transparent);
+    backdrop-filter:saturate(1.4) blur(12px);
+    border-bottom:var(--hair) solid var(--border)}
+  .top .wrap{display:flex;align-items:center;gap:14px;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:650;
+    font-size:17px;letter-spacing:-.01em}
+  .brand img{width:27px;height:27px;border-radius:7px}
+  .grow{flex:1}
+  .nav{display:flex;align-items:center;gap:2px}
+  .nav a{padding:8px 12px;border-radius:var(--r-ctrl);font-size:14px;color:var(--dim)}
+  .nav a:hover{background:var(--hover);color:var(--fg)}
+  .tt{width:36px;height:36px;border-radius:var(--r-ctrl);display:grid;
+    place-items:center;font-size:16px;color:var(--dim);margin-left:4px}
+  .tt:hover{background:var(--hover);color:var(--fg)}
+
+  /* ---------------- hero ---------------- */
+  .hero{position:relative;overflow:hidden;isolation:isolate}
+  .hero::before{content:"";position:absolute;inset:-20% -10% auto -10%;height:620px;z-index:-1;
+    background:radial-gradient(60% 100% at 50% 0%, var(--glow), transparent 70%)}
+  .hero .wrap{padding-top:78px;padding-bottom:20px;text-align:center}
+  .hero h1{font-size:clamp(38px,6.4vw,68px);line-height:1.02;letter-spacing:-.03em;
+    font-weight:720;margin:.3em auto .32em;max-width:15ch;text-wrap:balance}
+  .hero .lead{color:var(--fg2);font-size:clamp(17px,2.1vw,20px);max-width:60ch;
+    margin:0 auto 30px}
+  .btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .cta{background:var(--acc);color:var(--on-acc);font-weight:600;font-size:15px;
+    padding:13px 26px;border-radius:var(--r-ctrl);transition:background .15s,transform .15s;
+    box-shadow:0 10px 30px -12px var(--acc)}
+  .cta:hover{background:var(--acc-h);transform:translateY(-1px)}
+  .btn2{border:var(--hair) solid var(--border2);padding:13px 22px;
+    border-radius:var(--r-ctrl);font-size:15px;color:var(--fg);transition:background .15s}
+  .btn2:hover{background:var(--hover)}
+  .tech{font-family:var(--mono);font-size:12.5px;color:var(--dim);margin-top:22px}
+
+  /* flow */
+  .flow{display:flex;align-items:center;justify-content:center;gap:6px;
+    flex-wrap:wrap;margin:30px auto 0}
+  .flow .step{display:inline-flex;align-items:center;gap:9px;padding:9px 15px;
+    background:var(--panel);border:var(--hair) solid var(--border);
+    border-radius:999px;font-size:14px;font-weight:550}
+  .flow .step img{width:18px;height:18px}
+  .flow .arr{color:var(--dim);font-size:15px;padding:0 2px}
+
+  /* screenshot */
+  .shotwrap{position:relative;margin:44px auto 0;max-width:1000px}
+  .shotwrap::before{content:"";position:absolute;inset:8% 4% -6% 4%;z-index:-1;
+    background:radial-gradient(50% 60% at 50% 40%, var(--glow), transparent 75%);
+    filter:blur(30px)}
+  .shot{border:var(--hair) solid var(--border2);border-radius:var(--r-card);
     overflow:hidden;box-shadow:var(--shadow);background:var(--panel)}
   .shot img{width:100%}
 
-  /* ---- features ---- */
-  .feats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:52px 0 8px}
-  .card{background:var(--panel);border:var(--hair) solid var(--border);
-    border-radius:var(--r-card);padding:20px 18px}
-  .card .ic{width:32px;height:32px;border-radius:var(--r-ctrl);background:var(--chip);
-    display:grid;place-items:center;margin-bottom:12px;color:var(--acc);font-size:16px}
-  .card h3{font-size:15px;margin:0 0 6px;font-weight:600}
-  .card p{font-family:var(--geo);font-size:14px;color:var(--dim);margin:0;line-height:1.5}
+  /* ---------------- who it's for ---------------- */
+  .who{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:start}
+  .who p{font-size:17px;color:var(--fg2);margin:0;max-width:44ch}
+  .who p b{color:var(--fg);font-weight:600}
+  .who ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+  .who li{position:relative;padding-left:30px;color:var(--fg2);font-size:15.5px}
+  .who li::before{content:"";position:absolute;left:0;top:2px;width:19px;height:19px;
+    border-radius:50%;background:color-mix(in srgb,var(--keep) 22%,transparent);
+    border:1.5px solid var(--keep)}
+  .who li::after{content:"✓";position:absolute;left:4px;top:1px;color:var(--keep);
+    font-size:12px;font-weight:800}
+  .who li b{color:var(--fg);font-weight:600}
 
-  /* ---- why strip ---- */
-  .why{margin:44px 0 0;padding:30px;border:var(--hair) solid var(--border);
-    border-radius:var(--r-card);background:var(--panel)}
-  .why h2{font-size:20px;margin:0 0 14px;font-weight:600}
-  .why ul{margin:0;padding:0;list-style:none;display:grid;
-    grid-template-columns:1fr 1fr;gap:10px 30px}
-  .why li{font-family:var(--geo);color:var(--dim);font-size:14.5px;
-    padding-left:22px;position:relative}
-  .why li::before{content:"✓";position:absolute;left:0;color:var(--keep);font-weight:700}
+  /* ---------------- editor tool grid ---------------- */
+  .tools{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .tool{background:var(--panel);border:var(--hair) solid var(--border);
+    border-radius:var(--r-card);padding:20px;transition:border-color .18s,transform .18s,background .18s}
+  .tool:hover{border-color:var(--acc);transform:translateY(-2px);background:var(--panel2)}
+  .tool .ic{width:42px;height:42px;border-radius:var(--r-ctrl);background:var(--chip);
+    display:grid;place-items:center;margin-bottom:14px}
+  .tool .ic img{width:22px;height:22px}
+  .tool h3{font-size:15.5px;font-weight:620;margin-bottom:5px}
+  .tool p{font-size:13.5px;color:var(--dim);margin:0;line-height:1.55}
+  .toolnote{margin-top:20px;color:var(--dim);font-size:14px;text-align:center}
+  .toolnote b{color:var(--fg2);font-weight:600}
 
-  /* ---- footer ---- */
-  .foot{border-top:var(--hair) solid var(--border);margin-top:52px;padding:28px 0 48px;
-    display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:var(--dim);font-size:13px}
-  .foot .mono{font-family:var(--mono);font-size:12px}
+  /* ---------------- three-up band ---------------- */
+  .band{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+  .cell .ic{width:38px;height:38px;border-radius:var(--r-ctrl);background:var(--chip);
+    display:grid;place-items:center;margin-bottom:14px}
+  .cell .ic img{width:20px;height:20px}
+  .cell h3{font-size:17px;font-weight:620;margin-bottom:8px}
+  .cell p{color:var(--dim);font-size:14.5px;margin:0}
+  .cell p b{color:var(--fg2);font-weight:600}
 
-  @media (max-width:760px){
-    .feats{grid-template-columns:repeat(2,1fr)}
-    .why ul{grid-template-columns:1fr}
-    .nav .hide{display:none}
+  /* ---------------- keyboard ---------------- */
+  .keys{display:grid;grid-template-columns:1fr 1fr;gap:2px 40px}
+  .krow{display:flex;align-items:center;gap:12px;padding:11px 0;
+    border-bottom:var(--hair) solid var(--divider)}
+  .krow .combo{display:flex;gap:5px;flex:none;min-width:118px}
+  .krow .act{color:var(--fg2);font-size:14.5px}
+  kbd{font-family:var(--mono);font-size:12px;line-height:1;color:var(--fg);
+    background:var(--chip);border:var(--hair) solid var(--border2);
+    border-bottom-width:2px;border-radius:5px;padding:6px 8px;min-width:11px;text-align:center}
+
+  /* ---------------- languages ---------------- */
+  .lang{background:var(--panel);border:var(--hair) solid var(--border);
+    border-radius:var(--r-card);padding:34px 36px;display:flex;gap:28px;
+    align-items:center;flex-wrap:wrap}
+  .lang .big{font-family:var(--mono);font-size:15px;color:var(--acc);
+    letter-spacing:.06em;white-space:nowrap}
+  .lang p{margin:0;color:var(--fg2);font-size:15.5px;max-width:62ch}
+  .lang p b{color:var(--fg);font-weight:600}
+
+  /* ---------------- footer ---------------- */
+  .foot{border-top:var(--hair) solid var(--border);padding:34px 0 56px;color:var(--dim)}
+  .foot .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .foot .brand{font-size:15px;color:var(--fg)}
+  .foot a{color:var(--dim)}
+  .foot a:hover{color:var(--fg)}
+  .foot .mono{font-family:var(--mono);font-size:12.5px}
+  .foot .road{flex-basis:100%;font-size:13.5px;color:var(--dim);margin-top:8px}
+
+  /* reveal */
+  .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  @media (max-width:900px){
+    .tools{grid-template-columns:repeat(2,1fr)}
+    .band{grid-template-columns:1fr;gap:30px}
+    .who{grid-template-columns:1fr;gap:26px}
+    .keys{grid-template-columns:1fr}
   }
-  @media (prefers-reduced-motion:reduce){*{transition:none!important};html{scroll-behavior:auto}}
+  @media (max-width:560px){
+    .tools{grid-template-columns:1fr}
+    .nav .hide{display:none}
+    .section{padding:56px 0}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important}html{scroll-behavior:auto}
+    .reveal{opacity:1;transform:none}
+  }
 </style>
 </head>
 <body>
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><img src="manoni-icon.png" alt="Manoni"> Manoni</div>
-    <div class="spacer"></div>
+    <a class="brand" href="#top"><img src="manoni-icon.png" alt="Manoni"> Manoni</a>
+    <div class="grow"></div>
     <nav class="nav">
-      <a href="#features" class="hide">ფუნქციები</a>
-      <a href="https://github.com/kandelucky/Manoni" class="hide">GitHub</a>
-      <div class="swatches" id="sw" role="group" aria-label="აქცენტის ფერი">
-        <button class="sw" style="background:#4aa3ff" data-acc="#4aa3ff" data-h="#5ab0ff" title="Blue" aria-label="Blue"></button>
-        <button class="sw" style="background:#24b1a6" data-acc="#24b1a6" data-h="#33c2b6" title="Teal" aria-label="Teal"></button>
-        <button class="sw" style="background:#45b36b" data-acc="#45b36b" data-h="#55c17b" title="Green" aria-label="Green"></button>
-        <button class="sw" style="background:#9b87f5" data-acc="#9b87f5" data-h="#ab97ff" title="Purple" aria-label="Purple"></button>
-        <button class="sw" style="background:#ef8a53" data-acc="#ef8a53" data-h="#ff9a63" title="Orange" aria-label="Orange"></button>
-      </div>
-      <button class="tt" id="tt" title="თემის გადართვა" aria-label="თემის გადართვა">◐</button>
+      <a href="#editor" class="hide">Editor</a>
+      <a href="#cull" class="hide">Browse &amp; cull</a>
+      <a href="#keys" class="hide">Keyboard</a>
+      <a href="https://github.com/kandelucky/Manoni">GitHub</a>
+      <button class="tt" id="tt" title="Toggle theme" aria-label="Toggle theme">◐</button>
     </nav>
   </div>
 </header>
 
-<main class="wrap">
+<main id="top">
+
+  <!-- ===================== HERO ===================== -->
   <section class="hero">
-    <div class="eye">Browse · cull · edit · export</div>
-    <h1>ბევრი კადრი. სწრაფად. სუსტ ლეპტოპზეც.</h1>
-    <p class="lead">Manoni — მარტივი ფოტოს დამთვალიერებელი, culler და რედაქტორი. ორიგინალს არასდროს ცვლის: culling მხოლოდ ალაგებს ფაილებს, რედაქტირება კი ინახავს ასლს.</p>
-    <div class="btns">
-      <a class="cta" href="https://github.com/kandelucky/Manoni/releases">ჩამოტვირთვა · Windows</a>
-      <a class="btn2" href="https://github.com/kandelucky/Manoni">GitHub</a>
+    <div class="wrap">
+      <div class="eyebrow">Photo browser · culler · editor</div>
+      <h1>Cull fast. Edit for real. Keep every original.</h1>
+      <p class="lead">Manoni is a fast, simple photo browser, culler &amp; editor — light enough to stay smooth on a weak laptop, simple enough to stay out of your way.</p>
+      <div class="btns">
+        <a class="cta" href="https://github.com/kandelucky/Manoni/releases">Download for Windows</a>
+        <a class="btn2" href="https://github.com/kandelucky/Manoni">View on GitHub</a>
+      </div>
+      <div class="tech">Pure Python + Tkinter + Pillow · one dependency · MIT</div>
+
+      <div class="flow">
+        <span class="step"><img src="assets/readme/folder-open.png" alt=""> Browse</span>
+        <span class="arr">→</span>
+        <span class="step"><img src="assets/readme/folder-check.png" alt=""> Cull</span>
+        <span class="arr">→</span>
+        <span class="step"><img src="assets/readme/sliders-horizontal.png" alt=""> Edit</span>
+        <span class="arr">→</span>
+        <span class="step"><img src="assets/readme/upload.png" alt=""> Export</span>
+      </div>
+
+      <div class="shotwrap reveal">
+        <div class="shot">
+          <img src="assets/screenshot.jpg" width="2256" height="1432"
+               alt="The Manoni window: a folder tree and thumbnail strip on the left, the photo in the centre, the edit-tool rail on the right, and a filter preview strip along the bottom.">
+        </div>
+      </div>
     </div>
-    <div class="meta">v0.9 · Python + Tkinter + Pillow · MIT</div>
   </section>
 
-  <div class="shot">
-    <img src="assets/screenshot.jpg" width="2256" height="1432"
-         alt="Manoni-ს ფანჯარა: მარცხნივ საქაღალდის ხე და thumbnail-ები, ცენტრში ფოტო, მარჯვნივ რედაქტირების ხელსაწყოების რიგი, ქვემოთ ფილტრების ზოლი.">
-  </div>
+  <div class="rule"></div>
 
-  <section class="feats" id="features">
-    <div class="card"><div class="ic">▤</div><h3>დათვალიერება</h3><p>საქაღალდის ხე და thumbnail-ები — ათასობით ფაილიც სწრაფად.</p></div>
-    <div class="card"><div class="ic">✓</div><h3>Culling</h3><p>დატოვე კარგი, დააარქივე დანარჩენი — ღილაკით ან ისრებით.</p></div>
-    <div class="card"><div class="ic">◐</div><h3>რედაქტირება</h3><p>ტონი, ფერი, crop, heal, ფილტრები — ნამდვილი, მაგრამ მსუბუქი.</p></div>
-    <div class="card"><div class="ic">↥</div><h3>ექსპორტი</h3><p>სუფთა ასლები, შენახული metadata — ორიგინალი ხელუხლებელი.</p></div>
+  <!-- ===================== WHO ===================== -->
+  <section class="section" id="who">
+    <div class="wrap">
+      <div class="who reveal">
+        <div>
+          <div class="eyebrow">Who it's for</div>
+          <p style="margin-top:14px">For photographers who shoot a lot and work on a modest machine. Manoni is built to <b>cull a big batch fast, make quick but real edits, and hand back clean copies</b> — and to stay out of your way while you do it.</p>
+        </div>
+        <ul>
+          <li>You shoot in <b>volume</b> and need to sort keepers from rejects quickly.</li>
+          <li>You want <b>real edits</b> — tone, colour, crop, heal, filters — without a heavy install.</li>
+          <li>You work on a <b>weak or old laptop</b> and want it to stay fast.</li>
+          <li>You care that your <b>originals are never altered</b> — culling only moves files, edits export copies.</li>
+        </ul>
+      </div>
+    </div>
   </section>
 
-  <section class="why">
-    <h2>ვისთვის არის</h2>
-    <ul>
-      <li>ვინც <b>ბევრს</b> იღებს და keeper-ებს სწრაფად ეძებს</li>
-      <li>ვისაც <b>ნამდვილი</b> რედაქტირება უნდა — მძიმე პროგრამის გარეშე</li>
-      <li>ვინც <b>სუსტ ან ძველ</b> ლეპტოპზე მუშაობს და სისწრაფე უნდა</li>
-      <li>ვისთვისაც <b>ორიგინალი ხელუხლებელი</b> უნდა დარჩეს</li>
-    </ul>
+  <div class="rule"></div>
+
+  <!-- ===================== EDITOR ===================== -->
+  <section class="section" id="editor">
+    <div class="wrap">
+      <div class="head reveal">
+        <div class="eyebrow">The editor</div>
+        <h2>Twelve tools on one rail</h2>
+        <p>Click a tool on the right-hand rail to open its panel. Every edit is non-destructive — with undo, redo and a live histogram.</p>
+      </div>
+      <div class="tools reveal">
+        <div class="tool"><div class="ic"><img src="assets/readme/sliders-horizontal.png" alt=""></div><h3>Basic</h3><p>White balance, tone, and detail — clarity, texture, denoise, dehaze, sharpen — plus vibrance and saturation.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/palette.png" alt=""></div><h3>Color mixer</h3><p>Per-hue HSL bands, plus dedicated gold and skin mini-HSLs so only that material moves.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/wand-sparkles.png" alt=""></div><h3>Effects</h3><p>Vignette, grain and split-tone for finishing a look.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/crop.png" alt=""></div><h3>Crop</h3><p>Trim, straighten a tilted horizon, rotate and flip — with ratio and social presets.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/scaling.png" alt=""></div><h3>Resize</h3><p>Resize one photo, or every photo in a folder and its subfolders in one batch.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/frame.png" alt=""></div><h3>Perspective</h3><p>Fix keystoning and straighten converging lines.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/bandage.png" alt=""></div><h3>Heal &amp; Clone</h3><p>Remove blemishes automatically, or Alt-click to pick a clone source.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/circle-dot.png" alt=""></div><h3>Focus blur</h3><p>Blur the surroundings and keep your subject sharp.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/type.png" alt=""></div><h3>Text &amp; Watermark</h3><p>Live text overlays — many per photo, snapped to any corner.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/image.png" alt=""></div><h3>Logo</h3><p>Drop a transparent PNG — with size, opacity, tint, flip and corner-snap.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/blend.png" alt=""></div><h3>Filters</h3><p>Saved slider presets, previewed live on the current photo in a clickable strip.</p></div>
+        <div class="tool"><div class="ic"><img src="assets/readme/circle-play.png" alt=""></div><h3>Actions</h3><p>Record a macro and replay it on one photo — or a whole folder.</p></div>
+      </div>
+      <p class="toolnote reveal">Undo / redo · live histogram · dark &amp; light theme with an accent colour · a <b>Georgian / English</b> interface.</p>
+    </div>
   </section>
 
-  <footer class="foot">
-    <span>Manoni</span>
-    <span class="spacer" style="flex:1"></span>
-    <a href="https://github.com/kandelucky/Manoni">GitHub</a>
-    <span class="mono">made in Georgia · © 2026</span>
-  </footer>
+  <div class="rule"></div>
+
+  <!-- ===================== BAND ===================== -->
+  <section class="section" id="cull">
+    <div class="wrap">
+      <div class="band reveal">
+        <div class="cell">
+          <div class="ic"><img src="assets/readme/folder-check.png" alt=""></div>
+          <h3>Browse &amp; cull</h3>
+          <p>A virtualized thumbnail strip — thousands of files stay smooth — beside a nested folder tree. Arrow keys browse and cull each photo into <b>keep</b> / <b>reject</b> folders. Nothing is deleted: culling only <b>moves</b> files, and Ctrl+Z undoes any move.</p>
+        </div>
+        <div class="cell">
+          <div class="ic"><img src="assets/readme/blend.png" alt=""></div>
+          <h3>Filters &amp; the “Last” slot</h3>
+          <p>A filter is a saved slider preset — one click applies the whole look. Save a photo and its edit is pinned as <b>“Last”</b> for the next shot. Export a filter group to a small <b>.json</b> and share your looks between machines and friends.</p>
+        </div>
+        <div class="cell">
+          <div class="ic"><img src="assets/readme/upload.png" alt=""></div>
+          <h3>Export</h3>
+          <p>Save a full-resolution copy as <b>JPEG / PNG / WEBP</b> — to an <b>_edited/</b> subfolder or one fixed folder. Metadata is kept or stripped per your choice, and the original is <b>never touched</b>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <!-- ===================== KEYBOARD ===================== -->
+  <section class="section" id="keys">
+    <div class="wrap">
+      <div class="head reveal">
+        <div class="eyebrow">Keyboard</div>
+        <h2>Hands stay on the keys</h2>
+        <p>Browse and cull without reaching for the mouse. The Help button in the top bar opens a tabbed guide covering all of it.</p>
+      </div>
+      <div class="keys reveal">
+        <div class="krow"><span class="combo"><kbd>←</kbd><kbd>→</kbd></span><span class="act">Previous / next photo</span></div>
+        <div class="krow"><span class="combo"><kbd>↑</kbd><kbd>↓</kbd></span><span class="act">Keep / reject the current photo</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>O</kbd></span><span class="act">Open a folder of photos</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>S</kbd></span><span class="act">Quick-save an edited copy</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>Z</kbd></span><span class="act">Undo</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>Y</kbd></span><span class="act">Redo</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>R</kbd></span><span class="act">Show / hide the pixel rulers</span></div>
+        <div class="krow"><span class="combo"><kbd>[</kbd><kbd>]</kbd></span><span class="act">Shrink / grow the heal brush</span></div>
+        <div class="krow"><span class="combo"><kbd>R</kbd></span><span class="act">Start / stop recording an action</span></div>
+        <div class="krow"><span class="combo"><kbd>P</kbd></span><span class="act">Replay the action on the current photo</span></div>
+        <div class="krow"><span class="combo"><kbd>Shift</kbd><kbd>P</kbd></span><span class="act">Replay it over the whole folder</span></div>
+        <div class="krow"><span class="combo"><kbd>Esc</kbd></span><span class="act">Cancel recording</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <!-- ===================== LANGUAGES ===================== -->
+  <section class="section" id="lang">
+    <div class="wrap">
+      <div class="lang reveal">
+        <div class="big">EN · ქართული · +</div>
+        <p>The interface ships in <b>English and Georgian</b> — and adding your own needs no code and no rebuild. Settings generates a template of every phrase; translate the ones you want and import it back. Anything left untranslated simply stays English, so even a half-finished pack works the moment you load it.</p>
+      </div>
+    </div>
+  </section>
 </main>
+
+<footer class="foot">
+  <div class="wrap">
+    <span class="brand"><img src="manoni-icon.png" alt="" width="20" height="20" style="vertical-align:-4px;border-radius:5px;margin-right:7px">Manoni</span>
+    <div class="grow" style="flex:1"></div>
+    <a href="https://github.com/kandelucky/Manoni">GitHub</a>
+    <a href="https://github.com/kandelucky/Manoni/releases">Download</a>
+    <span class="mono">made in Georgia · © 2026 · MIT</span>
+    <p class="road">On the way: a Windows installer, file-type registration for shared filters &amp; languages, a moderated filter-sharing site, and optional RAW support.</p>
+  </div>
+</footer>
 
 <script>
   var root=document.documentElement;
   var tt=document.getElementById('tt');
-  function cur(){
-    var t=root.getAttribute('data-theme');
-    if(t)return t;
-    return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  tt.onclick=function(){
+    root.setAttribute('data-theme', root.getAttribute('data-theme')==='light'?'dark':'light');
+  };
+  // subtle scroll reveal (skipped when reduced motion is preferred)
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);} });
+    },{threshold:.12});
+    document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+  } else {
+    document.querySelectorAll('.reveal').forEach(function(el){el.classList.add('in');});
   }
-  tt.onclick=function(){root.setAttribute('data-theme',cur()==='dark'?'light':'dark');};
-  var sw=document.getElementById('sw');
-  sw.addEventListener('click',function(e){
-    var b=e.target.closest('.sw'); if(!b)return;
-    root.style.setProperty('--acc',b.dataset.acc);
-    root.style.setProperty('--acc-h',b.dataset.h);
-    sw.querySelectorAll('.sw').forEach(function(x){x.setAttribute('aria-pressed',x===b);});
-  });
-  sw.querySelector('.sw').setAttribute('aria-pressed','true');
 </script>
 </body>
 </html>
