@@ -623,7 +623,10 @@ class FiltersMixin:
         return sep
 
     def _add_group_caption(self, parent, grp):
-        "A clickable caption (chevron + group name) that folds / unfolds the group."
+        "A clickable caption (chevron + VERTICAL group name) that folds / unfolds the"
+        " group. The name is drawn rotated 90° (reading bottom-to-top) so a group"
+        " label costs almost no horizontal room in the filmstrip, leaving the width"
+        " for cells. A tk Label can't rotate text — a canvas create_text(angle=90) can."
         bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
         frame = tk.Frame(parent, bg=bar, cursor="hand2")
         frame.pack(side="left", padx=(6, 2))     # pack centres it vertically
@@ -632,16 +635,24 @@ class FiltersMixin:
         parts = [frame]
         if img is not None:
             ic = tk.Label(frame, image=img, bg=bar)
-            ic.pack(side="left", padx=(0, 3))
+            ic.pack(side="top", pady=(0, 3))
             parts.append(ic)
-        tx = tk.Label(frame, text=grp["label"], bg=bar, fg=fg_dim,
-                      font=("Segoe UI", 8, "bold"))
-        tx.pack(side="left")
-        parts.append(tx)
+        # Long custom names are middle-elided so a caption can't grow taller than the
+        # strip and clip; the canvas is sized to the (rotated) measured text.
+        fnt = self._strip_caption_font()
+        maxh = round((self.FILTER_THUMB_H + 12) * self.dpi)
+        label = self._middle_elide(grp["label"], fnt, maxh)
+        tw, th = fnt.measure(label), fnt.metrics("linespace")
+        cv = tk.Canvas(frame, width=th, height=tw, bg=bar, highlightthickness=0)
+        cv.pack(side="top")
+        tid = cv.create_text(th // 2, tw // 2, text=label, angle=90,
+                             anchor="center", fill=fg_dim,
+                             font=("Segoe UI", 8, "bold"))
+        parts.append(cv)
         for w in parts:
             w.bind("<Button-1>", lambda e, gid=grp["id"]: self._toggle_group(gid))
-            w.bind("<Enter>", lambda e: tx.configure(fg=fg))
-            w.bind("<Leave>", lambda e: tx.configure(fg=fg_dim))
+            w.bind("<Enter>", lambda e: cv.itemconfigure(tid, fill=fg))
+            w.bind("<Leave>", lambda e: cv.itemconfigure(tid, fill=fg_dim))
             w.bind("<MouseWheel>", lambda e: self.filter_strip_canvas.xview_scroll(
                 int(-e.delta / 120), "units"))
         return frame
@@ -722,6 +733,12 @@ class FiltersMixin:
         if size not in fonts:
             fonts[size] = tkfont.Font(font=("Segoe UI", size))
         return fonts[size]
+
+    def _strip_caption_font(self):
+        "A cached bold 'Segoe UI' 8pt Font — the strip's vertical group captions."
+        if getattr(self, "_strip_cap_font", None) is None:
+            self._strip_cap_font = tkfont.Font(font=("Segoe UI", 8, "bold"))
+        return self._strip_cap_font
 
     def _strip_name_fit(self, label, max_w):
         "Fit a name into max_w px: pick the largest font (8 down to a 6 floor)"
