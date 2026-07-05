@@ -14,6 +14,7 @@ Browse a folder → keep the good ones → cull the rest → quick edits → exp
 <img src="assets/readme/palette.png" width="22" alt="">&nbsp;&nbsp;
 <img src="assets/readme/crop.png" width="22" alt="">&nbsp;&nbsp;
 <img src="assets/readme/wand-sparkles.png" width="22" alt="">&nbsp;&nbsp;
+<img src="assets/readme/image.png" width="22" alt="">&nbsp;&nbsp;
 <img src="assets/readme/upload.png" width="22" alt="">
 
 Pure **Python + Tkinter + Pillow**. Tiny, MIT-friendly, fully ours to extend.
@@ -86,6 +87,7 @@ A tool rail on the right — click a tool to open its panel.
 | <img src="assets/readme/bandage.png" width="22" alt=""> | **Heal & Clone** | Remove blemishes (auto, or <kbd>Alt</kbd>+click a clone source) |
 | <img src="assets/readme/circle-dot.png" width="22" alt=""> | **Focus blur** | Blur the surroundings, keep the subject sharp |
 | <img src="assets/readme/type.png" width="22" alt=""> | **Text & Watermark** | Live text overlays — many per photo, snap to a corner |
+| <img src="assets/readme/image.png" width="22" alt=""> | **Logo** | Drop a transparent PNG onto the photo — many per photo, with size / opacity / tint / flip and corner-snap |
 | <img src="assets/readme/blend.png" width="22" alt=""> | **Filters** | Saved slider presets with a clickable preview strip |
 | <img src="assets/readme/circle-play.png" width="22" alt=""> | **Actions** | Record a macro and replay it on one photo or a whole folder |
 
@@ -138,11 +140,6 @@ stripped per your choice, and the original is **never touched**.
 | <kbd>P</kbd> | Replay the highlighted action on the current photo |
 | <kbd>Shift</kbd>+<kbd>P</kbd> | Replay it over the whole folder |
 
-The arrow keys work whether the edit panel is open or closed; leaving a photo
-with unsaved edits prompts you to save first. <kbd>P</kbd> replays the last
-action you recorded or played — the one shown highlighted in the Actions panel;
-the action keys pause while you're typing a name.
-
 The <img src="assets/readme/circle-help.png" width="16" alt=""> **Help** button in
 the top bar opens a tabbed guide covering all of the above.
 
@@ -155,23 +152,6 @@ no code, no rebuild. **Settings → General → Add your language** generates a
 template listing every phrase in the app; translate the ones you want, then
 import it back. Anything you leave untranslated simply stays English, so even a
 half-finished pack works the moment you load it.
-
----
-
-## RAW support (planned — an optional add-on)
-
-Camera RAW (CR2 / NEF / ARW / DNG …) isn't built yet, and when it lands it will
-be an **optional add-on**, not part of the base app — so Manoni stays light for
-anyone who only shoots JPEG. You'll be able to add it two ways: **tick a box in
-the installer**, or let Manoni **download it on demand** the first time you open
-a RAW file.
-
-Editing stays comfortable even on a weak laptop: a RAW is decoded once on open
-(behind the loading screen), then edited exactly like any other photo — on a
-fit-to-screen preview, with full resolution computed only at export. Bit depth is
-handled for you: full precision is kept internally, and the only choice you make
-is the export format — **JPEG** for a small file, **TIFF** for full 16-bit
-quality.
 
 ---
 
@@ -190,5 +170,6 @@ Planned work, roughly in order. Full detail in
   app (share / receive buttons).
 - [ ] **Windows installer** — single-instance, "Open with Manoni", drag & drop, a
   PyInstaller build, then an Inno Setup installer.
-- [ ] **Grid view** (2×2 library for faster culling) and **RAW support** (an
-  optional add-on) — longer-term.
+- [ ] **RAW support** — an optional add-on (installer tick-box or on-demand
+  download) so the base app stays light; export as JPEG or 16-bit TIFF.
+- [ ] **Grid view** — a 2×2 library for faster culling *(longer-term)*.
