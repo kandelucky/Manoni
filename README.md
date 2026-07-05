@@ -166,3 +166,23 @@ fit-to-screen preview, with full resolution computed only at export. Bit depth i
 handled for you: full precision is kept internally, and the only choice you make
 is the export format — **JPEG** for a small file, **TIFF** for full 16-bit
 quality.
+
+---
+
+## TODO
+
+Planned work, roughly in order. Full detail in
+[`spec/06-file-types-and-sharing.md`](spec/06-file-types-and-sharing.md) and
+[`spec/03-roadmap.md`](spec/03-roadmap.md).
+
+- [x] **`.mnf` / `.mnl` file types** — filters export as `.mnf`, languages as
+  `.mnl`; opening or dropping one on the window imports it *(done)*.
+- [ ] **Register the file types with Windows** — double-click a `.mnf` / `.mnl`
+  to open Manoni, with their own file icons *(part of the installer)*.
+- [ ] **Sharing website** — a place to share `.mnf` / `.mnl` files: free hosting
+  (Supabase), uploads **moderated** before they go public, driven from inside the
+  app (share / receive buttons).
+- [ ] **Windows installer** — single-instance, "Open with Manoni", drag & drop, a
+  PyInstaller build, then an Inno Setup installer.
+- [ ] **Grid view** (2×2 library for faster culling) and **RAW support** (an
+  optional add-on) — longer-term.
