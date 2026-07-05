@@ -362,6 +362,58 @@ class ChromeMixin:
         "Toolbar action: flip the before/after split-line view on/off."
         self._set_compare(not self.compare_mode)
 
+    # --- View-element toggles (rulers / histogram / filter strip) -----------
+
+    def _build_toggle_button(self, parent, icon_name, getter, command, tooltip,
+                             glyph="?"):
+        "A flat icon toggle for a view element: only the ICON lights up (accent)"
+        " while `getter()` is true — the background stays the plain bar / hover"
+        " tint like the other toolbar buttons. `command` flips the underlying state"
+        " (and, via _repaint_view_toggles, keeps this button in sync however the"
+        " state changes — button, Settings, or Ctrl+R). Falls back to a text glyph"
+        " if the PNG is missing."
+        img = self.icon(icon_name)
+        if img is not None:
+            btn = tk.Label(parent, image=img, bg=self.theme["bar"], cursor="hand2")
+            btn._icon = icon_name
+        else:
+            btn = tk.Label(parent, text=glyph, bg=self.theme["bar"],
+                           fg=self.theme["fg"], cursor="hand2",
+                           font=("Segoe UI", 11))
+
+        def paint(hover=False):
+            try:
+                token = "accent" if getter() else "fg"    # only the icon carries on/off
+                btn.configure(bg=self.theme["hover"] if hover else self.theme["bar"])
+                name = getattr(btn, "_icon", None)
+                if name is None:                          # text-glyph fallback
+                    btn.configure(fg=self.theme[token])
+                else:
+                    im = self.icon(name, color=self.theme[token])
+                    if im is not None:
+                        btn.configure(image=im)
+                        btn._icon_ref = im                # keep a hard ref alive
+            except tk.TclError:                   # button destroyed
+                self.theme.unsubscribe(paint)
+
+        btn._paint = paint
+        btn.bind("<Enter>", lambda e: paint(hover=True))
+        btn.bind("<Leave>", lambda e: paint(hover=False))
+        btn.bind("<Button-1>", lambda e: command())
+        btn._tip = Tooltip(btn, tooltip)
+        self.theme.subscribe(paint)
+        paint()
+        return btn
+
+    def _repaint_view_toggles(self):
+        "Re-sync the toolbar's rulers / histogram / filter-strip toggles with their"
+        " live state — called after any of them flips (from the button, Settings, or"
+        " Ctrl+R) so all three always show the right on/off tint."
+        for btn in getattr(self, "_view_toggle_btns", ()):
+            paint = getattr(btn, "_paint", None)
+            if paint is not None:
+                paint()
+
     # --- Top info bar -------------------------------------------------------
 
     def _build_infobar(self):
@@ -407,10 +459,11 @@ class ChromeMixin:
         bar.grid(row=1, column=0, sticky="ew")
         bar.grid_propagate(False)
 
-        # LEFT zone: file operations (open / save) then edit history (undo / redo),
-        # read left-to-right as one "file & history" cluster. Photo navigation
-        # (prev/next/first/last) lives on the bottom strip, next to the position
-        # counter — not repeated here.
+        # LEFT zone, read left-to-right: file operations (open / save / save-as),
+        # then the view-element toggles (rulers / histogram / filter strip), then
+        # edit history (undo / redo) — each group split off by a separator. Photo
+        # navigation (prev/next/first/last) lives on the bottom strip, next to the
+        # position counter — not repeated here.
         left = self._tw(tk.Frame(bar), bg="bar")
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
@@ -422,13 +475,36 @@ class ChromeMixin:
         self._tool_button(left, "save", self.overwrite_save,
                           t("Save — overwrite the original (Ctrl+S)")).pack(
                               side="left", padx=4, pady=8)
-        self._tool_button(left, "upload", self._save_as_dialog,
+        self._tool_button(left, "save-all", self._save_as_dialog,
                           t("Save as… — a new copy (Ctrl+Shift+S)")).pack(
                               side="left", padx=4, pady=8)
-        # Undo / redo follow the file buttons, split off by a separator: the eye
-        # reads open → save → undo → redo as one file-and-history run instead of
-        # hunting for undo out in the centre of the bar.
-        self._sep(left).pack(side="left", fill="y", padx=6, pady=10)
+
+        # View-element toggles sit between the file buttons and undo/redo: the
+        # pixel rulers (overlay the photo), the edit panel's live histogram, and the
+        # filter-preview strip below the canvas. Each is a show/hide toggle — only
+        # its icon lights up (accent) when on. State persists and stays in sync with
+        # Settings (and Ctrl+R for the rulers); all three default OFF on a fresh
+        # install. A separator with wide breathing space on each side sets the
+        # group clearly apart from the file and history icons.
+        self._sep(left).pack(side="left", fill="y", padx=18, pady=10)
+        self.btn_toggle_rulers = self._build_toggle_button(
+            left, "ruler", lambda: getattr(self, "show_rulers", False),
+            self.toggle_rulers, t("Rulers — show or hide (Ctrl+R)"), glyph="⊢")
+        self.btn_toggle_rulers.pack(side="left", padx=3, pady=8)
+        self.btn_toggle_hist = self._build_toggle_button(
+            left, "chart-column", lambda: getattr(self, "show_histogram", False),
+            self.toggle_histogram, t("Histogram — show or hide"), glyph="▁▃▅")
+        self.btn_toggle_hist.pack(side="left", padx=3, pady=8)
+        self.btn_toggle_filters = self._build_toggle_button(
+            left, "gallery-horizontal",
+            lambda: getattr(self, "show_filter_strip", False),
+            self.toggle_filter_strip, t("Filter strip — show or hide"), glyph="▦")
+        self.btn_toggle_filters.pack(side="left", padx=3, pady=8)
+        self._view_toggle_btns = [self.btn_toggle_rulers, self.btn_toggle_hist,
+                                  self.btn_toggle_filters]
+        # Undo / redo close the cluster, split off by a separator with the same
+        # wide spacing as the one before the toggles.
+        self._sep(left).pack(side="left", fill="y", padx=18, pady=10)
         for spec in [
             ("undo", self.undo, t("Undo (Ctrl+Z)")),
             ("redo", self.redo, t("Redo (Ctrl+Y)")),
