@@ -15,7 +15,7 @@ Browse a folder → keep the good ones → cull the rest → quick edits → exp
 <img src="assets/readme/crop.png" width="22" alt="">&nbsp;&nbsp;
 <img src="assets/readme/wand-sparkles.png" width="22" alt="">&nbsp;&nbsp;
 <img src="assets/readme/image.png" width="22" alt="">&nbsp;&nbsp;
-<img src="assets/readme/upload.png" width="22" alt="">
+<img src="assets/readme/save-all.png" width="22" alt="">
 
 Pure **Python + Tkinter + Pillow**. Tiny, MIT-friendly, fully ours to extend.
 
@@ -117,7 +117,7 @@ panel. That's how you pass your looks between machines and to other people.
 
 ## Export
 
-<img src="assets/readme/upload.png" width="18" alt=""> **Save as…** writes a
+<img src="assets/readme/save-all.png" width="18" alt=""> **Save as…** writes a
 full-resolution copy as JPEG / PNG / WEBP — to an `_edited/` subfolder or one
 fixed folder. Metadata (camera info, date, GPS, colour profile) is kept or
 stripped per your choice, and colours can be **converted to sRGB** so a
