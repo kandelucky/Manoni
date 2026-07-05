@@ -19,6 +19,8 @@ Browse a folder → keep the good ones → cull the rest → quick edits → exp
 
 Pure **Python + Tkinter + Pillow**. Tiny, MIT-friendly, fully ours to extend.
 
+**[Website](https://kandelucky.github.io/Manoni)** · **[Download](https://github.com/kandelucky/Manoni/releases/latest)** · **[Community & sharing](https://github.com/kandelucky/Manoni/discussions)**
+
 <br>
 
 <img src="assets/screenshot.jpg" width="900" alt="The Manoni window: folder tree and thumbnails on the left, the photo in the centre, the edit-tool rail on the right, and the filter preview strip along the bottom.">
@@ -117,9 +119,10 @@ click it to apply the same look to the next photo, no saving needed. "Last" is
 session-only; its `…` menu can promote it into a permanent named filter.
 
 <img src="assets/readme/share-2.png" width="18" alt=""> **Share filters.** A
-filter group's `…` menu exports the whole group to a small `.json` file — send it
+filter group's `…` menu exports the whole group to a small `.mnf` file — send it
 to a friend, and they load it from the **Import** button pinned atop the Filters
-panel. That's how you pass your looks between machines and to other people.
+panel (or just double-click the file). Swap looks with other people on the
+[Community board](https://github.com/kandelucky/Manoni/discussions/categories/filters).
 
 ---
 
@@ -165,24 +168,24 @@ The interface ships in **English, Georgian and Polish**, and adding your own is 
 no code, no rebuild. **Settings → General → Add your language** generates a
 template listing every phrase in the app; translate the ones you want, then
 import it back. Anything you leave untranslated simply stays English, so even a
-half-finished pack works the moment you load it.
+half-finished pack works the moment you load it. Share your pack — or grab
+someone else's — on the
+[Community board](https://github.com/kandelucky/Manoni/discussions/categories/language-packs).
 
 ---
 
 ## TODO
 
-Planned work, roughly in order. Full detail in
-[`spec/06-file-types-and-sharing.md`](spec/06-file-types-and-sharing.md) and
-[`spec/03-roadmap.md`](spec/03-roadmap.md).
-
 - [x] **`.mnf` / `.mnl` file types** — filters export as `.mnf`, languages as
-  `.mnl`; opening or dropping one on the window imports it *(done)*.
+  `.mnl`; opening or dropping one on the window imports it.
 - [x] **Register the file types with Windows** — double-click a `.mnf` / `.mnl`
-  opens Manoni, with their own file icons *(done — in the installer)*.
+  opens Manoni, with their own file icons *(in the installer)*.
 - [x] **Windows installer** — single-instance, "Open with Manoni", drag & drop, a
-  PyInstaller build and an Inno Setup installer *(done — ships as Setup.exe)*.
-- [ ] **Sharing website** — a place to share `.mnf` / `.mnl` files: free hosting
-  (Supabase), uploads **moderated** before they go public, driven from inside the
-  app (share / receive buttons).
+  PyInstaller build and an Inno Setup installer *(ships as Setup.exe)*.
+- [x] **Community sharing** — a
+  [Discussions board](https://github.com/kandelucky/Manoni/discussions) for
+  swapping language packs and filter groups, with a how-to pinned in each category.
+- [ ] **In-app sharing** — share / receive buttons inside Manoni, so you can
+  publish or grab a pack without leaving the app.
 - [ ] **RAW support** — an optional add-on (installer tick-box or on-demand
   download) so the base app stays light; export as JPEG or 16-bit TIFF.
