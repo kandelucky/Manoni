@@ -195,8 +195,9 @@ class FocusMixin:
 
     def _clear_focus_for_geometry(self):
         "Drop the focus shape when the image geometry changes (rotate / crop):"
-        " its source-px coordinates no longer map to the new pixels. No undo entry"
-        " — it rides along with the rotate/crop action that called it."
+        " its source-px coordinates no longer map to the new pixels. No separate"
+        " undo entry — it rides along with the geometry action's own undo, which"
+        " snapshots and restores the focus shape (see nav._geometry_snapshot)."
         if self.focus is None:
             return
         self.focus = None

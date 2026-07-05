@@ -349,7 +349,8 @@ class TextMixin:
     def _clear_text_for_geometry(self):
         "Drop ALL text when the image geometry changes (rotate / crop / resize /"
         " perspective): the source-px positions no longer map to the new pixels."
-        " No undo entry — it rides along with the geometry action that called it."
+        " No separate undo entry — it rides along with the geometry action's own"
+        " undo, which snapshots and restores the texts (see nav._geometry_snapshot)."
         if not self.texts:
             return
         self.texts = []
