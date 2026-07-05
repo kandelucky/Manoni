@@ -311,7 +311,7 @@ class HelpMixin:
         win.group(t("Share with others"))
         self._help_row(win, "share-2", "Export & import a group",
                        "A filter group's … menu exports the whole group to a "
-                       "small .json file — send it to a friend, and they load it "
+                       "small .mnf file — send it to a friend, and they load it "
                        "from the Import button pinned atop the Filters panel.")
         win.note(t("Sharing works per group, not per single filter: export a "
                    "group, import the file someone sends you."))

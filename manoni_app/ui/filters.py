@@ -374,7 +374,7 @@ class FiltersMixin:
         " small header icon too easy to miss (2026-07-04)."
         self._filter_action(parent, "folder-input", t("Import filters"),
                             self._filter_import,
-                            t("Load filters from a .json file"))
+                            t("Load filters from a .mnf file"))
         holder = self._tw(tk.Frame(parent), bg="bar")
         holder.pack(fill="x", padx=(EDIT_PAD, 0), pady=(12, 8))
 
@@ -1364,12 +1364,23 @@ class FiltersMixin:
     # --- Import / Export ----------------------------------------------------
 
     def _filter_import(self):
-        "Load filters from one or more .json files into the store."
+        "Load filters from one or more .mnf (or older .json) files into the store."
         paths = tkfd.askopenfilenames(
             parent=self.root, title=t("Import filters"),
-            filetypes=[(t("Filter file"), "*.json"), (t("All files"), "*.*")])
+            filetypes=[(t("Filter file"), ("*.mnf", "*.json")),
+                       (t("All files"), "*.*")])
         if not paths:
             return
+        added = self.import_filters_from(paths)
+        if added:
+            self.toast(t("Added {n} filter(s)").format(n=added))
+        else:
+            self.toast(t("No filters found in the file"))
+
+    def import_filters_from(self, paths):
+        "Add every filter found in the given files to the store; return the count."
+        " Shared by the Import button and opening a .mnf file with Manoni. A file"
+        " that isn't a filter (unreadable / wrong shape) simply contributes zero."
         added = 0
         for p in paths:
             try:
@@ -1387,20 +1398,18 @@ class FiltersMixin:
             self._normalize_groups()       # surface any new group ('Others' etc.)
             self._save_filters()
             self._refresh_filter_strip()
-            self.toast(t("Added {n} filter(s)").format(n=added))
-        else:
-            self.toast(t("No filters found in the file"))
+        return added
 
     def _export_filters(self, filters):
-        "Write the given filters to a .json file the user chooses."
+        "Write the given filters to a .mnf file the user chooses."
         if len(filters) == 1:
-            default = filters[0]["name"] + ".json"
+            default = filters[0]["name"] + ".mnf"
         else:
-            default = "manoni-filters.json"
+            default = "manoni-filters.mnf"
         path = tkfd.asksaveasfilename(
             parent=self.root, title=t("Save filters"),
-            defaultextension=".json", initialfile=default,
-            filetypes=[(t("Filter file"), "*.json")])
+            defaultextension=".mnf", initialfile=default,
+            filetypes=[(t("Filter file"), "*.mnf"), (t("All files"), "*.*")])
         if not path:
             return
         if len(filters) == 1:

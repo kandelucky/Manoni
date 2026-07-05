@@ -693,15 +693,45 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.crop_sizes = clean
 
     def _open_launch_target(self, path):
-        "Open a launch argument that may be a single image file or a folder."
-        # Windows "Open with Manoni" hands us the image's full path, not its
+        "Open a launch argument: a shared Manoni filter (.mnf) or language (.mnl)"
+        " file, a single image, or a folder."
+        # Windows "Open with Manoni" hands us the file's full path, not its
         # folder; a folder drop / `manoni C:\photos` still hands us a folder.
-        # A file → open its folder and land on that photo; a folder → as before.
         path = os.path.abspath(path)
-        if os.path.isfile(path):
+        ext = os.path.splitext(path)[1].lower()
+        if ext == ".mnf":
+            self._open_filter_file(path)     # a shared filter → import it
+        elif ext == ".mnl":
+            self._open_language_file(path)   # a shared language → install it
+        elif os.path.isfile(path):
+            # A file → open its folder and land on that photo; a folder → as before.
             self.load_folder(os.path.dirname(path), select=os.path.basename(path))
         else:
             self.load_folder(path)
+
+    def _open_filter_file(self, path):
+        "Import a shared .mnf filter file (opened with / double-clicked in Manoni)."
+        if not os.path.isfile(path):
+            return
+        added = self.import_filters_from([path])
+        if added:
+            self.toast(i18n.t("Added {n} filter(s)").format(n=added))
+        else:
+            self.toast(i18n.t("No filters found in the file"))
+
+    def _open_language_file(self, path):
+        "Install a shared .mnl language file (opened with / double-clicked). It is"
+        " installed but NOT auto-switched: a language double-click could otherwise"
+        " re-exec with the same .mnl argument and loop. The user picks it from the"
+        " ☰ → Language menu when ready."
+        if not os.path.isfile(path):
+            return
+        res = self.install_language_file(path)
+        if res is None:
+            self.toast(i18n.t("That isn't a valid language file"))
+            return
+        _code, name = res
+        self.toast(i18n.t("Language added: {name}").format(name=name))
 
     def _handle_external_open(self, path):
         "A second launch forwarded us a path; open it here instead of a new window."

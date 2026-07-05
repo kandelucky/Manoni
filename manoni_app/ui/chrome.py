@@ -524,13 +524,13 @@ class ChromeMixin:
 
         self._filter_action(wrap, "download", t("Generate template file"),
                             self._lang_export_template,
-                            t("Save a .json file with every text to translate"))
+                            t("Save a .mnl file with every text to translate"))
         self._filter_action(wrap, "folder-input", t("Import a language"),
                             lambda: self._lang_import(dlg),
-                            t("Load a finished .json translation and install it"))
+                            t("Load a finished .mnl translation and install it"))
         self._filter_action(wrap, "share-2", t("Export a language"),
                             self._lang_export_pack,
-                            t("Save an installed language to a .json file to share"))
+                            t("Save an installed language to a .mnl file to share"))
 
         self._dialog_btn(wrap, t("Close"), dlg.destroy).pack(anchor="e",
                                                               pady=(16, 0))
@@ -538,8 +538,9 @@ class ChromeMixin:
         self._place_filter_dialog(dlg)
 
     def _lang_export_template(self):
-        "Write a .json template: every English source string, ready to translate."
+        "Write a .mnl template: every English source string, ready to translate."
         payload = {
+            "manoni_language": 1,
             "_readme": ("Fill in 'code' (e.g. fr) and 'name' (e.g. Francais), "
                         "then translate the right-hand value of each line under "
                         "'strings'. Leave the left-hand key exactly as it is."),
@@ -549,8 +550,8 @@ class ChromeMixin:
         }
         path = tkfd.asksaveasfilename(
             parent=self.root, title=t("Save template"),
-            defaultextension=".json", initialfile="manoni-language.json",
-            filetypes=[(t("Language file"), "*.json")])
+            defaultextension=".mnl", initialfile="manoni-language.mnl",
+            filetypes=[(t("Language file"), "*.mnl"), (t("All files"), "*.*")])
         if not path:
             return
         try:
@@ -562,34 +563,18 @@ class ChromeMixin:
             self.toast(t("Could not write the file"))
 
     def _lang_import(self, parent_dlg=None):
-        "Load a finished translation .json, install it to LANG_DIR, switch to it."
-        from ..config import LANG_DIR
+        "Pick a finished .mnl (or older .json) translation, install it, switch to it."
         path = tkfd.askopenfilename(
             parent=self.root, title=t("Import a language"),
-            filetypes=[(t("Language file"), "*.json"), (t("All files"), "*.*")])
+            filetypes=[(t("Language file"), ("*.mnl", "*.json")),
+                       (t("All files"), "*.*")])
         if not path:
             return
-        try:
-            with open(path, encoding="utf-8") as f:
-                code, name = i18n.load_pack(json.load(f))
-        except Exception:
+        res = self.install_language_file(path)
+        if res is None:
             self.toast(t("That isn't a valid language file"))
             return
-        # Strip path separators so a hand-written code can't escape LANG_DIR.
-        safe = "".join(ch for ch in code if ch.isalnum() or ch in "-_")
-        if not safe or code == i18n.DEFAULT_LANG:
-            self.toast(t("That language code is reserved"))
-            return
-        try:
-            os.makedirs(LANG_DIR, exist_ok=True)
-            with open(os.path.join(LANG_DIR, f"{safe}.json"), "w",
-                      encoding="utf-8") as f:
-                json.dump({"code": code, "name": name,
-                           "strings": i18n.catalog(code)}, f,
-                          ensure_ascii=False, indent=2)
-        except Exception:
-            self.toast(t("Could not write the file"))
-            return
+        code, name = res
         if parent_dlg is not None:
             try:
                 parent_dlg.destroy()
@@ -598,6 +583,33 @@ class ChromeMixin:
         self.toast(t("Language added: {name}").format(name=name))
         # Switch to the freshly added language (relaunches, restoring the session).
         self.switch_language(code)
+
+    def install_language_file(self, path):
+        "Read a {code,name,strings} pack, validate it, and install it to LANG_DIR."
+        " Returns (code, name), or None if the file isn't a usable language pack."
+        " Does NOT switch the UI language — shared by the Import button and opening"
+        " a .mnl file with Manoni (the latter must not relaunch mid-open)."
+        from ..config import LANG_DIR
+        try:
+            with open(path, encoding="utf-8") as f:
+                code, name = i18n.load_pack(json.load(f))
+        except Exception:
+            return None
+        # Strip path separators so a hand-written code can't escape LANG_DIR;
+        # 'en' is the built-in default and can't be replaced by an import.
+        safe = "".join(ch for ch in code if ch.isalnum() or ch in "-_")
+        if not safe or code == i18n.DEFAULT_LANG:
+            return None
+        try:
+            os.makedirs(LANG_DIR, exist_ok=True)
+            with open(os.path.join(LANG_DIR, f"{safe}.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"manoni_language": 1, "code": code, "name": name,
+                           "strings": i18n.catalog(code)}, f,
+                          ensure_ascii=False, indent=2)
+        except Exception:
+            return None
+        return code, name
 
     def _lang_export_pack(self):
         "Pick an installed language and save its pack to a .json file to share."
@@ -616,16 +628,16 @@ class ChromeMixin:
         self._place_filter_dialog(dlg)
 
     def _write_lang_pack(self, code, name):
-        "Save one installed language ({code,name,strings}) to a chosen .json file."
+        "Save one installed language ({code,name,strings}) to a chosen .mnl file."
         path = tkfd.asksaveasfilename(
             parent=self.root, title=t("Export a language"),
-            defaultextension=".json", initialfile=f"manoni-{code}.json",
-            filetypes=[(t("Language file"), "*.json")])
+            defaultextension=".mnl", initialfile=f"manoni-{code}.mnl",
+            filetypes=[(t("Language file"), "*.mnl"), (t("All files"), "*.*")])
         if not path:
             return
         try:
             with open(path, "w", encoding="utf-8") as f:
-                json.dump({"code": code, "name": name,
+                json.dump({"manoni_language": 1, "code": code, "name": name,
                            "strings": i18n.catalog(code)}, f,
                           ensure_ascii=False, indent=2)
             self.toast(t("Exported → {name}").format(name=os.path.basename(path)))
