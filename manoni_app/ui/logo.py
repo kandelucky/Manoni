@@ -26,9 +26,10 @@ import math
 import os
 import shutil
 import tkinter as tk
+import tkinter.ttk as ttk
 from tkinter import colorchooser
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 import tintkit
 
@@ -47,6 +48,7 @@ class LogoMixin:
     LOGO_MARGIN   = 0.04   # corner-placement inset, as a fraction of the short side
     LOGO_PRESET_PX = 46    # preset thumbnail square, logical px
     LOGO_PRESET_COLS = 4   # thumbnails per row in the preset strip
+    LOGO_GROUP_MAX_H = 150 # a preset group's height before its own scrollbar shows
 
     # --- Panel --------------------------------------------------------------
 
@@ -78,12 +80,14 @@ class LogoMixin:
         tintkit.HoverTip(self._logo_del_btn.canvas, self.theme,
                          t("Remove the selected logo from the photo"))
 
-        # Preset strip: a grid of clickable thumbnails from the bundled + user
-        # logo folders. Rebuilt when a PNG is imported.
-        self._group_header(f, t("Saved logos"))
-        self._logo_preset_host = self._tw(tk.Frame(f), bg="bar")
-        self._logo_preset_host.pack(fill="x", padx=EDIT_PAD, pady=2)
-        self._logo_preset_thumbs = []          # PhotoImages kept alive
+        # Presets live in TWO collapsible, independently scrollable groups: the
+        # shapes bundled with the app and the user's own imported PNGs. Each has a
+        # click-to-fold header and a height-capped scroll body (rebuilt on import).
+        self._logo_preset_thumbs = []          # PhotoImages kept alive (both groups)
+        self._logo_groups = {}                 # key -> {header, body, canvas, inner…}
+        self._logo_collapsed = {"preset": False, "user": False}
+        self._build_logo_group(f, "preset", t("Built-in"))
+        self._build_logo_group(f, "user", t("Your logos"))
         self._refresh_logo_presets()
 
         # Size (as % of the photo's short side) and opacity, each a TitledSlider
@@ -192,18 +196,98 @@ class LogoMixin:
 
     # --- Preset strip -------------------------------------------------------
 
-    def _logo_preset_paths(self):
-        "Every PNG in the bundled + user logo folders (user ones last), sorted."
-        paths = []
-        for d in (LOGO_PRESET_DIR, LOGO_DIR):
-            try:
-                names = sorted(os.listdir(d))
-            except OSError:
-                continue
-            for name in names:
-                if name.lower().endswith(".png"):
-                    paths.append(os.path.join(d, name))
-        return paths
+    LOGO_GROUP_DIRS = {"preset": LOGO_PRESET_DIR, "user": LOGO_DIR}
+
+    def _logo_paths_in(self, folder):
+        "Every PNG in one logo folder, name-sorted (empty list if unreadable)."
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            return []
+        return [os.path.join(folder, n) for n in names if n.lower().endswith(".png")]
+
+    def _build_logo_group(self, parent, key, title):
+        "One collapsible + scrollable preset group: a fold header over a canvas +"
+        " inner grid + auto-hiding slim scrollbar (same nested-scroll recipe as the"
+        " crop size list). Bodies are rebuilt by _populate_logo_group."
+        sec = self._tw(tk.Frame(parent), bg="bar")
+        sec.pack(fill="x", padx=EDIT_PAD, pady=(8, 0))
+        self._tw(tk.Frame(sec, height=1), bg="divider").pack(fill="x", pady=(0, 3))
+
+        header = self._tw(tk.Frame(sec, cursor="hand2"), bg="bar")
+        header.pack(fill="x")
+        chev = self._tw(tk.Label(header, text="▾", font=("Segoe UI", 8)),
+                        bg="bar", fg="fg_dim")
+        chev.pack(side="left")
+        cap = self._tw(tk.Label(header, text=title, anchor="w",
+                       font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim")
+        cap.pack(side="left", padx=(4, 0))
+        cnt = self._tw(tk.Label(header, text="", font=("Segoe UI", 8)),
+                       bg="bar", fg="fg_dim")
+        cnt.pack(side="right")
+
+        maxh = self._edit_dpi_w(self.LOGO_GROUP_MAX_H)
+        body = self._tw(tk.Frame(sec), bg="bar")
+        body.pack(fill="x", pady=(4, 0))
+        cv = self._tw(tk.Canvas(body, highlightthickness=0, bd=0, height=maxh), bg="bar")
+        sb = ttk.Scrollbar(body, orient="vertical", command=cv.yview,
+                           style="Sidebar.Vertical.TScrollbar")
+        cv.configure(yscrollcommand=sb.set)
+        inner = self._tw(tk.Frame(cv), bg="bar")
+        win = cv.create_window((0, 0), window=inner, anchor="nw")
+        cv.pack(side="left", fill="x", expand=True)
+
+        def on_inner(_e=None, cv=cv, inner=inner, sb=sb, maxh=maxh):
+            cv.configure(scrollregion=cv.bbox("all"))
+            need = inner.winfo_reqheight()
+            cv.configure(height=min(need, maxh))
+            if need > maxh:
+                if not sb.winfo_ismapped():
+                    sb.pack(side="right", fill="y", before=cv)
+            else:
+                sb.pack_forget()
+                cv.yview_moveto(0)
+
+        inner.bind("<Configure>", on_inner)
+        cv.bind("<Configure>", lambda e, cv=cv, win=win: cv.itemconfigure(win, width=e.width))
+        self._logo_groups[key] = {"sec": sec, "chev": chev, "count": cnt,
+                                  "body": body, "canvas": cv, "inner": inner,
+                                  "on_inner": on_inner}
+        for w in (header, chev, cap, cnt):
+            w.bind("<Button-1>", lambda e, k=key: self._toggle_logo_group(k))
+        self._bind_logo_group_wheel(key, cv)
+
+    def _toggle_logo_group(self, key):
+        "Fold / unfold one preset group, then refresh the outer panel's scroll extent."
+        g = self._logo_groups.get(key)
+        if not g:
+            return
+        collapsed = not self._logo_collapsed.get(key, False)
+        self._logo_collapsed[key] = collapsed
+        if collapsed:
+            g["body"].pack_forget()
+            g["chev"].configure(text="▸")
+        else:
+            g["body"].pack(fill="x", pady=(4, 0))    # re-packs after the header
+            g["chev"].configure(text="▾")
+            g["on_inner"]()
+        self.root.after_idle(self._sync_section_scroll)
+
+    def _bind_logo_group_wheel(self, key, widget):
+        "Arm the wheel on a group's canvas + every descendant so it scrolls that"
+        " group (not the outer panel or the photo)."
+        widget.bind("<MouseWheel>", lambda e, k=key: self._logo_group_wheel(k, e))
+        for c in widget.winfo_children():
+            self._bind_logo_group_wheel(key, c)
+
+    def _logo_group_wheel(self, key, e):
+        "Scroll one preset group if it overflows its cap; swallow the event either way."
+        g = self._logo_groups.get(key)
+        if g is not None:
+            cv = g["canvas"]
+            if g["inner"].winfo_reqheight() > int(cv["height"]):
+                cv.yview_scroll(-1 if e.delta > 0 else 1, "units")
+        return "break"
 
     def _is_user_logo(self, path):
         "True if `path` sits in the user's writable my_logos folder — those can be"
@@ -214,66 +298,98 @@ class LogoMixin:
         except (OSError, ValueError):
             return False
 
+    @staticmethod
+    def _checker_tile(px):
+        "A px×px checkerboard in two mid greys — a neutral backdrop that reads a"
+        " white shape, a black shape and the transparent hole of an outline alike."
+        cell = max(4, px // 8)
+        tile = Image.new("RGBA", (px, px), (120, 120, 120, 255))
+        d = ImageDraw.Draw(tile)
+        for y in range(0, px, cell):
+            for x in range(0, px, cell):
+                if (x // cell + y // cell) % 2:
+                    d.rectangle([x, y, x + cell - 1, y + cell - 1], fill=(165, 165, 165, 255))
+        return tile
+
     def _logo_thumb(self, path):
-        "A PhotoImage of `path` fitted into a light tile so light AND dark logos"
-        " both read (a transparent logo on the dark chip could vanish otherwise)."
+        "A PhotoImage of `path` on a soft checkerboard so light AND dark logos both"
+        " read — a white shape (or an outline's see-through centre) would vanish on"
+        " a flat tile, and a dark one vanishes on the dark chip."
         px = round(self.LOGO_PRESET_PX * getattr(self, "dpi", 1.0))
         try:
             im = Image.open(path).convert("RGBA")
         except Exception:
             return None
         im.thumbnail((px, px), Image.LANCZOS)
-        tile = Image.new("RGBA", (px, px), (200, 200, 200, 255))
+        tile = self._checker_tile(px)
         tile.paste(im, ((px - im.width) // 2, (px - im.height) // 2), im)
         return ImageTk.PhotoImage(tile.convert("RGB"))
 
     def _refresh_logo_presets(self):
-        "Rebuild the preset thumbnail grid from the two logo folders."
-        host = getattr(self, "_logo_preset_host", None)
-        if host is None:
+        "Rebuild BOTH preset groups from their folders, then resettle the scroll."
+        if not getattr(self, "_logo_groups", None):
             return
-        for w in host.winfo_children():
+        self._logo_preset_thumbs = []          # both groups share one keep-alive list
+        for key, folder in self.LOGO_GROUP_DIRS.items():
+            self._populate_logo_group(key, folder)
+        self.root.after_idle(self._sync_section_scroll)
+
+    def _populate_logo_group(self, key, folder):
+        "Fill one group's inner grid with its folder's PNG thumbnails (or a hint)."
+        g = self._logo_groups.get(key)
+        if g is None:
+            return
+        inner = g["inner"]
+        for w in inner.winfo_children():
             w.destroy()
-        self._logo_preset_thumbs = []
-        paths = self._logo_preset_paths()
+        paths = self._logo_paths_in(folder)
+        g["count"].configure(text=str(len(paths)) if paths else "")
         if not paths:
-            self._tw(tk.Label(host, text=t("No saved logos yet — use Choose PNG…"),
-                     font=("Segoe UI", 8), justify="left", anchor="w",
-                     wraplength=self._edit_dpi_w(190)),
+            msg = (t("No saved logos yet — use Choose PNG…") if key == "user"
+                   else t("No built-in shapes found"))
+            self._tw(tk.Label(inner, text=msg, font=("Segoe UI", 8), justify="left",
+                     anchor="w", wraplength=self._edit_dpi_w(180)),
                      bg="bar", fg="fg_dim").pack(fill="x", pady=2)
-            return
-        grid = self._tw(tk.Frame(host), bg="bar")
-        grid.pack(anchor="w")
-        for i, path in enumerate(paths):
-            thumb = self._logo_thumb(path)
-            self._logo_preset_thumbs.append(thumb)   # keep the ref alive
-            cell = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1),
-                            bg="chip", hl="border")
-            cell.grid(row=i // self.LOGO_PRESET_COLS,
-                      column=i % self.LOGO_PRESET_COLS, padx=2, pady=2)
-            if thumb is not None:
-                lbl = tk.Label(cell, image=thumb, bg=self.theme["chip"], bd=0)
-            else:
-                lbl = self._tw(tk.Label(cell, text="?", width=4, height=2),
-                               bg="chip", fg="fg_dim")
-            lbl.pack()
-            for w in (cell, lbl):
-                w.bind("<Button-1>", lambda e, p=path: self._add_logo(p))
-                w.bind("<Enter>", lambda e, c=cell: c.configure(
-                    highlightbackground=self.theme["accent"]))
-                w.bind("<Leave>", lambda e, c=cell: c.configure(
-                    highlightbackground=self.theme["border"]))
-            tintkit.HoverTip(lbl, self.theme, os.path.basename(path))
-            # User-imported logos carry a small ✕ badge to delete them from the
-            # library; the bundled read-only presets don't (nothing to delete).
-            if self._is_user_logo(path):
-                x = tk.Label(cell, text="✕", font=("Segoe UI", 8, "bold"),
-                             bg=self.theme["bg"], fg="#ff8a8a", cursor="hand2",
-                             padx=2, bd=0)
-                x.place(relx=1.0, rely=0.0, anchor="ne")
-                x.bind("<Button-1>",
-                       lambda e, p=path: (self._delete_saved_logo(p), "break")[1])
-                tintkit.HoverTip(x, self.theme, t("Remove from your saved logos"))
+        else:
+            grid = self._tw(tk.Frame(inner), bg="bar")
+            grid.pack(anchor="w")
+            for i, path in enumerate(paths):
+                self._logo_preset_cell(grid, i, path)
+        self._bind_logo_group_wheel(key, g["canvas"])   # re-arm wheel on fresh rows
+        inner.update_idletasks()
+        g["on_inner"]()                                  # cap height + toggle scrollbar
+
+    def _logo_preset_cell(self, grid, i, path):
+        "One clickable preset thumbnail; user PNGs also get a ✕ delete badge."
+        thumb = self._logo_thumb(path)
+        self._logo_preset_thumbs.append(thumb)           # keep the ref alive
+        cell = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1),
+                        bg="chip", hl="border")
+        cell.grid(row=i // self.LOGO_PRESET_COLS,
+                  column=i % self.LOGO_PRESET_COLS, padx=2, pady=2)
+        if thumb is not None:
+            lbl = tk.Label(cell, image=thumb, bg=self.theme["chip"], bd=0)
+        else:
+            lbl = self._tw(tk.Label(cell, text="?", width=4, height=2),
+                           bg="chip", fg="fg_dim")
+        lbl.pack()
+        for w in (cell, lbl):
+            w.bind("<Button-1>", lambda e, p=path: self._add_logo(p))
+            w.bind("<Enter>", lambda e, c=cell: c.configure(
+                highlightbackground=self.theme["accent"]))
+            w.bind("<Leave>", lambda e, c=cell: c.configure(
+                highlightbackground=self.theme["border"]))
+        tintkit.HoverTip(lbl, self.theme, os.path.basename(path))
+        # User-imported logos carry a small ✕ badge to delete them from the
+        # library; the bundled read-only presets don't (nothing to delete).
+        if self._is_user_logo(path):
+            x = tk.Label(cell, text="✕", font=("Segoe UI", 8, "bold"),
+                         bg=self.theme["bg"], fg="#ff8a8a", cursor="hand2",
+                         padx=2, bd=0)
+            x.place(relx=1.0, rely=0.0, anchor="ne")
+            x.bind("<Button-1>",
+                   lambda e, p=path: (self._delete_saved_logo(p), "break")[1])
+            tintkit.HoverTip(x, self.theme, t("Remove from your saved logos"))
 
     def _import_logo(self):
         "‘Choose PNG…’: pick a PNG, copy it into the user logo folder (so it is"
