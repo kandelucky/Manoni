@@ -390,6 +390,14 @@ class SettingsMixin:
 
         win.note(t("These are the defaults the Save dialog opens with."))
 
+        win.group(t("Overwrite (Ctrl+S)"))
+        r = win.row(t("Ask before overwriting the original"),
+                    t("Ctrl+S and the Save button write your edits back over the "
+                      "open file. Keep this on to confirm first — there is no "
+                      "backup of the original."))
+        tintkit.Toggle(r, self.theme, value=getattr(self, "confirm_overwrite", True),
+                command=lambda on: self._set_pref("confirm_overwrite", on)).pack()
+
     def _set_export_subfolder_row(self, win):
         "Edit the per-photo subfolder name (mode “subfolder”)."
         right = win.row(t("Subfolder name"),
@@ -440,6 +448,14 @@ class SettingsMixin:
         win.note(t("The keep / reject buttons (and the ↑ / ↓ keys) move "
                    "the current photo into these folders. Ctrl+Z undoes "
                    "the last move."))
+
+        win.group(t("Auto-save while culling"))
+        r = win.row(t("Save an edited copy when you move on"),
+                    t("As you ← / → or ↑ / ↓ off an edited photo, silently write "
+                      "a copy to the export folder — no prompt. Off shows the "
+                      "usual Save / Discard prompt instead."))
+        tintkit.Toggle(r, self.theme, value=getattr(self, "autosave_copy", False),
+                command=lambda on: self._set_pref("autosave_copy", on)).pack()
 
         win.group(t("At the end of the folder"))
         r = win.row(t("When you pass the last photo"),

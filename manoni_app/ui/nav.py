@@ -132,113 +132,124 @@ class NavMixin:
         self.show_current()   # re-reads the file → original pixels, all edits reset
         self.toast(t("The original is back — every edit was cleared"))
 
-    def _ask_restore_original(self):
-        "Confirm before wiping the live edits (not undoable). Returns True to proceed."
-        result = {"ok": False}
-        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
-        dlg = tk.Toplevel(self.root)
-        dlg.title(t("Restore the original?"))
-        dlg.configure(bg=bg)
+    def _confirm_dialog(self, title, message, buttons, checkbox=None, width=360):
+        """The shared kit-standard confirm modal behind the save / restore prompts:
+        a self._tw-threaded Toplevel (follows dark<->light), DPI-scaled padding,
+        centered with keyboard nav.
+
+        `buttons` is a list of (key, label, role) in VISUAL left-to-right order,
+        the primary first; they pack right-to-left so the primary sits leftmost and
+        Cancel rightmost (the house order), and Enter fires the primary. `checkbox`
+        is an optional (label, key) tick. Returns (choice_key, checkbox_on);
+        closing / Escape gives ("cancel", False), so pass a "cancel" button."""
+        state = {"choice": "cancel", "chk": False}
+        dlg = self._tw(tk.Toplevel(self.root), bg="bg")
+        dlg.title(title)
         dlg.transient(self.root)
         dlg.resizable(False, False)
 
-        def choose(ok):
-            result["ok"] = ok
+        def choose(k):
+            state["choice"] = k
             dlg.destroy()
 
-        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
+        wrap = self._tw(tk.Frame(dlg, padx=self._edit_dpi_w(22),
+                                 pady=self._edit_dpi_w(18)), bg="bg")
         wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("Restore the original?"), bg=bg, fg=fg,
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        fname = self.files[self.index] if self.files else ""
-        tk.Label(wrap, text=t("Discard every edit on {fname} and reload the original "
-                              "from disk?").format(fname=fname),
-                 bg=bg, fg=fg_dim, font=("Segoe UI", 9),
-                 wraplength=360, justify="left").pack(anchor="w", pady=(4, 16))
+        self._tw(tk.Label(wrap, text=title, font=("Segoe UI", 11, "bold")),
+                 bg="bg", fg="fg").pack(anchor="w")
+        self._tw(tk.Label(wrap, text=message, font=("Segoe UI", 9), justify="left",
+                 wraplength=self._edit_dpi_w(width)), bg="bg", fg="fg_dim").pack(
+            anchor="w", pady=(self._edit_dpi_w(4), self._edit_dpi_w(15)))
 
-        row = tk.Frame(wrap, bg=bg)
-        row.pack(anchor="e")
-        tintkit.Button(row, self.theme, t("Cancel"), role="neutral",
-                       variant="outline", command=lambda: choose(False)).pack(
-            side="right", padx=(8, 0))
-        tintkit.Button(row, self.theme, t("Restore"), role="primary",
-                       command=lambda: choose(True)).pack(side="right")
+        if checkbox:
+            def toggled(s):
+                state["chk"] = (s == "on")
+            tintkit.Checkbox(wrap, self.theme, checkbox[0], state="off",
+                             command=toggled, bg="bg").pack(
+                anchor="w", pady=(0, self._edit_dpi_w(2)))
 
-        dlg.protocol("WM_DELETE_WINDOW", lambda: choose(False))
-        dlg.bind("<Escape>", lambda e: choose(False))
-        dlg.bind("<Return>", lambda e: choose(True))
+        row = self._tw(tk.Frame(wrap), bg="bg")
+        row.pack(anchor="e", pady=(self._edit_dpi_w(16), 0))
+        for key, label, role in reversed(buttons):     # cancel packs first → rightmost
+            tintkit.Button(row, self.theme, label, role=role,
+                           variant="filled" if role == "primary" else "outline",
+                           command=lambda k=key: choose(k), bg="bg").pack(
+                side="right", padx=(self._edit_dpi_w(8), 0))
+
+        dlg.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
+        dlg.bind("<Escape>", lambda e: choose("cancel"))
+        dlg.bind("<Return>", lambda e: choose(buttons[0][0]))   # Enter = primary
         center_over(self.root, dlg)
         dlg.grab_set()
         dlg.focus_set()
         self.root.wait_window(dlg)
-        return result["ok"]
+        return state["choice"], state["chk"]
+
+    def _ask_restore_original(self):
+        "Confirm before wiping the live edits (not undoable). Returns True to proceed."
+        fname = self.files[self.index] if self.files else ""
+        choice, _ = self._confirm_dialog(
+            t("Restore the original?"),
+            t("Discard every edit on {fname} and reload the original from disk?")
+            .format(fname=fname),
+            [("restore", t("Restore"), "primary"),
+             ("cancel", t("Cancel"), "neutral")])
+        return choice == "restore"
 
     def _maybe_prompt_save(self):
-        "Before leaving an edited photo, offer to save a copy. Returns False to stay."
-        if not getattr(self, "warn_unsaved", True):
-            return True                  # the user turned the unsaved-edit warning off
+        """Before leaving an edited photo (←/→, ↑/↓ cull, folder switch, close):
+        auto-save a copy, ask, or just go. Returns False only to STAY put.
+
+        With 'auto-save copies while culling' on, an edited photo silently drops a
+        copy into the export folder and we move on — the fast many-photos flow.
+        Otherwise the unsaved-edit prompt offers Save-a-copy / Discard / Cancel
+        (unless that warning is switched off, in which case edits are dropped).
+        This runs for BOTH the ← / → step and the ↑ / ↓ cull, so a keep / reject
+        that would move the original off-screen also saves the edit first."""
         if not self._has_unsaved_edits():
             return True
+        if getattr(self, "autosave_copy", False):
+            self._auto_save_copy()       # silent copy → _edited, then move on
+            return True
+        if not getattr(self, "warn_unsaved", True):
+            return True                  # warning off → leave; live edits are dropped
         choice = self._ask_save_copy()
         if choice == "cancel":
             return False
         if choice == "save":
-            return self.quick_save()     # quick-save logic (opens dialog if unarmed)
+            return bool(self._auto_save_copy())
         return True                      # 'discard' → leave; live edits are dropped
 
     def _ask_save_copy(self):
-        """Modal dark dialog shown when leaving a photo that has unsaved edits.
-
-        Offers to save an edited copy (into _edited), discard the edits, or stay
-        on the photo. Returns 'save', 'discard', or 'cancel'.
-        """
-        result = {"choice": "cancel"}
-        bg, fg, fg_dim = self.theme["bg"], self.theme["fg"], self.theme["fg_dim"]
-        dlg = tk.Toplevel(self.root)
-        dlg.title(t("Save?"))
-        dlg.configure(bg=bg)
-        dlg.transient(self.root)
-        dlg.resizable(False, False)
-
-        def choose(c):
-            result["choice"] = c
-            dlg.destroy()
-
-        wrap = tk.Frame(dlg, bg=bg, padx=22, pady=18)
-        wrap.pack(fill="both", expand=True)
-        tk.Label(wrap, text=t("The image has changed"), bg=bg, fg=fg,
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        """Prompt shown when leaving a photo with unsaved edits: save an edited
+        copy (into _edited), discard the edits, or stay. Returns 'save',
+        'discard' or 'cancel'."""
         fname = self.files[self.index] if self.files else ""
-        tk.Label(wrap, text=t("{fname} — save a copy to _edited?").format(fname=fname), bg=bg,
-                 fg=fg_dim, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 16))
+        choice, _ = self._confirm_dialog(
+            t("The image has changed"),
+            t("{fname} — save a copy to _edited?").format(fname=fname),
+            [("save", t("Save"), "primary"),
+             ("discard", t("Don't save"), "neutral"),
+             ("cancel", t("Cancel"), "neutral")])
+        return choice
 
-        row = tk.Frame(wrap, bg=bg)
-        row.pack(anchor="e")
-        tintkit.Button(row, self.theme, t("Cancel"), role="neutral",
-                       variant="outline", command=lambda: choose("cancel")).pack(
-            side="right", padx=(8, 0))
-        tintkit.Button(row, self.theme, t("Don't save"), role="neutral",
-                       variant="outline",
-                       command=lambda: choose("discard")).pack(
-            side="right", padx=(8, 0))
-        tintkit.Button(row, self.theme, t("Save"), role="primary",
-                       command=lambda: choose("save")).pack(side="right")
-
-        dlg.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
-        dlg.bind("<Escape>", lambda e: choose("cancel"))
-        dlg.bind("<Return>", lambda e: choose("save"))
-
-        # Center the dialog over the main window.
-        dlg.update_idletasks()
-        w, h = dlg.winfo_width(), dlg.winfo_height()
-        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-        rw, rh = self.root.winfo_width(), self.root.winfo_height()
-        dlg.geometry(f"+{max(0, rx + (rw - w) // 2)}+{max(0, ry + (rh - h) // 2)}")
-
-        dlg.grab_set()
-        dlg.focus_set()
-        self.root.wait_window(dlg)
-        return result["choice"]
+    def _ask_overwrite(self, fname):
+        """Ask what Ctrl+S should do: overwrite the original in place, save a copy
+        instead (Save as…), or cancel. Returns 'overwrite', 'saveas' or 'cancel'.
+        A 'Don't ask again' tick — only meaningful for Overwrite — turns the
+        confirmation off for good (persisted)."""
+        choice, dont = self._confirm_dialog(
+            t("Overwrite the original?"),
+            t("Write your edits straight onto {fname}, replacing it — no backup, "
+              "can't be undone. Or save a copy instead.").format(fname=fname),
+            [("overwrite", t("Overwrite"), "primary"),
+             ("saveas", t("Save as…"), "neutral"),
+             ("cancel", t("Cancel"), "neutral")],
+            checkbox=(t("Don't ask again"), "dont"), width=380)
+        if choice == "overwrite" and dont:
+            self.confirm_overwrite = False       # honoured next time; persist it now
+            self._save_state()
+        return choice
 
     def prev(self):
         if self.files:

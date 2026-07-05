@@ -376,7 +376,7 @@ class ActionsMixin:
 
     def _ask_batch_config(self, n, title=None, intro=None, default_dir=None):
         "Dialog: output folder + format + quality for a folder batch. None = cancel."
-        seed = self.quick_save_cfg or self.last_save or {}
+        seed = self.last_save or {}
         default_dir = default_dir or os.path.join(self.folder, "_actions")
         title = title or t("Apply to whole folder")
         intro = intro or t("Apply this action to all {n} photos and save copies.").format(n=n)

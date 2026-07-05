@@ -448,10 +448,16 @@ class PerspApp(PerspectiveMixin):
     def toast(self, msg): self._toasts.append(msg)
     def _clear_focus_for_geometry(self): pass
     def _clear_text_for_geometry(self): pass
+    def _clear_logo_for_geometry(self): pass
     def _restyle_crop_chips(self): pass
     def _render_preview(self): pass
     def _update_info(self, *a): pass
     def _refresh_filter_strip(self): pass
+    # Geometry-undo hooks: the real commit records one undo entry via these
+    # (NavMixin). The snapshot's contents don't affect the commit logic under
+    # test, so both are stubbed out.
+    def _geometry_snapshot(self): return {}
+    def _record_geometry(self, before): pass
 
 
 @check
@@ -500,6 +506,55 @@ def _quad_image(w, h):
         for x in range(w):
             px[x, y] = (200 if x < w // 2 else 60, 200 if y < h // 2 else 60, 120)
     return img
+
+
+# ---- overwrite: in-place save (Ctrl+S) -------------------------------------
+
+@check
+def overwrite_fmt_maps_known_extensions():
+    a = app()
+    assert a._overwrite_fmt("Photo.JPG") == "JPEG", "jpg not mapped to JPEG"
+    assert a._overwrite_fmt("a.jpeg") == "JPEG", "jpeg not mapped to JPEG"
+    assert a._overwrite_fmt("a.PNG") == "PNG", "png not mapped to PNG"
+    assert a._overwrite_fmt("a.webp") == "WEBP", "webp not mapped to WEBP"
+    assert a._overwrite_fmt("a.tif") is None, "unhandled .tif not rejected"
+    assert a._overwrite_fmt("noext") is None, "extensionless not rejected"
+
+
+@check
+def overwrite_writes_in_place_never_a_copy():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        target = os.path.join(d, "photo.jpg")
+        Image.new("RGB", (16, 16), (200, 100, 50)).save(target, "JPEG", quality=95)
+        before = open(target, "rb").read()
+
+        a = app()
+        a.folder, a.files, a.index = d, ["photo.jpg"], 0
+        a.current_pil = Image.open(target)
+        a.current_pil.load()                       # closes the fp (exclusive) → replace ok
+        # Collaborators that live on the Tk / viewer mixins → harmless stubs.
+        a._apply_edits = lambda img: Image.new("RGB", img.size, (10, 20, 30))
+        a._capture_last_filter = lambda: None
+        a._refresh_saved_indicator = lambda: None
+
+        assert a._write_overwrite(target) is True, "overwrite reported failure"
+        # Wrote back onto the SAME file — no numbered copy beside it (unique_path
+        # is deliberately skipped for an in-place save).
+        assert os.listdir(d) == ["photo.jpg"], \
+            f"overwrite left extra files: {os.listdir(d)}"
+        assert open(target, "rb").read() != before, "overwrite did not change the file"
+        assert Image.open(target).format == "JPEG", "overwrite changed the format"
+        assert a._edits_saved is True, "overwrite left edits marked unsaved"
+
+
+@check
+def overwrite_refuses_unhandled_type():
+    a = app()
+    a.folder, a.files, a.index = ".", ["photo.tif"], 0
+    a.current_pil = Image.new("RGB", (4, 4))
+    # No handler for .tif → refuse before touching disk (returns False, no write).
+    assert a._write_overwrite("photo.tif") is False, "tif overwrite not refused"
 
 
 def main():

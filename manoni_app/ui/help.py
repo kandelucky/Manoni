@@ -233,12 +233,13 @@ class HelpMixin:
         self._help_key_row(win, "←  /  →", "Previous / next photo.")
         self._help_key_row(win, "↑  /  ↓", "Keep / reject the current photo.")
         win.note(t("These work whether the edit panel is open or closed; if the "
-                   "photo has unsaved edits, Manoni offers to save first."))
+                   "photo has unsaved edits, Manoni saves a copy or asks first "
+                   "(Settings → Culling → Auto-save)."))
 
         win.group(t("Anytime"))
         self._help_key_row(win, "Ctrl + O", "Open a folder of photos.")
-        self._help_key_row(win, "Ctrl + S",
-                           "Quick-save an edited copy  (Save-as the first time).")
+        self._help_key_row(win, "Ctrl + S", "Save — overwrite the open file.")
+        self._help_key_row(win, "Ctrl + Shift + S", "Save as… — write a new copy.")
         self._help_key_row(win, "Ctrl + Z", "Undo.")
         self._help_key_row(win, "Ctrl + Y", "Redo  (or Ctrl + Shift + Z).")
         self._help_key_row(win, "Ctrl + R", "Show / hide the pixel rulers.")
@@ -333,13 +334,33 @@ class HelpMixin:
     # --- Save & Export tab --------------------------------------------------
 
     def _help_tab_export(self, win):
-        win.group(t("Export your edits"))
-        self._help_row(win, "upload", "Save as…",
-                       "Choose the format (JPEG / PNG / WEBP), quality and where "
-                       "to save.")
+        win.group(t("Three ways to save"))
+        self._help_row(win, "save", "Save — overwrite",
+                       "Ctrl+S (or the Save button under the edit panel, and the "
+                       "Save button in the top bar) writes your edits straight "
+                       "back onto the open file, replacing it. There is no "
+                       "backup, so the first time it asks you to confirm.")
+        self._help_row(win, "upload", "Save as… — a copy",
+                       "Ctrl+Shift+S (or Save as… in the top bar) opens a dialog "
+                       "to write a NEW file — pick the format (JPEG / PNG / WEBP), "
+                       "quality and folder. The original is left untouched.")
+        self._help_row(win, "folder-check", "Quick copy while culling",
+                       "Turn on Settings → Culling → Auto-save, and each time you "
+                       "← / → or ↑ / ↓ off an edited photo Manoni silently drops "
+                       "a copy in the export folder — no clicks. With it off, it "
+                       "asks (Save a copy / Discard) before you leave.")
+
+        win.group(t("Saved, or not?"))
+        self._help_row(win, "circle-dot", "The ● dot",
+                       "A ● in front of the file name — in the bottom bar and the "
+                       "window title — means the photo has edits not yet saved "
+                       "anywhere. It disappears the moment you save.")
+
+        win.group(t("Where copies land"))
         self._help_row(win, "folder-output", "Output folder",
-                       "Save in a subfolder next to each photo, or to one fixed "
-                       "folder — set the default in Settings → Export.")
+                       "Save as… and the culling copy default to a subfolder next "
+                       "to each photo, or to one fixed folder — set it in "
+                       "Settings → Export.")
 
         win.group(t("Metadata"))
         self._help_row(win, "info", "View or delete",
@@ -350,5 +371,6 @@ class HelpMixin:
                        "file, keeping the pixels exactly.")
         self._help_row(win, "upload", "Keep or strip on export",
                        "The same camera info, date, GPS and colour profile can "
-                       "also be kept or removed when you export.")
-        win.note(t("The export defaults live in Settings → Export."))
+                       "also be kept or removed when you save a copy.")
+        win.note(t("The overwrite confirmation and every export default live in "
+                   "Settings → Export."))

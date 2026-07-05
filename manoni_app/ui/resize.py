@@ -676,7 +676,7 @@ class ResizeMixin:
         """Dialog for the whole-folder resize: source folder (+ sub-folders),
         output layout (flat / mirror tree / in-place sub-folder), format +
         quality. Returns a config dict, or None on cancel."""
-        seed = self.quick_save_cfg or self.last_save or {}
+        seed = self.last_save or {}
         st = {"src": start_dir, "recurse": False, "out_mode": "flat",
               "out_dir": os.path.join(start_dir, "_resized") if start_dir else "_resized",
               "sub_name": "resized",

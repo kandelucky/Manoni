@@ -288,14 +288,16 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # vertical / horizontal, 0 = none. A destructive in-memory bake on commit.
         self.persp_v = 0.0
         self.persp_h = 0.0
-        self._edits_saved = False  # are the current photo's edits already saved to a copy?
-        # Save model: "quick save" (rail button + leaving an edited photo) writes
-        # silently using quick_save_cfg = {dir, fmt, quality}. It starts UNSET each
-        # session on purpose, so the first quick save opens the full Save-as dialog
-        # (where it gets armed). last_save = the dialog's remembered defaults
-        # (folder/format/quality), persisted across sessions in the state file.
-        self.quick_save_cfg = None    # armed only within this session (never loaded)
-        self.last_save = None         # {dir, fmt, quality} remembered for the dialog
+        self._edits_saved = False  # are the current photo's edits already saved anywhere?
+        # Save model — three separate paths:
+        #   • overwrite_save() (Ctrl+S, the panel + top-bar Save) writes the edits
+        #     straight back onto the open original, in place.
+        #   • _save_as_dialog() (Ctrl+Shift+S, top-bar Save as…) writes a fresh copy;
+        #     its folder/format/quality defaults live in last_save, persisted across
+        #     sessions in the state file.
+        #   • _auto_save_copy() silently drops an edited copy into the export folder
+        #     when you leave an edited photo (the culling quick-save, autosave_copy).
+        self.last_save = None         # {dir, fmt, quality, keep_meta, to_srgb} for the dialog
         # The "Last" filter: a session-only slot holding the slider look of the
         # most recent MEANINGFUL save (one that changed the sliders). A save that
         # touched only geometry (crop / rotate) leaves the previous slot alone. It
@@ -317,6 +319,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.restore_photo = True     # …and land on the last photo (else the first)
         self.confirm_reject = False   # ask before the reject (✗) move
         self.warn_unsaved = True      # offer to save when leaving an edited photo
+        self.autosave_copy = False    # cull mode: silently save an edited copy on ←/→ and ↑/↓
+        self.confirm_overwrite = True # ask before Ctrl+S overwrites the original in place
         self.first_run_done = False   # flips true after the very first launch ever
         # Where the Save dialog defaults to (Settings → Export → Output):
         #   "subfolder" → a folder named export_subfolder beside each photo,
@@ -517,7 +521,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.toggle_rulers()
             return "break"
         if ks == "s" or kc == self._VK_S:
-            self.quick_save()               # silent quick save (Save-as if unarmed)
+            # Ctrl+S saves in place (overwrite the original); Ctrl+Shift+S opens
+            # the Save-as dialog for a fresh copy.
+            self._save_as_dialog() if shift else self.overwrite_save()
             return "break"
         if ks == "o" or kc == self._VK_O:
             self.open_folder()              # native folder picker
@@ -570,6 +576,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "restore_photo": self.restore_photo,
                  "confirm_reject": self.confirm_reject,
                  "warn_unsaved": self.warn_unsaved,
+                 "autosave_copy": self.autosave_copy,
+                 "confirm_overwrite": self.confirm_overwrite,
                  "first_run_done": self.first_run_done,
                  "scheme": self.theme.scheme,   # dark / light interface theme
                  "accent": self.theme.accent,   # highlight colour (accent picker)
@@ -644,7 +652,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             self.theme.set(accent=accent)
         # Simple General toggles (each defaults as set in __init__ if absent).
         for key in ("restore_session", "restore_photo", "confirm_reject",
-                    "warn_unsaved", "show_filter_strip", "show_histogram",
+                    "warn_unsaved", "autosave_copy", "confirm_overwrite",
+                    "show_filter_strip", "show_histogram",
                     "basic_full", "fast_preview", "async_render", "first_run_done"):
             val = state.get(key)
             if isinstance(val, bool):
@@ -653,8 +662,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         lang = state.get("language")
         if isinstance(lang, str):
             i18n.set_language(lang)
-        # Save-as defaults (folder/format/quality). NOT quick_save_cfg — that stays
-        # unset each session so the first quick save always opens the dialog.
+        # Save-as dialog defaults (folder/format/quality/metadata), remembered
+        # across sessions so the dialog reopens the way you last left it.
         ls = state.get("last_save")
         if isinstance(ls, dict) and isinstance(ls.get("dir"), str) \
                 and ls.get("fmt") in ("JPEG", "PNG", "WEBP"):

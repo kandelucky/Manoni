@@ -415,6 +415,7 @@ class ViewerMixin:
         `_view_base` in place per dab, so it must not hand that live-mutating
         buffer to the worker thread (which would read it while the next dab writes).
         """
+        self._refresh_saved_indicator()   # keep the unsaved ● in step with edits
         if self.current_pil is None:
             if self._message:
                 self._draw_message(self._message)
@@ -834,7 +835,6 @@ class ViewerMixin:
         return (not self.fit_mode) and abs(self.user_scale - chip._scale) < 1e-3
 
     def _update_info(self, path):
-        file = self.files[self.index]
         try:
             w, h = self.current_pil.size if self.current_pil else (0, 0)
             size_kb = os.path.getsize(path) / 1024
@@ -842,13 +842,39 @@ class ViewerMixin:
             mtime = datetime.datetime.fromtimestamp(os.path.getmtime(path))
             date_txt = mtime.strftime("%Y/%m/%d %H:%M")
             folder = os.path.dirname(path)
-            self.lbl_name.configure(text=file)
             # Remember this line so the nav-button hover hints can restore it
             # when the pointer leaves (they borrow the same info bar).
             self._info_text = (f"{self.index+1}/{len(self.files)}   ·   {w}×{h}"
                                f"   ·   {size_txt}   ·   {date_txt}   ·   {folder}")
             self.lbl_info.configure(text=self._info_text, fg=self.theme["fg_dim"])
         except Exception:
-            self.lbl_name.configure(text=file)
             self._info_text = ""
             self.lbl_info.configure(text="", fg=self.theme["fg_dim"])
+        # The name label carries the unsaved ● marker, so route it through the
+        # indicator (which also refreshes the window title).
+        self._refresh_saved_indicator()
+
+    def _refresh_saved_indicator(self):
+        """Mark the current photo saved / unsaved in the info-bar name and the
+        window title: a leading ● while it has edits not yet written anywhere,
+        gone once saved. A change-guard skips redundant work, so it is cheap
+        enough to call on every render / edit."""
+        lbl = getattr(self, "lbl_name", None)
+        if lbl is None:
+            return
+        file = self.files[self.index] if self.files else None
+        dirty = bool(file) and self._has_unsaved_edits()
+        key = (file, dirty)
+        if key == getattr(self, "_indicator_key", None):
+            return
+        self._indicator_key = key
+        dot = "● " if dirty else ""           # ● when there are unsaved edits
+        try:
+            if file is None:
+                self.root.title("Manoni")
+                lbl.configure(text="Manoni")
+            else:
+                lbl.configure(text=dot + file)
+                self.root.title(f"{dot}{file} — Manoni")
+        except Exception:
+            pass

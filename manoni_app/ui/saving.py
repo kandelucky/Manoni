@@ -6,6 +6,7 @@ behaviour is identical to when it lived directly on the class.
 
 import io
 import os
+import tempfile
 import tkinter as tk
 import tkinter.filedialog as tkfd
 
@@ -114,26 +115,110 @@ class SaveMixin:
             return None
         self._edits_saved = True                   # on disk now → no re-prompt
         self._capture_last_filter()                # remember this look as "Last"
+        self._refresh_saved_indicator()            # clear the unsaved ● mark
         return out
 
-    def quick_save(self):
-        """Rail button + 'save on leaving an edited photo'. Writes silently with the
-        session's quick-save config. If that isn't armed yet THIS session, open the
-        full Save-as dialog instead (which can arm it). Returns True if saved."""
+    # --- Overwrite: save the edits straight back onto the open file ----------
+
+    _EXT_FMT = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".webp": "WEBP"}
+
+    def _overwrite_fmt(self, path):
+        "PIL format to write when overwriting `path` in place, or None if we don't"
+        " handle that file type (then the user must fall back to Save as…)."
+        return self._EXT_FMT.get(os.path.splitext(path)[1].lower())
+
+    def _write_overwrite(self, target):
+        """Apply the live edits to the FULL-RES original and write them BACK OVER
+        `target` — the open file itself — in its own format. Metadata is carried
+        across (Orientation forced to 1). Returns True on success.
+
+        This is the one save that DELIBERATELY replaces an existing file, so it
+        skips unique_path. It is still crash-safe: the bytes go to a temp file in
+        the same folder first and are swapped in with os.replace, so the file on
+        disk is always either the whole old photo or the whole new one — never a
+        half-written original. There is no backup — the original pixels are gone."""
+        fmt = self._overwrite_fmt(target)
+        if fmt is None:
+            self.toast(t("Can't overwrite this file type — use Save as…"))
+            return False
+        tmp = None
+        try:
+            extra = self._export_meta()            # ICC + EXIF, Orientation → 1
+            img = self._apply_edits(self.current_pil.convert("RGB"))
+            directory = os.path.dirname(target) or "."
+            # Temp file in the SAME folder so os.replace is a true atomic rename.
+            fd, tmp = tempfile.mkstemp(suffix=os.path.splitext(target)[1],
+                                       dir=directory)
+            os.close(fd)
+            if fmt == "PNG":
+                img.save(tmp, "PNG", **extra)      # lossless; quality n/a
+            else:
+                quality = int((getattr(self, "last_save", None) or {}).get("quality", 95))
+                img.save(tmp, fmt, quality=quality, **extra)
+            os.replace(tmp, target)                # atomic swap over the original
+            tmp = None
+        except Exception as e:
+            if tmp is not None:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+            self.toast(t("Error: {e}").format(e=e))
+            return False
+        self._edits_saved = True                   # on disk now → no unsaved ● mark
+        self._capture_last_filter()                # remember this look as "Last"
+        self._refresh_saved_indicator()
+        return True
+
+    def overwrite_save(self):
+        """Save the edits straight back onto the open original (Ctrl+S, the panel
+        Save button, the top-bar Save). Confirms first — the original has no
+        backup — unless the user turned that off. Returns True if written."""
+        if not self.files or self.current_pil is None or not self.folder:
+            self.toast(t("Open an image first"))
+            return False
+        if not self._has_any_edits():
+            self.toast(t("No edits to save"))
+            return False
+        fname = self.files[self.index]
+        target = os.path.join(self.folder, fname)
+        if self._overwrite_fmt(target) is None:
+            # No in-place writer for this type (e.g. .tif) → go straight to Save as…
+            self.toast(t("Can't overwrite this file type — use Save as…"))
+            return self._save_as_dialog()
+        if getattr(self, "confirm_overwrite", True):
+            choice = self._ask_overwrite(fname)    # Overwrite / Save as… / Cancel
+            if choice == "cancel":
+                return False
+            if choice == "saveas":
+                return self._save_as_dialog()      # write a copy instead
+        if not self._write_overwrite(target):
+            return False
+        self._update_info(target)                  # refresh size / date, clear ●
+        self.toast(t("Saved → {name}").format(name=fname))
+        return True
+
+    def _auto_save_copy(self):
+        """Silently write an edited COPY using the Export defaults, no dialog — the
+        culling auto-save that fires when you arrow off an edited photo with
+        'auto-save copies' on, and the 'Save' choice in the leaving prompt.
+        Returns True if a file was written."""
         if not self.files or self.current_pil is None or not self.folder:
             return False
-        if self.quick_save_cfg is None:
-            return self._save_as_dialog()          # configure + save in one go
-        out = self._write_save(self.quick_save_cfg, self._save_basename())
-        if out:
-            self.toast(t("Saved → {name}").format(name=os.path.basename(out)))
-            return True
-        return False
+        src_ext = os.path.splitext(self.files[self.index])[1].lower()
+        default_fmt = ("PNG" if src_ext == ".png" else
+                       "WEBP" if src_ext == ".webp" else "JPEG")
+        ls = getattr(self, "last_save", None) or {}
+        cfg = {"dir": self._default_export_dir(),
+               "fmt": ls.get("fmt") or default_fmt,
+               "quality": int(ls.get("quality", 95)),
+               "keep_meta": bool(ls.get("keep_meta", True)),
+               "to_srgb": bool(ls.get("to_srgb", False))}
+        return bool(self._write_save(cfg, self._save_basename()))
 
     def _save_as_dialog(self):
-        """Full save: pick folder, name, format, quality; optionally arm quick save.
-        Defaults come from this session's quick cfg → the last saved → a sensible
-        guess. Returns True if a file was written."""
+        """Full save (Ctrl+Shift+S): pick folder, name, format, quality. Defaults
+        come from the last save, else a sensible guess. Returns True if written."""
         if not self.files or self.current_pil is None or not self.folder:
             self.toast(t("Open an image first"))
             return False
@@ -141,28 +226,30 @@ class SaveMixin:
         src_ext = os.path.splitext(self.files[self.index])[1].lower()
         default_fmt = ("PNG" if src_ext == ".png" else
                        "WEBP" if src_ext == ".webp" else "JPEG")
-        seed = self.quick_save_cfg or self.last_save or {}
+        seed = self.last_save or {}
         q_opts = (80, 90, 95, 100)
         # The default folder comes from the Settings → Export → Output config
-        # (per-source subfolder or a fixed folder); a session quick-save dir wins.
-        st = {"dir": (self.quick_save_cfg or {}).get("dir") or self._default_export_dir(),
+        # (per-source subfolder or a fixed folder), unless the dialog remembered one.
+        st = {"dir": seed.get("dir") or self._default_export_dir(),
               "fmt": seed.get("fmt") or default_fmt,
               "quality": min(q_opts, key=lambda q: abs(q - int(seed.get("quality", 95)))),
               "keep_meta": bool(seed.get("keep_meta", True)),
               "to_srgb": bool(seed.get("to_srgb", False)),
-              "name": "", "quick": False, "ok": False}
+              "name": "", "ok": False}
 
         dlg = tk.Toplevel(self.root)
         dlg.title(t("Save as"))
         self._tw(dlg, bg="bg")
         dlg.transient(self.root)
         dlg.resizable(False, False)
-        wrap = self._tw(tk.Frame(dlg, padx=22, pady=16), bg="bg")
+        wrap = self._tw(tk.Frame(dlg, padx=self._edit_dpi_w(22),
+                                 pady=self._edit_dpi_w(16)), bg="bg")
         wrap.pack(fill="both", expand=True)
 
         def heading(text):
             self._tw(tk.Label(wrap, text=text, font=("Segoe UI", 8)),
-                     bg="bg", fg="fg_dim").pack(anchor="w", pady=(10, 2))
+                     bg="bg", fg="fg_dim").pack(
+                         anchor="w", pady=(self._edit_dpi_w(10), self._edit_dpi_w(2)))
 
         # --- Folder (with a browse button) ---
         heading(t("Folder"))
@@ -179,7 +266,7 @@ class SaveMixin:
         frow = self._tw(tk.Frame(wrap), bg="bg"); frow.pack(fill="x")
         tintkit.Button(frow, self.theme, t("Select"), role="neutral",
                        variant="outline", command=pick_dir, bg="bg").pack(
-                           side="right", padx=(6, 0))
+                           side="right", padx=(self._edit_dpi_w(6), 0))
         dir_field = tintkit.TextField(frow, self.theme, bg="bg")
         dir_field.entry.configure(textvariable=dir_var)
         dir_field.pack(side="left", fill="x", expand=True)
@@ -190,7 +277,7 @@ class SaveMixin:
         nrow = self._tw(tk.Frame(wrap), bg="bg"); nrow.pack(fill="x")
         ext_lbl = self._tw(tk.Label(nrow, text=self.FMT_EXT[st["fmt"]],
                            font=("Segoe UI", 10)), bg="bg", fg="fg_dim")
-        ext_lbl.pack(side="right", padx=(6, 0))
+        ext_lbl.pack(side="right", padx=(self._edit_dpi_w(6), 0))
         name_field = tintkit.TextField(nrow, self.theme, bg="bg")
         name_field.entry.configure(textvariable=name_var)
         name_field.pack(side="left", fill="x", expand=True)
@@ -199,7 +286,8 @@ class SaveMixin:
         # --- Quality (lossy only) — built before format so format can show/hide it ---
         qbox = self._tw(tk.Frame(wrap), bg="bg")
         self._tw(tk.Label(qbox, text=t("Quality"), font=("Segoe UI", 8)),
-                 bg="bg", fg="fg_dim").pack(anchor="w", pady=(10, 2))
+                 bg="bg", fg="fg_dim").pack(
+                     anchor="w", pady=(self._edit_dpi_w(10), self._edit_dpi_w(2)))
 
         def pick_q(i, _label):
             st["quality"] = q_opts[i]
@@ -216,11 +304,10 @@ class SaveMixin:
                                     state="on" if st[key] else "off",
                                     command=toggled, bg="bg")
 
-        # Keep camera/colour metadata (ICC + EXIF). Quick save arms this config.
+        # Keep camera/colour metadata (ICC + EXIF).
         meta_chk = checkbox(t("Keep metadata (camera info, GPS, colour profile)"),
                             "keep_meta")
         srgb_chk = checkbox(t("Convert colours to sRGB (best for web)"), "to_srgb")
-        chk = checkbox(t("Use this config for quick save"), "quick")
 
         # --- Format (drives the extension label + quality visibility) ---
         heading(t("Format"))
@@ -239,9 +326,8 @@ class SaveMixin:
                               command=lambda i, label: apply_fmt(label),
                               bg="bg").pack(anchor="w")
 
-        meta_chk.pack(anchor="w", pady=(14, 0))    # below format/quality
-        srgb_chk.pack(anchor="w", pady=(8, 0))
-        chk.pack(anchor="w", pady=(8, 0))
+        meta_chk.pack(anchor="w", pady=(self._edit_dpi_w(14), 0))   # below format/quality
+        srgb_chk.pack(anchor="w", pady=(self._edit_dpi_w(8), 0))
         apply_fmt(st["fmt"])                        # initial styling + quality visibility
 
         # --- Confirm / cancel ---
@@ -255,10 +341,11 @@ class SaveMixin:
             st["ok"] = True
             dlg.destroy()
 
-        brow = self._tw(tk.Frame(wrap), bg="bg"); brow.pack(anchor="e", pady=(16, 0))
+        brow = self._tw(tk.Frame(wrap), bg="bg")
+        brow.pack(anchor="e", pady=(self._edit_dpi_w(16), 0))
         tintkit.Button(brow, self.theme, t("Cancel"), role="neutral",
                        variant="outline", command=dlg.destroy, bg="bg").pack(
-                           side="right", padx=(8, 0))
+                           side="right", padx=(self._edit_dpi_w(8), 0))
         tintkit.Button(brow, self.theme, t("Save"), role="primary",
                        variant="filled", command=confirm, bg="bg").pack(
                            side="right")
@@ -268,9 +355,10 @@ class SaveMixin:
         dlg.bind("<Return>", lambda e: confirm())
         dlg.update_idletasks()
         dw, dh = dlg.winfo_width(), dlg.winfo_height()
+        dw = max(dw, self._edit_dpi_w(380))        # a consistent minimum width
         rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
         rw, rh = self.root.winfo_width(), self.root.winfo_height()
-        dlg.geometry(f"+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
+        dlg.geometry(f"{dw}x{dh}+{max(0, rx + (rw - dw) // 2)}+{max(0, ry + (rh - dh) // 2)}")
         dlg.grab_set()
         ne.focus_set(); ne.select_range(0, "end")
         self.root.wait_window(dlg)
@@ -283,8 +371,6 @@ class SaveMixin:
         if not out:
             return False
         self.last_save = dict(cfg)                 # remember as the dialog's defaults
-        if st["quick"]:
-            self.quick_save_cfg = dict(cfg)        # arm quick save for this session
         self._save_state()                         # persist last_save across sessions
         self.toast(t("Saved → {name}").format(name=os.path.basename(out)))
         return True

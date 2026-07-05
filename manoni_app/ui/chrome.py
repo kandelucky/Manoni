@@ -415,10 +415,16 @@ class ChromeMixin:
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
                           t("Open folder")).pack(side="left", padx=4, pady=8)
-        # Save as… sits next to Open — both are file operations. (Moved up here
-        # from the ☰ menu so saving is one click away.)
-        self._tool_button(left, "save", self._save_as_dialog,
-                          t("Save as…")).pack(side="left", padx=4, pady=8)
+        # Save (overwrite the open file) then Save as… (a fresh copy) sit next to
+        # Open — all three are file operations, one click away. Save is the
+        # standard in-place save (Ctrl+S); Save as… opens the copy dialog
+        # (Ctrl+Shift+S). Distinct icons so the two don't read as one button.
+        self._tool_button(left, "save", self.overwrite_save,
+                          t("Save — overwrite the original (Ctrl+S)")).pack(
+                              side="left", padx=4, pady=8)
+        self._tool_button(left, "upload", self._save_as_dialog,
+                          t("Save as… — a new copy (Ctrl+Shift+S)")).pack(
+                              side="left", padx=4, pady=8)
         # Undo / redo follow the file buttons, split off by a separator: the eye
         # reads open → save → undo → redo as one file-and-history run instead of
         # hunting for undo out in the centre of the bar.

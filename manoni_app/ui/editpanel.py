@@ -466,12 +466,12 @@ class EditPanelMixin:
                       font=("Segoe UI", 8, "bold")), bg="accent", fg="on_accent")
         tx.pack(pady=(0, 8))
         for w in (btn, ic, tx):
-            w.bind("<Button-1>", lambda e: self.quick_save())
+            w.bind("<Button-1>", lambda e: self.overwrite_save())
             w.bind("<Enter>", lambda e: [c.configure(bg=self.theme["accent_hover"])
                                          for c in (btn, ic, tx)])
             w.bind("<Leave>", lambda e: [c.configure(bg=self.theme["accent"])
                                          for c in (btn, ic, tx)])
-        btn._tip = Tooltip(btn, t("Save"))
+        btn._tip = Tooltip(btn, t("Save — overwrite the original (Ctrl+S)"))
 
     def _build_panel_actions(self, panel):
         "The open panel's foot: View original, over Restore-original, over Save — all full-width."
@@ -483,7 +483,8 @@ class EditPanelMixin:
         self._wide_action(wrap, "rotate-ccw", t("Restore original"),
                           self.restore_original,
                           tip=t("Discard every edit and reload the original photo"))
-        self._wide_action(wrap, "save", t("Save"), self.quick_save, accent=True)
+        self._wide_action(wrap, "save", t("Save"), self.overwrite_save, accent=True,
+                          tip=t("Overwrite the original file (Ctrl+S)"))
 
     def _build_peek_action(self, parent):
         "Full-width panel action: press-and-hold to peek the original, release for the edit."
