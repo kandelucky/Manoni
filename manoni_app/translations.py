@@ -39,4 +39,5 @@ def _load_bundled(code):
 # via the studio survives the relaunch a language switch triggers). English is the
 # default and needs no pack.
 _load_bundled("ka")
+_load_bundled("pl")
 i18n.load_user_packs(LANG_DIR)

@@ -30,6 +30,7 @@ DEFAULT_LANG = "en"
 LANGUAGES = [
     ("en", "English"),
     ("ka", "ქართული"),
+    ("pl", "Polski"),
 ]
 
 _lang = DEFAULT_LANG
