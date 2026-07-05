@@ -10,11 +10,13 @@ startup traceback is visible), flip to False for the shipping build.
 
 from PyInstaller.utils.hooks import collect_all
 
-CONSOLE = True
+CONSOLE = False
 
 # Read-only data shipped with the app (config.py finds these via sys._MEIPASS).
 datas = [
     ('icons', 'icons'),
+    ('logos', 'logos'),          # Logo tool preset PNGs (config.LOGO_PRESET_DIR)
+    ('manoni_app/langs', 'manoni_app/langs'),  # bundled language packs (translations._LANGS_DIR)
     ('Filter_Show.jpg', '.'),
     ('manoni.ico', '.'),
     ('manoni-icon.png', '.'),
