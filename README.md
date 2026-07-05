@@ -45,6 +45,14 @@ You'll feel at home if you:
 
 ## Run
 
+**Most people — install it.** Download the **Windows installer**
+(`Manoni-Setup.exe`) from the
+[Releases page](https://github.com/kandelucky/Manoni/releases/latest), run it,
+and launch Manoni from the Start menu. No Python needed — and it registers
+`.mnf` / `.mnl` files so a double-click opens them in Manoni.
+
+**Run from source** (for development):
+
 ```bash
 # one-time setup
 python -m venv .venv
