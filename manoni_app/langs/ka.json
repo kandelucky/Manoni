@@ -550,6 +550,10 @@
     "“Last” lasts only for this session; its … menu can promote it into a permanent named filter, or clear it.": "„უკანასკნელი“ მხოლოდ ამ სესიაშია; მისი … მენიუ მას მუდმივ, დასახელებულ ფილტრად აქცევს ან ასუფთავებს.",
     "An action is a recorded macro of edits you can replay on other photos.": "მოქმედება ჩაწერილი ედიტების მაკროა, რომელიც სხვა ფოტოებზე შეგიძლია დააკრა.",
     "Heal strokes are not recorded; everything else — light, colour, crop, text, filters — is.": "შეკეთების მოსმები არ იწერება; დანარჩენი — შუქი, ფერი, მოჭრა, ტექსტი, ფილტრები — კი.",
-    "The info button in the top bar shows the current photo's metadata. The export defaults live in Settings → Export.": "ზედა ზოლის ინფო ღილაკი მიმდინარე ფოტოს მეტამონაცემებს აჩვენებს. ექსპორტის ნაგულისხმევები პარამეტრები → ექსპორტშია."
+    "View or delete": "ნახვა ან წაშლა",
+    "The info button on the bottom bar — the strip showing which file you're editing right now — opens the photo's metadata, and its red Delete metadata button wipes the colour profile and all EXIF (including GPS) from the file, keeping the pixels exactly.": "ქვედა ზოლის ინფო ღილაკი — ის ზოლი, სადაც ჩანს, რომელ ფაილს ამუშავებ ახლა — ხსნის ფოტოს მეტამონაცემებს, ხოლო იქ არსებული წითელი „წაშალე მონაცემები“ ღილაკი ფაილიდან შლის ფერის პროფილსა და მთელ EXIF-ს (GPS-ის ჩათვლით), პიქსელებს კი უცვლელად ტოვებს.",
+    "Keep or strip on export": "შენახვა ან მოცილება ექსპორტისას",
+    "The same camera info, date, GPS and colour profile can also be kept or removed when you export.": "იგივე კამერის ინფო, თარიღი, GPS და ფერის პროფილი ექსპორტისასაც შეიძლება შეინახო ან მოაცილო.",
+    "The export defaults live in Settings → Export.": "ექსპორტის ნაგულისხმევები პარამეტრები → ექსპორტშია."
   }
 }

@@ -342,8 +342,13 @@ class HelpMixin:
                        "folder — set the default in Settings → Export.")
 
         win.group(t("Metadata"))
-        self._help_row(win, "info", "Keep or strip",
-                       "Camera info, date, GPS and the colour profile can be "
-                       "kept or removed on export.")
-        win.note(t("The info button in the top bar shows the current photo's "
-                   "metadata. The export defaults live in Settings → Export."))
+        self._help_row(win, "info", "View or delete",
+                       "The info button on the bottom bar — the strip showing "
+                       "which file you're editing right now — opens the photo's "
+                       "metadata, and its red Delete metadata button wipes the "
+                       "colour profile and all EXIF (including GPS) from the "
+                       "file, keeping the pixels exactly.")
+        self._help_row(win, "upload", "Keep or strip on export",
+                       "The same camera info, date, GPS and colour profile can "
+                       "also be kept or removed when you export.")
+        win.note(t("The export defaults live in Settings → Export."))
