@@ -91,8 +91,9 @@ A tool rail on the right — click a tool to open its panel.
 | <img src="assets/readme/blend.png" width="22" alt=""> | **Filters** | Saved slider presets with a clickable preview strip |
 | <img src="assets/readme/circle-play.png" width="22" alt=""> | **Actions** | Record a macro and replay it on one photo or a whole folder |
 
-Undo / redo · a live histogram · dark / light theme with an accent colour · an
-English, Georgian & Polish UI.
+Undo / redo · a live histogram · before / after compare (a split line, or a
+press-and-hold peek) · dark / light theme with an accent colour · an English,
+Georgian & Polish UI.
 
 ---
 
@@ -119,7 +120,12 @@ panel. That's how you pass your looks between machines and to other people.
 <img src="assets/readme/upload.png" width="18" alt=""> **Save as…** writes a
 full-resolution copy as JPEG / PNG / WEBP — to an `_edited/` subfolder or one
 fixed folder. Metadata (camera info, date, GPS, colour profile) is kept or
-stripped per your choice, and the original is **never touched**.
+stripped per your choice, and colours can be **converted to sRGB** so a
+wide-gamut photo still looks right on the web. The original is **never touched**.
+
+<img src="assets/readme/circle-help.png" width="18" alt=""> An **info** button in
+the top bar shows a photo's full metadata — camera, capture, colour profile and
+location — and can **wipe GPS & EXIF** from a file before you share it.
 
 ---
 
