@@ -21,7 +21,7 @@ import tkinter as tk
 import tintkit  # DPI + theme; declares DPI awareness at import, before tk.Tk()
 
 from manoni_app.config import (BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR,
-                               ICON_DIR, THEME_DARK)
+                               ICON_DIR, THEME_DARK, FIRST_RUN_IMAGE)
 from manoni_app import i18n
 from manoni_app import translations  # noqa: F401 — registers language packs on import
 from manoni_app import single_instance
@@ -47,11 +47,10 @@ from manoni_app.ui.settings import SettingsMixin
 from manoni_app.ui.help import HelpMixin
 
 
-# The very first time Manoni is ever launched (no photo given), it opens this one
-# image, then never again (a one-time flag lives in the state file). Testing hook:
-# an absolute path that only exists on this machine — harmless elsewhere, since the
-# startup check skips it when the file is missing.
-FIRST_RUN_IMAGE = r"C:\Users\likak\Desktop\Manoni\temp\test_chart.png"
+# The very first time Manoni is ever launched (no photo given), it opens the one
+# bundled demo image (config.FIRST_RUN_IMAGE), then never again (a one-time flag
+# lives in the state file). The image ships in its own folder so this browses only
+# it; the startup check skips it when missing, so a source run is unaffected.
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
