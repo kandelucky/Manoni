@@ -185,23 +185,23 @@
     background:var(--chip);border:var(--hair) solid var(--border2);
     border-bottom-width:2px;border-radius:5px;padding:6px 8px;min-width:11px;text-align:center}
 
-  /* ---------------- languages ---------------- */
-  .lang{background:var(--panel);border:var(--hair) solid var(--border);
-    border-radius:var(--r-card);padding:34px 36px;display:flex;gap:28px;
-    align-items:center;flex-wrap:wrap}
-  .lang .big{font-family:var(--mono);font-size:15px;color:var(--acc);
-    letter-spacing:.06em;white-space:nowrap}
-  .lang p{margin:0;color:var(--fg2);font-size:15.5px;max-width:62ch}
-  .lang p b{color:var(--fg);font-weight:600}
-
   /* ---------------- footer ---------------- */
-  .foot{border-top:var(--hair) solid var(--border);padding:34px 0 56px;color:var(--dim)}
-  .foot .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-  .foot .brand{font-size:15px;color:var(--fg)}
+  .foot{border-top:var(--hair) solid var(--border);padding:46px 0 60px;color:var(--dim)}
+  .foot .wrap{display:block}
+  .foot .ftop{display:flex;justify-content:space-between;align-items:flex-start;
+    gap:30px;flex-wrap:wrap}
+  .foot .brand{font-size:16px;color:var(--fg)}
+  .foot .ftag{margin:13px 0 0;max-width:40ch;font-size:13.5px;line-height:1.55;color:var(--dim)}
+  .foot .fnav{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;padding-top:4px}
+  .foot .fnav a{color:var(--fg2);font-size:14px}
+  .foot .fnav a:hover{color:var(--acc)}
+  .foot .fbase{display:flex;justify-content:space-between;align-items:center;
+    gap:14px;flex-wrap:wrap;margin-top:32px;padding-top:22px;
+    border-top:var(--hair) solid var(--divider)}
+  .foot .mono{font-family:var(--mono);font-size:12.5px;color:var(--dim)}
+  .foot .road{font-size:13px;color:var(--dim);max-width:56ch;margin:0}
   .foot a{color:var(--dim)}
   .foot a:hover{color:var(--fg)}
-  .foot .mono{font-family:var(--mono);font-size:12.5px}
-  .foot .road{flex-basis:100%;font-size:13.5px;color:var(--dim);margin-top:8px}
 
   /* reveal */
   .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
@@ -376,18 +376,6 @@
 
   <div class="rule"></div>
 
-  <!-- ===================== LANGUAGES ===================== -->
-  <section class="section" id="lang">
-    <div class="wrap">
-      <div class="lang reveal">
-        <div class="big">EN · ქართული · Polski · +</div>
-        <p>The interface ships in <b>English, Georgian and Polish</b> — and adding your own needs no code and no rebuild. Settings generates a template of every phrase; translate the ones you want and import it back. Anything left untranslated simply stays English, so even a half-finished pack works the moment you load it.</p>
-      </div>
-    </div>
-  </section>
-
-  <div class="rule"></div>
-
   <!-- ===================== COMMUNITY / SHARE ===================== -->
   <section class="section" id="share">
     <div class="wrap">
@@ -421,12 +409,24 @@
 
 <footer class="foot">
   <div class="wrap">
-    <span class="brand"><img src="manoni-icon.png" alt="" width="20" height="20" style="vertical-align:-4px;border-radius:5px;margin-right:7px">Manoni</span>
-    <div class="grow" style="flex:1"></div>
-    <a href="https://github.com/kandelucky/Manoni">GitHub</a>
-    <a href="https://github.com/kandelucky/Manoni/releases">Download</a>
-    <span class="mono">© 2026 · MIT</span>
-    <p class="road">On the way: optional RAW support, and a dedicated home for shared language packs &amp; filters.</p>
+    <div class="ftop">
+      <div>
+        <span class="brand"><img src="manoni-icon.png" alt="" width="22" height="22" style="vertical-align:-5px;border-radius:5px;margin-right:8px">Manoni</span>
+        <p class="ftag">A fast, simple photo browser, culler &amp; editor — built to stay smooth on a weak laptop, and to keep every original untouched.</p>
+      </div>
+      <nav class="fnav">
+        <a href="#editor">Editor</a>
+        <a href="#cull">Browse &amp; cull</a>
+        <a href="#keys">Keyboard</a>
+        <a href="#share">Community</a>
+        <a href="https://github.com/kandelucky/Manoni">GitHub</a>
+        <a href="https://github.com/kandelucky/Manoni/releases">Download</a>
+      </nav>
+    </div>
+    <div class="fbase">
+      <span class="mono">© 2026 Manoni · MIT · Pure Python + Tkinter + Pillow</span>
+      <span class="road">On the way: optional RAW support, and a dedicated home for shared language packs &amp; filters.</span>
+    </div>
   </div>
 </footer>
 
