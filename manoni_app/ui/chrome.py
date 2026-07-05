@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import time
+import webbrowser
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as tkfd
@@ -24,6 +25,9 @@ from ..config import (BG, ICON_SIZE, ICON_DIR,
 from ..widgets import Tooltip
 from .. import i18n
 from ..i18n import t
+# The support button reuses the About dialog's single source of truth for the
+# Buy-Me-a-Coffee link + brand yellow, so there's only one place to change.
+from .about import BMC_URL, BMC_BG
 
 
 class ChromeMixin:
@@ -442,16 +446,32 @@ class ChromeMixin:
         # inside Settings, so no dropdown is needed here anymore.
         right = self._tw(tk.Frame(bar), bg="bar")
         right.pack(side="right", padx=8)
-        # Pack help first so it sits rightmost, gear to its left → reads ⚙ ?.
+        # Three app-level controls, each split off by a vertical separator with
+        # generous spacing so they read as three distinct actions, not a cluster.
+        # Packed right-to-left, so the visual order is  ⚙ | ? | ☕  — the coffee
+        # cup sits at the very end (far right).
+        #
+        # A little coffee cup — tinted the Buy-Me-a-Coffee brand yellow so it
+        # stands apart as a support link, not a tool; opens the same page as About.
+        self.btn_coffee = self._tool_button(right, "coffee",
+                                            self._buy_me_coffee,
+                                            t("Buy me a coffee"), color=BMC_BG)
+        self.btn_coffee.pack(side="right", padx=(6, 4), pady=8)
+        self._sep(right).pack(side="right", fill="y", padx=8, pady=12)
         self.btn_help = self._tool_button(right, "circle-help",
                                           self._help_dialog, t("Help"))
-        self.btn_help.pack(side="right", padx=4, pady=8)
+        self.btn_help.pack(side="right", padx=6, pady=8)
+        self._sep(right).pack(side="right", fill="y", padx=8, pady=12)
         self.btn_settings = self._tool_button(right, "settings",
                                               self._settings_dialog, t("Settings"))
-        self.btn_settings.pack(side="right", padx=4, pady=8)
+        self.btn_settings.pack(side="right", padx=6, pady=8)
 
         # The edit panel's open/close lives on the always-visible icon rail
         # (a collapse chevron), not here — see _build_tool_rail / toggle_panel.
+
+    def _buy_me_coffee(self):
+        "Open the Buy-Me-a-Coffee page in the browser (same link as About)."
+        webbrowser.open(BMC_URL)
 
     # --- Language ----------------------------------------------------------
 
