@@ -149,3 +149,20 @@ no code, no rebuild. **Settings → General → Add your language** generates a
 template listing every phrase in the app; translate the ones you want, then
 import it back. Anything you leave untranslated simply stays English, so even a
 half-finished pack works the moment you load it.
+
+---
+
+## RAW support (planned — an optional add-on)
+
+Camera RAW (CR2 / NEF / ARW / DNG …) isn't built yet, and when it lands it will
+be an **optional add-on**, not part of the base app — so Manoni stays light for
+anyone who only shoots JPEG. You'll be able to add it two ways: **tick a box in
+the installer**, or let Manoni **download it on demand** the first time you open
+a RAW file.
+
+Editing stays comfortable even on a weak laptop: a RAW is decoded once on open
+(behind the loading screen), then edited exactly like any other photo — on a
+fit-to-screen preview, with full resolution computed only at export. Bit depth is
+handled for you: full precision is kept internally, and the only choice you make
+is the export format — **JPEG** for a small file, **TIFF** for full 16-bit
+quality.
