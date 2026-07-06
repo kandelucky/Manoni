@@ -22,7 +22,8 @@ class PerspectiveMixin:
     # --- Panel --------------------------------------------------------------
 
     def _build_perspective_section(self, parent):
-        "Perspective panel: vertical + horizontal keystone sliders, then Apply."
+        "Perspective panel in the shared Foldout-group visual: a Vertical and a"
+        " Horizontal keystone group (both open by default), then Apply."
         f = self._tw(tk.Frame(parent), bg="bar")
 
         intro = self._tw(tk.Label(
@@ -30,33 +31,24 @@ class PerspectiveMixin:
                       "(buildings shot from below / to the side)."),
             font=("Segoe UI", 8), justify="left", anchor="w",
             wraplength=self._edit_dpi_w(190)), bg="bar", fg="fg_dim")
-        intro.pack(fill="x", padx=EDIT_PAD, pady=(12, 6))
+        intro.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
 
-        self._persp_group_header(f, "flip-vertical-2", t("Vertical"))
         self.s_persp_v = self._persp_slider(
-            f, t("Vertical"), "persp_v",
+            self._fold_group(f, "pp_v", t("Vertical")),
+            t("Vertical"), "persp_v",
             t("Tilt the top/bottom — fix verticals that lean in or out"))
 
-        self._persp_group_header(f, "flip-horizontal-2", t("Horizontal"))
         self.s_persp_h = self._persp_slider(
-            f, t("Horizontal"), "persp_h",
+            self._fold_group(f, "pp_h", t("Horizontal")),
+            t("Horizontal"), "persp_h",
             t("Tilt the left/right — fix horizontals that lean in or out"))
 
         self._build_perspective_actions(f)
         return f
 
-    def _persp_group_header(self, parent, icon_name, text):
-        "A small icon + dim caption titling a slider in the perspective panel."
-        row = self._tw(tk.Frame(parent), bg="bar")
-        row.pack(fill="x", padx=EDIT_PAD, pady=(12, 4))
-        if self.icon(icon_name, size=12) is not None:
-            self._icon_label(row, icon_name, size=12, token="fg_dim",
-                             bg="bar").pack(side="left", padx=(0, 6))
-        self._tw(tk.Label(row, text=text, anchor="w",
-                          font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
-
     def _persp_slider(self, parent, label, attr, tip):
-        "A −100…+100 keystone TitledSlider (0 = none); reset icon sits in its strip."
+        "A −100…+100 keystone TitledSlider (0 = none); reset icon sits in its"
+        " strip. Lives in a Foldout body, whose own inset aligns it (padx=0)."
         # Bidirectional, so the signed delta readout (+35 / −20) shows which way
         # it leans — TitledSlider's default. Reset zeroes just this slider.
         s = tintkit.TitledSlider(
@@ -64,7 +56,7 @@ class PerspectiveMixin:
             command=lambda v, a=attr: self._on_persp(a, v), bg="bar",
             reset_tip=t("Reset this slider"),
             on_reset=lambda a=attr: self._reset_persp_one(a))
-        s.pack(fill="x", padx=EDIT_PAD, pady=2)
+        s.pack(fill="x", pady=2)
         tintkit.HoverTip(s.canvas, self.theme, tip)
         return s
 

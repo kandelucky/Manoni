@@ -178,18 +178,31 @@ class EditPanelMixin:
         for c in w.winfo_children():
             self._bind_section_wheel(c)
 
+    # Inner width of a Foldout body: the panel minus the foldout's own EDIT_PAD
+    # packing, its hairline border and its 10px body inset — the wraplength for
+    # any label living inside a fold body.
+    FOLD_BODY_W = EDIT_PANEL_W - 2 * EDIT_PAD - 22
+
+    def _fold_group(self, parent, key, title, pady=(0, 8)):
+        "One collapsible control group (tintkit.Foldout) — the shared visual for"
+        " every sectioned tool panel (Basic / Effects / Color mixer / Text). Its"
+        " open state loads from and persists to basic_folds under `key`. Returns"
+        " the body frame for the caller to fill (pack children with pad=0 — the"
+        " body's own inset aligns them)."
+        fo = tintkit.Foldout(
+            parent, self.theme, title, bg="bar",
+            open=self.basic_folds.get(key, False),
+            on_toggle=lambda o, k=key: self._on_fold(k, o))
+        fo.pack(fill="x", padx=EDIT_PAD, pady=pady)
+        return fo.body
+
     def _build_basic_section(self, parent):
         "Basic Edits: tintkit.Foldout groups — Essentials open by default, the"
         " advanced groups collapsed. Each fold's state persists via basic_folds."
         f = self._tw(tk.Frame(parent), bg="bar")
 
         def group(key, title, pady=(0, 8)):
-            fo = tintkit.Foldout(
-                f, self.theme, title, bg="bar",
-                open=self.basic_folds.get(key, key == "essentials"),
-                on_toggle=lambda o, k=key: self._on_basic_fold(k, o))
-            fo.pack(fill="x", padx=EDIT_PAD, pady=pady)
-            return fo.body
+            return self._fold_group(f, key, title, pady=pady)
 
         # Essentials: the seven most-used controls.
         ess = group("essentials", t("Essentials"), pady=(8, 8))
@@ -239,21 +252,11 @@ class EditPanelMixin:
         self._clear_button(f)
         return f
 
-    def _on_basic_fold(self, key, open):
-        "Remember one Basic group's open/closed state and re-fit the scroll."
+    def _on_fold(self, key, open):
+        "Remember one foldout group's open/closed state and re-fit the scroll."
         self.basic_folds[key] = bool(open)
         self._save_state()
         self.root.after_idle(self._sync_section_scroll)   # content height changed
-
-    def _group_header(self, parent, text):
-        "A thin divider + small bold caption that splits the basic sliders into"
-        " Photoshop-style groups (white balance / tone / detail) instead of one"
-        " glued strip."
-        self._tw(tk.Frame(parent, height=1), bg="divider").pack(
-            fill="x", padx=EDIT_PAD, pady=(12, 0))
-        self._tw(tk.Label(parent, text=text, anchor="w",
-                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
-                     fill="x", padx=EDIT_PAD, pady=(4, 2))
 
     def _panel_card(self, parent, title):
         "A bordered card titled with a small dim bold caption — the boxed field the"
@@ -281,28 +284,33 @@ class EditPanelMixin:
                           fg=self.theme["on_accent"] if active else self.theme["fg"])
 
     def _build_effects_section(self, parent):
-        "Effects: creative looks, each a 0→full strength slider. B&W + sepia +"
-        " vignette + film grain. They share the edit pipeline, undo and reset."
+        "Effects: creative looks in the shared Foldout-group visual — Essentials"
+        " (the four everyday looks) open by default, Split tone collapsed. They"
+        " share the edit pipeline, undo and reset."
         f = self._tw(tk.Frame(parent), bg="bar")
+        ess = self._fold_group(f, "fx_essentials", t("Essentials"), pady=(8, 8))
         # Effects rest at 0 (off): hi=100, neutral=0 → strength 0.0–1.0.
-        self.s_bw = self._slider(f, t("Black & White"), "bw", hi=100, neutral=0)
+        self.s_bw = self._slider(ess, t("Black & White"), "bw", hi=100,
+                                 neutral=0, pad=0)
         self.sliders["bw"] = self.s_bw   # join the shared reset / undo machinery
         # Sepia: a warm-toned monochrome — grouped with B&W (both desaturating looks).
-        self.s_sepia = self._slider(f, t("Sepia"), "sepia", hi=100, neutral=0)
+        self.s_sepia = self._slider(ess, t("Sepia"), "sepia", hi=100, neutral=0,
+                                    pad=0)
         self.sliders["sepia"] = self.s_sepia
-        # Split-tone (colour grading): warm↔cool tint for highlights vs shadows.
-        # Bidirectional (neutral 100): left = cool/teal, right = warm/orange.
-        self._group_header(f, t("Split tone"))
-        self.s_split_hi = self._slider(f, t("Highlights tone"), "split_hi")
-        self.sliders["split_hi"] = self.s_split_hi
-        self.s_split_sh = self._slider(f, t("Shadows tone"), "split_sh")
-        self.sliders["split_sh"] = self.s_split_sh
         # Bidirectional (centred at 0): left lightens the corners, right darkens.
-        self.s_vignette = self._slider(f, t("Vignette"), "vignette")
+        self.s_vignette = self._slider(ess, t("Vignette"), "vignette", pad=0)
         self.sliders["vignette"] = self.s_vignette
         # Film grain: 0 = off → full strength. Laid on top of the whole look.
-        self.s_grain = self._slider(f, t("Film grain"), "grain", hi=100, neutral=0)
+        self.s_grain = self._slider(ess, t("Film grain"), "grain", hi=100,
+                                    neutral=0, pad=0)
         self.sliders["grain"] = self.s_grain
+        # Split-tone (colour grading): warm↔cool tint for highlights vs shadows.
+        # Bidirectional (neutral 100): left = cool/teal, right = warm/orange.
+        st = self._fold_group(f, "fx_split", t("Split tone"))
+        self.s_split_hi = self._slider(st, t("Highlights tone"), "split_hi", pad=0)
+        self.sliders["split_hi"] = self.s_split_hi
+        self.s_split_sh = self._slider(st, t("Shadows tone"), "split_sh", pad=0)
+        self.sliders["split_sh"] = self.s_split_sh
 
         self._clear_button(f)
         return f
@@ -322,40 +330,42 @@ class EditPanelMixin:
     ]
 
     def _build_color_section(self, parent):
-        "Color mixer (HSL): per-hue saturation for the eight bands, plus a"
-        " separate 'gold shine'. Each slider strengthens (right) or weakens"
-        " (left) just that colour; they share the edit pipeline, undo and reset."
+        "Color mixer (HSL) in the shared Foldout-group visual: the eight per-hue"
+        " Saturation bands open by default, the Gold and Skin mini-HSLs collapsed."
+        " Each slider strengthens (right) or weakens (left) just that colour;"
+        " they share the edit pipeline, undo and reset."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        self._group_header(f, t("Saturation"))
+        sat = self._fold_group(f, "mix_sat", t("Saturation"), pady=(8, 8))
         for attr, label, chip in self.COLOR_BANDS:
-            self.sliders[attr] = self._color_slider(f, t(label), attr, chip)
+            self.sliders[attr] = self._color_slider(sat, t(label), attr, chip)
 
         # Gold gets its own three-slider mini-HSL — the special treatment for
         # golden tones, unlike the plain (saturation-only) bands above.
-        self._group_header(f, t("Gold"))
+        gold = self._fold_group(f, "mix_gold", t("Gold"))
         self.sliders["gold_hue"] = self._color_slider(
-            f, t("Gold hue"), "gold_hue", "#d4af37")
+            gold, t("Gold hue"), "gold_hue", "#d4af37")
         self.sliders["gold_sat"] = self._color_slider(
-            f, t("Gold saturation"), "gold_sat", "#d4af37")
+            gold, t("Gold saturation"), "gold_sat", "#d4af37")
         self.sliders["gold_light"] = self._color_slider(
-            f, t("Gold shine"), "gold_light", "#d4af37")
+            gold, t("Gold shine"), "gold_light", "#d4af37")
 
         # Skin: the same targeted mini-HSL for skin tones (hue + saturation gated
         # so only skin moves, not the warm walls behind it).
-        self._group_header(f, t("Skin"))
+        skin = self._fold_group(f, "mix_skin", t("Skin"))
         self.sliders["skin_hue"] = self._color_slider(
-            f, t("Skin hue"), "skin_hue", "#e0ac8b")
+            skin, t("Skin hue"), "skin_hue", "#e0ac8b")
         self.sliders["skin_sat"] = self._color_slider(
-            f, t("Skin saturation"), "skin_sat", "#e0ac8b")
+            skin, t("Skin saturation"), "skin_sat", "#e0ac8b")
         self.sliders["skin_light"] = self._color_slider(
-            f, t("Skin brightness"), "skin_light", "#e0ac8b")
+            skin, t("Skin brightness"), "skin_light", "#e0ac8b")
 
         self._clear_button(f)
         return f
 
     def _color_slider(self, parent, label, attr, chip):
         "A labeled live TitledSlider with a colour chip in its title strip + reset."
+        " Lives inside a Foldout body, whose own inset does the aligning (padx=0)."
         s = tintkit.TitledSlider(
             parent, self.theme, label, value=100, lo=0, hi=200, neutral=100,
             bg="bar", chip=chip, compact=True,
@@ -363,7 +373,7 @@ class EditPanelMixin:
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"),
             on_reset=lambda a=attr: self._reset_slider(a))
-        s.pack(fill="x", padx=EDIT_PAD, pady=(1, 2))
+        s.pack(fill="x", pady=(1, 2))
         return s
 
     # --- Tool rail (col 4): vertical labeled icon buttons, Fotor-style -------

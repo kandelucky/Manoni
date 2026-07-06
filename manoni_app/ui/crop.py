@@ -16,7 +16,7 @@ import tintkit
 # draw (handles) — accent is scheme-independent and those draws sit over the
 # image, not on chrome. Every crop-panel widget reads self.theme live instead so
 # the panel switches dark<->light with the rest of the app.
-from ..config import ACCENT, ON_ACCENT, EDIT_PANEL_W, EDIT_PAD
+from ..config import ACCENT, ON_ACCENT, EDIT_PAD
 from ..i18n import t
 from .dialogs import center_over
 
@@ -53,9 +53,9 @@ class CropMixin:
 
         # Shape is the highest-frequency control, so it stays expanded; the two
         # preset lists below are situational (not every crop needs a social ratio
-        # or a saved size), so they fold away by default — same idea as the
-        # Filters manager's foldable groups, just simpler since crop's panel is
-        # built once and shown/hidden rather than rebuilt on toggle.
+        # or a saved size), so they live in the shared Foldout-group visual
+        # (tintkit.Foldout via _fold_group) and start collapsed, their open
+        # state persisting like every other fold.
         self._crop_group_header(f, "ratio", t("Shape"))
         self._build_crop_segment(f)
         self._build_ratio_cards(f)
@@ -64,10 +64,9 @@ class CropMixin:
         self._build_straighten(f)
         self._build_orientation_tools(f)
 
-        self._build_foldable_group(f, t("Social networks"), "_crop_social_open",
-                                   self._build_social_rows)
-        self._build_foldable_group(f, t("My sizes"), "_crop_sizes_open",
-                                   self._build_my_sizes)
+        self._build_social_rows(
+            self._fold_group(f, "cr_social", t("Social networks")))
+        self._build_my_sizes(self._fold_group(f, "cr_sizes", t("My sizes")))
         # Crop/Cancel are NOT built here — they're a pinned footer (see
         # _build_crop_footer) so folding Social/My sizes open can't push them
         # out of view.
@@ -133,54 +132,6 @@ class CropMixin:
                              bg="bar").pack(side="left", padx=(0, 6))
         self._tw(tk.Label(row, text=text, anchor="w",
                  font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
-
-    # --- Foldable group (chevron caption + a once-built, show/hide body) ----
-
-    def _build_foldable_group(self, parent, text, flag_name, build_content):
-        "A collapsible group, matching the Filters manager's fold caption (just"
-        " a chevron + name here — no icon/count, to keep it light). Collapsed by"
-        " default; `flag_name` is a self attribute so the open/closed state"
-        " survives for the panel's lifetime. `build_content(frame)` is called"
-        " once — folding only packs/unpacks the frame, since (unlike Filters'"
-        " list) crop's panel is built once, not rebuilt on every toggle."
-        if not hasattr(self, flag_name):
-            setattr(self, flag_name, False)
-        header = self._tw(tk.Frame(parent, cursor="hand2"), bg="bar")
-        header.pack(fill="x", padx=EDIT_PAD, pady=(13, 6))
-        chev = self._tw(tk.Label(header), bg="bar")
-        chev.pack(side="left", padx=(0, 6))
-        cap = self._tw(tk.Label(header, text=text, anchor="w",
-                       font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim")
-        cap.pack(side="left", fill="x", expand=True)
-
-        content = self._tw(tk.Frame(parent), bg="bar")
-        build_content(content)
-
-        def repaint_chevron():
-            name = "chevron-down" if getattr(self, flag_name) else "chevron-right"
-            im = self.icon(name, size=12, color=self.theme["fg_dim"])
-            if im is not None:
-                chev.configure(image=im)
-                chev._icon_ref = im       # keep a hard ref alive
-
-        def refresh():
-            repaint_chevron()
-            if getattr(self, flag_name):
-                # Sit the body directly under its own header — not at the end of
-                # the parent (which would drop it below any later section, e.g.
-                # resize's "Whole folder").
-                content.pack(fill="x", after=header)
-            else:
-                content.pack_forget()
-
-        def toggle(_e=None):
-            setattr(self, flag_name, not getattr(self, flag_name))
-            refresh()
-
-        for w in (header, cap, chev):
-            w.bind("<Button-1>", toggle)
-        self.theme.subscribe(repaint_chevron)
-        refresh()
 
     # --- Form segment: Free / Orig. / Custom --------------------------------
 
@@ -429,8 +380,9 @@ class CropMixin:
 
     def _build_social_rows(self, parent):
         "A vertical list of social-network presets, each a full-width row."
+        " Lives in a Foldout body, whose own inset does the aligning (padx=0)."
         wrap = self._tw(tk.Frame(parent), bg="bar")
-        wrap.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+        wrap.pack(fill="x", pady=(0, 2))
         for name, sub, rlabel, ratio in self.CROP_SOCIAL:
             self._preset_row(wrap, t(name), t(sub), rlabel, ratio)
 
@@ -488,7 +440,7 @@ class CropMixin:
         # reads the live theme for its transient accent-tint.
         add = self._tw(tk.Frame(parent, cursor="hand2", highlightthickness=1),
                        bg="bar", hl="border")
-        add.pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
+        add.pack(fill="x", pady=(0, 6))
         inner = self._tw(tk.Frame(add), bg="bar")
         inner.pack(pady=6)
         plus = self._tw(tk.Label(inner, text="＋", font=("Segoe UI", 11, "bold")),
@@ -517,7 +469,7 @@ class CropMixin:
         # canvas height tracks the content up to a cap, then the list scrolls.
         self._sizes_max_h = self._edit_dpi_w(116)
         holder = self._tw(tk.Frame(parent), bg="bar")
-        holder.pack(fill="x", padx=EDIT_PAD)
+        holder.pack(fill="x")
         cv = self._tw(tk.Canvas(holder, highlightthickness=0, bd=0,
                       height=self._sizes_max_h), bg="bar")
         sb = ttk.Scrollbar(holder, orient="vertical", command=cv.yview,
@@ -567,7 +519,7 @@ class CropMixin:
         if not self.crop_sizes:
             ph = self._tw(tk.Label(inner, text=t("No sizes yet"),
                           font=("Segoe UI", 8), anchor="w", justify="left",
-                          wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD - 10)),
+                          wraplength=self._edit_dpi_w(self.FOLD_BODY_W - 10)),
                           bg="bar", fg="fg_dim")
             ph.pack(fill="x", pady=(2, 4))
         else:

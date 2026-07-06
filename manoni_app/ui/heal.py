@@ -54,15 +54,20 @@ class HealMixin:
                                    bg="bar", fg="fg_dim")
         self._heal_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
+        # The brush group in the shared Foldout visual: the aligned/mirror source
+        # options over the three brush sliders. Children pack WITHOUT EDIT_PAD —
+        # the fold body's own inset aligns them.
+        brush = self._fold_group(f, "hl_brush", t("Brush"))
+
         # Aligned + mirror — independent on/off toggles, so checkboxes, not the
         # exclusive segmented control. They govern any Alt+click source pick,
         # in either mode, so both modes show them (set up by _refresh_heal_mode).
-        self._clone_opts = self._tw(tk.Frame(f), bg="bar")
+        self._clone_opts = self._tw(tk.Frame(brush), bg="bar")
         self._chk_aligned = tintkit.Checkbox(
             self._clone_opts, self.theme, t("Aligned"),
             state="on" if self.clone_aligned else "off", bg="bar",
             command=lambda st: self._set_clone_opt("aligned", st == "on"))
-        self._chk_aligned.pack(anchor="w", padx=EDIT_PAD, pady=(2, 0))
+        self._chk_aligned.pack(anchor="w", pady=(2, 0))
         tintkit.HoverTip(self._chk_aligned.canvas, self.theme, t(
             "On: the source keeps the same offset from the brush across every "
             "stroke. Off: each new stroke re-anchors to the picked source point."))
@@ -70,7 +75,7 @@ class HealMixin:
             self._clone_opts, self.theme, t("Mirror"),
             state="on" if self.clone_flip else "off", bg="bar",
             command=lambda st: self._set_clone_opt("flip", st == "on"))
-        self._chk_flip.pack(anchor="w", padx=EDIT_PAD, pady=(2, 0))
+        self._chk_flip.pack(anchor="w", pady=(2, 0))
         tintkit.HoverTip(self._chk_flip.canvas, self.theme, t(
             "Mirror the source left-right about its point — handy for "
             "symmetric retouching (e.g. copying from the other eye)."))
@@ -81,17 +86,17 @@ class HealMixin:
         # readout reads as a gauge. Changing a brush setting is not an image
         # edit, so unlike the tone sliders these carry no undo gesture.
         self.s_heal_size = self._heal_slider(
-            f, t("Brush size"), self._set_heal_radius, "size",
+            brush, t("Brush size"), self._set_heal_radius, "size",
             self.HEAL_MIN, self.HEAL_MAX, self.HEAL_MIN, self.heal_radius)
-        self.s_heal_size.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
+        self.s_heal_size.pack(fill="x", pady=(2, 6))
         self.s_heal_strength = self._heal_slider(
-            f, t("Strength"), self._set_heal_strength, "strength",
+            brush, t("Strength"), self._set_heal_strength, "strength",
             0, 100, 0, round(self.heal_opacity * 100))
-        self.s_heal_strength.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
+        self.s_heal_strength.pack(fill="x", pady=(2, 6))
         self.s_heal_feather = self._heal_slider(
-            f, t("Edge softness"), self._set_heal_feather, "feather",
+            brush, t("Edge softness"), self._set_heal_feather, "feather",
             0, 100, 0, round(self.heal_feather * 100))
-        self.s_heal_feather.pack(fill="x", padx=EDIT_PAD, pady=(2, 6))
+        self.s_heal_feather.pack(fill="x", pady=(2, 6))
 
         self._tw(tk.Label(f, text=t("Ctrl+Z — undo the last action"),
                  anchor="w", font=("Segoe UI", 8)), bg="bar", fg="fg_dim").pack(

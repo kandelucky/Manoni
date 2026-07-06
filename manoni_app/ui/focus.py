@@ -51,14 +51,16 @@ class FocusMixin:
                                     bg="bar", fg="fg_dim")
         self._focus_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
-        # Blur strength and edge softness. Absolute magnitudes (neutral = the low
-        # end), so the accent fill reads as a gauge — like the heal sliders. Each
-        # slider carries its own reset button, so one part can be zeroed without
-        # dropping the whole effect. The press/release hooks make a drag one undo.
+        # Blur strength and edge softness, in the shared Foldout visual. Absolute
+        # magnitudes (neutral = the low end), so the accent fill reads as a gauge
+        # — like the heal sliders. Each slider carries its own reset button, so
+        # one part can be zeroed without dropping the whole effect. The
+        # press/release hooks make a drag one undo.
+        blur = self._fold_group(f, "fc_blur", t("Blur"))
         self.s_focus_blur = self._focus_slider(
-            f, t("Blur strength"), self._set_focus_blur, "blur")
+            blur, t("Blur strength"), self._set_focus_blur, "blur")
         self.s_focus_feather = self._focus_slider(
-            f, t("Transition softness"), self._set_focus_feather, "feather")
+            blur, t("Transition softness"), self._set_focus_feather, "feather")
 
         # Done (close the tool, keep the live effect) + Remove (turn it off).
         done = tintkit.Button(
@@ -74,7 +76,8 @@ class FocusMixin:
         return f
 
     def _focus_slider(self, parent, label, setter, which):
-        "A focus TitledSlider (blur/feather): title strip + reset over a bare track."
+        "A focus TitledSlider (blur/feather): title strip + reset over a bare"
+        " track. Lives in a Foldout body, whose own inset aligns it (padx=0)."
         # Gauge sliders (0→100), so show the raw value. The press/release hooks
         # batch a whole drag into one undo step; reset zeroes just this slider.
         s = tintkit.TitledSlider(
@@ -83,7 +86,7 @@ class FocusMixin:
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"),
             on_reset=lambda: self._reset_focus_slider(which))
-        s.pack(fill="x", padx=EDIT_PAD, pady=2)
+        s.pack(fill="x", pady=2)
         return s
 
     def _focus_done(self):

@@ -104,7 +104,10 @@ class ResizeMixin:
     # --- Panel build --------------------------------------------------------
 
     def _build_resize_section(self, parent):
-        "Resize panel content (Resize/Reset are a separate pinned footer)."
+        "Resize panel content in the shared Foldout-group visual — Size + Quick"
+        " sizes open, Quality + Whole folder collapsed (Resize/Reset are a"
+        " separate pinned footer). Controls pack WITHOUT EDIT_PAD — the foldout"
+        " body's own inset aligns them."
         f = self._tw(tk.Frame(parent), bg="bar")
         self._resize_modes = ["dim", "pct"]  # tab order for the mode toggle
         self._resize_mode = "dim"            # "dim" = W×H, "pct" = percent
@@ -115,25 +118,25 @@ class ResizeMixin:
         self._resize_h_var = tk.StringVar()
         self._resize_pct_var = tk.StringVar()
 
-        self._resize_group(f, t("Size"))
+        size = self._fold_group(f, "rs_size", t("Size"), pady=(8, 8))
         # Current dimensions, refreshed on enter and after every resize.
-        self._resize_current = self._tw(tk.Label(f, text="", anchor="w",
+        self._resize_current = self._tw(tk.Label(size, text="", anchor="w",
                                         font=("Segoe UI", 9)), bg="bar", fg="fg_dim")
-        self._resize_current.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        self._resize_current.pack(fill="x", pady=(0, 8))
 
         # Mode toggle: explicit dimensions or a percentage — exclusive, so a
         # full-width segmented control.
         self._resize_mode_tabs = StretchTabs(
-            f, self.theme, [t("Dimensions"), t("Percent")], selected=0, bg="bar",
+            size, self.theme, [t("Dimensions"), t("Percent")], selected=0, bg="bar",
             command=lambda i, _l: self._set_resize_mode(self._resize_modes[i]))
-        self._resize_mode_tabs.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        self._resize_mode_tabs.pack(fill="x", pady=(0, 8))
 
         # --- Dimensions body: W · lock · H --------------------------------
-        self._resize_dim_body = self._tw(tk.Frame(f), bg="bar")
+        self._resize_dim_body = self._tw(tk.Frame(size), bg="bar")
         self._resize_w_entry = self._resize_field(
             self._resize_dim_body, "W", self._resize_w_var, self._resize_on_w)
         lockrow = self._tw(tk.Frame(self._resize_dim_body), bg="bar")
-        lockrow.pack(fill="x", padx=EDIT_PAD, pady=(2, 4))
+        lockrow.pack(fill="x", pady=(2, 4))
         self._resize_lock_chk = tintkit.Checkbox(
             lockrow, self.theme, t("Lock aspect ratio"), state="on",
             command=self._resize_set_lock, bg="bar")
@@ -142,22 +145,25 @@ class ResizeMixin:
             self._resize_dim_body, "H", self._resize_h_var, self._resize_on_h)
 
         # --- Percent body -------------------------------------------------
-        self._resize_pct_body = self._tw(tk.Frame(f), bg="bar")
+        self._resize_pct_body = self._tw(tk.Frame(size), bg="bar")
         self._resize_pct_entry = self._resize_field(
             self._resize_pct_body, "%", self._resize_pct_var, self._resize_on_pct,
             unit_only=True)
 
         # Live result of the current input ("→ W × H"), under whichever body.
-        self._resize_result = self._tw(tk.Label(f, text="", anchor="w",
+        self._resize_result = self._tw(tk.Label(size, text="", anchor="w",
                                        font=("Segoe UI", 10, "bold")),
                                        bg="bar", fg="accent")
-        self._resize_result.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
+        self._resize_result.pack(fill="x", pady=(6, 0))
+
+        self._tw(tk.Label(size, text=t("The original stays untouched — Save writes the resized copy."),
+                 anchor="w", justify="left", font=("Segoe UI", 8),
+                 wraplength=self._edit_dpi_w(self.FOLD_BODY_W)),
+                 bg="bar", fg="fg_dim").pack(fill="x", pady=(10, 0))
 
         # Quick long-side targets — each jumps to Dimensions with a proportional
         # W×H. Equal-width columns so the four always fit the panel.
-        self._resize_group(f, t("Quick sizes (long side)"))
-        qs = self._tw(tk.Frame(f), bg="bar")
-        qs.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+        qs = self._fold_group(f, "rs_quick", t("Quick sizes (long side)"))
         for i in range(len(self.RESIZE_PX_PRESETS)):
             qs.columnconfigure(i, weight=1, uniform="rp")
         for i, p in enumerate(self.RESIZE_PX_PRESETS):
@@ -166,39 +172,25 @@ class ResizeMixin:
                            command=lambda v=p: self._resize_apply_preset(v)).grid(
                                row=0, column=i, sticky="ew", padx=2)
 
-        self._tw(tk.Label(f, text=t("The original stays untouched — Save writes the resized copy."),
-                 anchor="w", justify="left", font=("Segoe UI", 8),
-                 wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
-                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
-
-        # Pixel quality — secondary, so it folds away (collapsed by default).
-        self._build_foldable_group(f, t("Quality"), "_resize_quality_open",
-                                   self._build_resize_quality_body)
+        # Pixel quality — secondary, so it starts collapsed.
+        self._build_resize_quality_body(
+            self._fold_group(f, "rs_quality", t("Quality")))
 
         # --- Whole-folder batch (same size rule applied to every photo) ---
-        self._resize_group(f, t("Whole folder"))
-        self._tw(tk.Label(f, text=t("Resize every photo in a folder with the size above — "
+        folder = self._fold_group(f, "rs_folder", t("Whole folder"))
+        self._tw(tk.Label(folder, text=t("Resize every photo in a folder with the size above — "
                            "pick the folder, subfolders and where the copies go. "
                            "Originals are untouched."),
                  anchor="w", justify="left", font=("Segoe UI", 8),
-                 wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
-                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(0, 6))
-        tintkit.Button(f, self.theme, t("Resize the whole folder"), role="neutral",
+                 wraplength=self._edit_dpi_w(self.FOLD_BODY_W)),
+                 bg="bar", fg="fg_dim").pack(fill="x", pady=(0, 6))
+        tintkit.Button(folder, self.theme, t("Resize the whole folder"), role="neutral",
                        variant="outline", icon="folder-output", stretch=True, bg="bar",
-                       command=self._resize_folder).pack(
-                           fill="x", padx=EDIT_PAD, pady=(0, 8))
+                       command=self._resize_folder).pack(fill="x")
 
         self._set_resize_quality(self._resize_quality)   # paints tabs + str block
         self._resize_dim_body.pack(fill="x", before=self._resize_result)  # default mode
         return f
-
-    def _resize_group(self, parent, text):
-        "A thin divider + small bold caption titling a resize sub-section."
-        self._tw(tk.Frame(parent, height=1), bg="divider").pack(
-            fill="x", padx=EDIT_PAD, pady=(12, 0))
-        self._tw(tk.Label(parent, text=text, anchor="w",
-                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
-                     fill="x", padx=EDIT_PAD, pady=(4, 6))
 
     def _resize_field(self, parent, tag, var, on_change, unit_only=False):
         """A [tag] [entry] [unit] row. For W/H the tag is the leading letter and
@@ -206,7 +198,7 @@ class ResizeMixin:
         trailing unit and the leading column is blank — keeping every field's
         left edge aligned."""
         row = self._tw(tk.Frame(parent), bg="bar")
-        row.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        row.pack(fill="x", pady=(0, 4))
         unit = tag if unit_only else "px"
         self._tw(tk.Label(row, text=unit, font=("Segoe UI", 9)),
                  bg="bar", fg="fg_dim").pack(side="right", padx=(6, 0))
@@ -221,13 +213,13 @@ class ResizeMixin:
         return ent
 
     def _build_resize_quality_body(self, parent):
-        "Foldable Quality body: resample filter + a strength row for soft/sharp."
+        "Foldout Quality body: resample filter + a strength row for soft/sharp."
         qlabels = {"soft": t("Soft"), "normal": t("Normal"), "sharp": t("Sharp")}
         self._resize_q_tabs = StretchTabs(
             parent, self.theme, [qlabels[k] for k in self.RESIZE_QUALITIES],
             selected=self.RESIZE_QUALITIES.index(self._resize_quality), bg="bar",
             command=lambda i, _l: self._set_resize_quality(self.RESIZE_QUALITIES[i]))
-        self._resize_q_tabs.pack(fill="x", padx=EDIT_PAD, pady=(0, 2))
+        self._resize_q_tabs.pack(fill="x", pady=(0, 2))
 
         # Strength (a whole block, shown only for soft/sharp). Packed before the
         # hint by _refresh_resize_strength.
@@ -245,9 +237,9 @@ class ResizeMixin:
         self._resize_q_hint = self._tw(tk.Label(
             parent, text=t("Soft = smoother · Sharp adds web output-sharpening."),
             anchor="w", justify="left", font=("Segoe UI", 8),
-            wraplength=self._edit_dpi_w(EDIT_PANEL_W - 2 * EDIT_PAD)),
+            wraplength=self._edit_dpi_w(self.FOLD_BODY_W)),
             bg="bar", fg="fg_dim")
-        self._resize_q_hint.pack(fill="x", padx=EDIT_PAD, pady=(5, 0))
+        self._resize_q_hint.pack(fill="x", pady=(5, 0))
 
     def _build_resize_footer(self, panel):
         "Scaffold the pinned Resize/Reset row; hidden until the resize tool opens."
@@ -388,8 +380,7 @@ class ResizeMixin:
         if self._resize_quality == "normal":
             self._resize_str_block.pack_forget()
             return
-        self._resize_str_block.pack(fill="x", padx=EDIT_PAD,
-                                    before=self._resize_q_hint)
+        self._resize_str_block.pack(fill="x", before=self._resize_q_hint)
         active = self._resize_strength[self._resize_quality]
         idx = self.RESIZE_STRENGTHS.index(active)
         if self._resize_str_tabs.selected != idx:

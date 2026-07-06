@@ -409,10 +409,21 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.show_rulers = False  # top + left pixel rulers (Ctrl+R); persisted
         self.show_filter_strip = False  # the filter-preview filmstrip; persisted
         self.show_histogram = False  # the edit panel's live histogram; persisted
-        # Basic Edits foldout states (key -> open). Essentials starts open, the
-        # advanced groups shut; every header click persists here.
+        # Edit-panel foldout states (key -> open) — Basic, Effects and Color
+        # mixer share one dict (kept under the historic "basic_folds" state key).
+        # The primary group of each tool starts open, the rest shut; every
+        # header click persists here.
         self.basic_folds = {"essentials": True, "wb": False,
-                            "tone": False, "detail": False}
+                            "tone": False, "detail": False,
+                            "fx_essentials": True, "fx_split": False,
+                            "mix_sat": True, "mix_gold": False,
+                            "mix_skin": False,
+                            "rs_size": True, "rs_quick": True,
+                            "rs_quality": False, "rs_folder": False,
+                            "cr_social": False, "cr_sizes": False,
+                            "pp_v": True, "pp_h": True,
+                            "hl_brush": True, "fc_blur": True,
+                            "ac_list": True}
         self.fast_preview = True  # drop heavy filters during a slider drag; persisted
         self.async_render = True  # render off the UI thread so a heavy edit can't
                                   # freeze the window; persisted (Settings → General)

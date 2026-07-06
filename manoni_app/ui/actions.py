@@ -545,15 +545,12 @@ class ActionsMixin:
             wraplength=self._edit_dpi_w(210)), bg="bar", fg="fg_dim").pack(
                 fill="x", padx=EDIT_PAD, pady=(0, 6))
 
-        self._tw(tk.Frame(f, height=1), bg="divider").pack(
-            fill="x", padx=EDIT_PAD, pady=(4, 8))
-
-        self._lbl_action_count = self._tw(tk.Label(f, text="", anchor="w",
-                                          font=("Segoe UI", 8, "bold")), bg="bar", fg="fg")
-        self._lbl_action_count.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
-
-        self._actions_list = self._tw(tk.Frame(f), bg="bar")
-        self._actions_list.pack(fill="x", padx=EDIT_PAD)
+        # The saved-actions list, in the shared Foldout-group visual (its caption
+        # replaces the old divider + "Saved actions: N" heading; the rows carry
+        # the state, so a separate count label added nothing but repetition).
+        lst = self._fold_group(f, "ac_list", t("Saved actions"), pady=(4, 8))
+        self._actions_list = self._tw(tk.Frame(lst), bg="bar")
+        self._actions_list.pack(fill="x")
 
         # Footer: Done just closes the tool. Actions are a manager — nothing to
         # apply or reset at the panel level; saved actions persist on their own.
@@ -591,8 +588,6 @@ class ActionsMixin:
         "Rebuild the saved-actions rows from self.user_actions."
         if not hasattr(self, "_actions_list"):
             return
-        self._lbl_action_count.configure(
-            text=t("Saved actions: {n}").format(n=len(self.user_actions)))
         for w in self._actions_list.winfo_children():
             w.destroy()
         if not self.user_actions:
