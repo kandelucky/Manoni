@@ -26,7 +26,7 @@ from tkinter import colorchooser
 
 import tintkit
 
-from ..config import ACCENT, FG_DIM, ON_ACCENT, EDIT_PAD
+from ..config import ACCENT, FG_DIM, ON_ACCENT, EDIT_PAD, CHIP_GAP
 from ..i18n import t
 from .. import imaging
 
@@ -44,19 +44,14 @@ class TextMixin:
     # --- Panel --------------------------------------------------------------
 
     def _build_text_section(self, parent):
-        "Text panel: the string, font, size + opacity, colour, shadow, placement."
+        "Text panel: the string, then Appearance / Shadow / Alignment foldouts"
+        " (tintkit.Foldout — Unity-style collapsible groups), then the footer."
         f = self._tw(tk.Frame(parent), bg="bar")
-
-        self._tw(tk.Label(f, text=t("Add a text, then drag it on the photo to place it. "
-                           "The corner handle resizes it. Add as many as you like."),
-                 font=("Segoe UI", 8), justify="left",
-                 anchor="w", wraplength=self._edit_dpi_w(190)),
-                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(10, 6))
 
         # Top row: ‘Add text’ (the ONLY way a text appears — accent primary) and
         # a trash icon that removes the selected one.
         addrow = self._tw(tk.Frame(f), bg="bar")
-        addrow.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        addrow.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
         add = tintkit.Button(addrow, self.theme, t("Add text"), role="primary",
                              variant="filled", stretch=True, bg="bar",
                              command=self._add_text)
@@ -75,123 +70,225 @@ class TextMixin:
         # one undo step (snapshot on focus-in, recorded on focus-out). `_text_entry`
         # stays the tk.Text so every get / insert / state= call is unchanged.
         self._text_area = tintkit.TextArea(f, self.theme, height=2, bg="bar")
-        self._text_area.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        self._text_area.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
         self._text_entry = self._text_area.text
         self._text_entry.bind("<KeyRelease>", self._on_text_typed)
         self._text_entry.bind("<FocusIn>", lambda e: self._edit_snapshot())
         self._text_entry.bind("<FocusOut>", lambda e: self._edit_commit())
 
-        # Font: a compact dropdown (six families is too many for a segmented pill).
-        self._group_header(f, t("Font"))
+        # Appearance foldout (open by default — it's the primary group): font,
+        # size / opacity / rotation, then the colour row. Controls pack WITHOUT
+        # EDIT_PAD — the foldout body's own inset aligns them.
+        ap = tintkit.Foldout(f, self.theme, t("Appearance"), open=True,
+                             bg="bar").pack(fill="x", padx=EDIT_PAD,
+                                            pady=(0, 8)).body
         self._text_fonts = list(imaging.TEXT_FONTS)
         self._text_font_dd = tintkit.Dropdown(
-            f, self.theme, [t(fam) for fam in self._text_fonts], selected=0,
+            ap, self.theme, [t(fam) for fam in self._text_fonts], selected=0,
             bg="bar", command=lambda i, _l: self._set_text_font(self._text_fonts[i]))
-        self._text_font_dd.pack(fill="x", padx=EDIT_PAD, pady=2)
-
-        # Size (as % of the photo's short side) and opacity, each a TitledSlider
-        # with its own reset. The press/release hooks fold a whole drag into one
-        # undo step; the readouts are raw gauges (a % and 0–100).
+        self._text_font_dd.pack(fill="x", pady=(0, 2))
+        # Size (% of the photo's short side), opacity and rotation — compact
+        # TitledSliders (the dense strip meant for a stack of minor sliders). The
+        # press/release hooks fold a whole drag into one undo step.
         self.s_text_size = tintkit.TitledSlider(
-            f, self.theme, t("Size"), value=8, lo=1, hi=50, neutral=8, bg="bar",
-            command=self._set_text_size, on_press=self._edit_gesture_start,
-            on_release=self._edit_gesture_end, reset_tip=t("Reset this slider"),
-            value_fmt=lambda v, n: str(v),
+            ap, self.theme, t("Size"), value=8, lo=1, hi=50, neutral=8, bg="bar",
+            compact=True, command=self._set_text_size,
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_text_slider("size"))
-        self.s_text_size.pack(fill="x", padx=EDIT_PAD, pady=(8, 2))
+        self.s_text_size.pack(fill="x", pady=(3, 0))
         self.s_text_opacity = tintkit.TitledSlider(
-            f, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
-            bg="bar", command=self._set_text_opacity,
+            ap, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
+            bg="bar", compact=True, command=self._set_text_opacity,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_text_slider("opacity"))
-        self.s_text_opacity.pack(fill="x", padx=EDIT_PAD, pady=2)
+        self.s_text_opacity.pack(fill="x", pady=(3, 0))
         # Rotation: −180…180° (0 = upright). Positive turns clockwise.
         self.s_text_rotation = tintkit.TitledSlider(
-            f, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
-            bg="bar", command=self._set_text_rotation,
+            ap, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
+            bg="bar", compact=True, command=self._set_text_rotation,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: f"{v}°",
             on_reset=lambda: self._reset_text_slider("rotation"))
-        self.s_text_rotation.pack(fill="x", padx=EDIT_PAD, pady=2)
+        self.s_text_rotation.pack(fill="x", pady=(3, 0))
 
-        # Colour swatch + a shadow checkbox, side by side.
-        row = self._tw(tk.Frame(f), bg="bar")
-        row.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
-        self._tw(tk.Label(row, text=t("Colour"),
-                 font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(side="left")
-        self._text_swatch = self._tw(tk.Frame(row, bg="#ffffff", cursor="hand2",
-                                     width=self._edit_dpi_w(28),
-                                     height=self._edit_dpi_w(16),
+        # Colour swatch row (the shadow lives in its own foldable group below).
+        cbox = self._tw(tk.Frame(ap), bg="bar")
+        cbox.pack(fill="x", pady=(8, 0))
+        self._tw(tk.Label(cbox, text=t("Colour"), font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(side="left")
+        self._text_swatch = self._tw(tk.Frame(cbox, bg="#ffffff", cursor="hand2",
+                                     width=self._edit_dpi_w(40),
+                                     height=self._edit_dpi_w(20),
                                      highlightthickness=1), hl="border")
         self._text_swatch.pack(side="left", padx=(8, 0))
         self._text_swatch.pack_propagate(False)
         self._text_swatch.bind("<Button-1>", lambda e: self._pick_text_color())
         tintkit.HoverTip(self._text_swatch, self.theme, t("Pick the text colour"))
-        self._text_shadow_chk = tintkit.Checkbox(
-            row, self.theme, t("Shadow"), state="off", bg="bar",
-            command=lambda _st: self._toggle_text_shadow())
-        self._text_shadow_chk.pack(side="right")
-        tintkit.HoverTip(
-            self._text_shadow_chk.canvas, self.theme,
-            t("A soft drop shadow, for light text on a bright photo"))
 
-        # Alignment (matters for multi-line text): left / centre / right.
-        self._group_header(f, t("Alignment"))
-        self._text_aligns = ["left", "center", "right"]
-        self._text_align_tabs = tintkit.SegmentedTabs(
-            f, self.theme, [t("Left"), t("Centre"), t("Right")], selected=1,
-            bg="bar",
-            command=lambda i, _l: self._set_text_align(self._text_aligns[i]))
-        self._text_align_tabs.pack(padx=EDIT_PAD, pady=2)
+        # Shadow foldout — secondary, so it starts collapsed.
+        sh = tintkit.Foldout(f, self.theme, t("Shadow"), bg="bar").pack(
+            fill="x", padx=EDIT_PAD, pady=(0, 8))
+        self._build_text_shadow_body(sh.body)
 
-        # One-click placement: a 3×3 grid snapping the text to a corner / edge /
-        # centre with a small margin — the watermark staple.
-        self._group_header(f, t("Position"))
-        self._build_text_position_grid(f)
+        # Alignment foldout (collapsed): left / centre / right as three equal
+        # icon tiles — the same boxed-tile look as the logo Flip tiles, the
+        # active one lit accent.
+        lay = tintkit.Foldout(f, self.theme, t("Alignment"), bg="bar").pack(
+            fill="x", padx=EDIT_PAD, pady=(0, 8))
+        self._build_text_align_tiles(lay.body)
 
-        # Footer: Done closes the tool (the texts stay live on the photo); Delete
-        # all wipes every text. 'Delete text' (the selected one) is the trash icon
-        # up by 'Add text'. Delete all dims to disabled while there's nothing to wipe.
-        done = tintkit.Button(
-            f, self.theme, t("Done"), role="primary", variant="filled",
-            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
-        done.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
+        # Footer: Done + Delete all on one row, two equal halves. Done closes the
+        # tool (texts stay live); Delete all wipes every text and dims to disabled
+        # while there's nothing to wipe. ('Delete text' is the trash icon above.)
+        foot = self._tw(tk.Frame(f), bg="bar")
+        foot.pack(fill="x", padx=EDIT_PAD, pady=(12, 10))
+        foot.grid_columnconfigure(0, weight=1, uniform="ft")
+        foot.grid_columnconfigure(1, weight=1, uniform="ft")
+        tintkit.Button(foot, self.theme, t("Done"), role="primary",
+                       variant="filled", stretch=True, bg="bar",
+                       command=lambda: self.set_section("basic")).grid(
+                           row=0, column=0, sticky="ew", padx=(0, CHIP_GAP))
         self._text_delall_btn = tintkit.Button(
-            f, self.theme, t("Delete all"), role="neutral", variant="outline",
+            foot, self.theme, t("Delete all"), role="neutral", variant="outline",
             icon="x", stretch=True, bg="bar", command=self._delete_all_text)
-        self._text_delall_btn.pack(fill="x", padx=EDIT_PAD, pady=(8, 8))
+        self._text_delall_btn.grid(row=0, column=1, sticky="ew", padx=(CHIP_GAP, 0))
         tintkit.HoverTip(self._text_delall_btn.canvas, self.theme,
                          t("Remove every text from the photo"))
         self._refresh_text_buttons()          # start Delete-all disabled if empty
         return f
 
-    def _build_text_position_grid(self, parent):
-        "A 3×3 grid of buttons; each snaps the text to that anchor with a margin."
+    def _build_text_shadow_body(self, parent):
+        "Foldout Shadow body: the on/off checkbox + colour swatch side by side,"
+        " then the knob sliders, always visible — the foldout itself is the"
+        " show/hide. Distance + blur are % of the font size."
+        row = self._tw(tk.Frame(parent), bg="bar")
+        row.pack(fill="x")
+        row.grid_columnconfigure(0, weight=1, uniform="ts")
+        row.grid_columnconfigure(1, weight=1, uniform="ts")
+        tbox = self._tw(tk.Frame(row), bg="bar")
+        tbox.grid(row=0, column=0, sticky="w")
+        self._text_shadow_tgl = tintkit.Toggle(
+            tbox, self.theme, value=False, bg="bar",
+            command=lambda _v: self._toggle_text_shadow())
+        self._text_shadow_tgl.pack(side="left")
+        self._tw(tk.Label(tbox, text=t("Shadow"), font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(side="left", padx=(8, 0))
+        tintkit.HoverTip(
+            self._text_shadow_tgl.canvas, self.theme,
+            t("A soft drop shadow, for light text on a bright photo"))
+        scbox = self._tw(tk.Frame(row), bg="bar")
+        scbox.grid(row=0, column=1, sticky="e")
+        self._tw(tk.Label(scbox, text=t("Colour"), font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(side="left")
+        self._text_sh_swatch = self._tw(tk.Frame(scbox, bg="#000000", cursor="hand2",
+                                        width=self._edit_dpi_w(40),
+                                        height=self._edit_dpi_w(20),
+                                        highlightthickness=1), hl="border")
+        self._text_sh_swatch.pack(side="left", padx=(8, 0))
+        self._text_sh_swatch.pack_propagate(False)
+        self._text_sh_swatch.bind("<Button-1>", lambda e: self._pick_text_shadow_color())
+        tintkit.HoverTip(self._text_sh_swatch, self.theme,
+                         t("Pick the shadow colour"))
+
+        sb = self._tw(tk.Frame(parent), bg="bar")
+        sb.pack(fill="x", pady=(6, 0))
+        self.s_text_sh_dist = tintkit.TitledSlider(
+            sb, self.theme, t("Distance"), value=10, lo=0, hi=50, neutral=10,
+            bg="bar", compact=True,
+            command=lambda v: self._set_text_shadow_param("shadow_dist", float(int(v))),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
+            on_reset=lambda: self._reset_text_shadow_slider("shadow_dist"))
+        self.s_text_sh_dist.pack(fill="x", pady=(3, 0))
+        self.s_text_sh_angle = tintkit.TitledSlider(
+            sb, self.theme, t("Angle"), value=45, lo=-180, hi=180, neutral=45,
+            bg="bar", compact=True,
+            command=lambda v: self._set_text_shadow_param("shadow_angle", float(int(v))),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: f"{v}°",
+            on_reset=lambda: self._reset_text_shadow_slider("shadow_angle"))
+        self.s_text_sh_angle.pack(fill="x", pady=(3, 0))
+        self.s_text_sh_blur = tintkit.TitledSlider(
+            sb, self.theme, t("Blur"), value=20, lo=0, hi=100, neutral=20,
+            bg="bar", compact=True,
+            command=lambda v: self._set_text_shadow_param("shadow_blur", float(int(v))),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
+            on_reset=lambda: self._reset_text_shadow_slider("shadow_blur"))
+        self.s_text_sh_blur.pack(fill="x", pady=(3, 0))
+        self.s_text_sh_opacity = tintkit.TitledSlider(
+            sb, self.theme, t("Opacity"), value=60, lo=0, hi=100, neutral=60,
+            bg="bar", compact=True,
+            command=lambda v: self._set_text_shadow_param("shadow_opacity",
+                                                          int(v) / 100.0),
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
+            on_reset=lambda: self._reset_text_shadow_slider("shadow_opacity"))
+        self.s_text_sh_opacity.pack(fill="x", pady=(3, 0))
+
+    # (icon, align-key, tooltip) for the three alignment tiles.
+    _TEXT_ALIGN_TILES = [
+        ("align-left", "left", "Left-align the lines"),
+        ("align-center", "center", "Centre the lines"),
+        ("align-right", "right", "Right-align the lines"),
+    ]
+
+    def _build_text_align_tiles(self, parent):
+        "Three equal icon-only tiles (left / centre / right), single-select: the"
+        " active one lights accent. Same boxed-tile style + fixed button height as"
+        " the logo Flip tiles; repainted by _paint_text_align_tiles."
         grid = self._tw(tk.Frame(parent), bg="bar")
-        grid.pack(padx=EDIT_PAD, pady=2)
-        for r, v in enumerate(("t", "m", "b")):
-            for c, h in enumerate(("l", "c", "r")):
-                cell = self._tw(tk.Frame(grid, cursor="hand2",
-                                width=self._edit_dpi_w(34),
-                                height=self._edit_dpi_w(22)), bg="chip")
-                cell.grid(row=r, column=c, padx=2, pady=2)
-                cell.pack_propagate(False)
-                dot = self._tw(tk.Frame(cell,
-                               width=self._edit_dpi_w(6), height=self._edit_dpi_w(6)),
-                               bg="fg_dim")
-                # Place the dot toward the cell side it represents (a visual hint).
-                dot.place(relx={"l": 0.18, "c": 0.5, "r": 0.82}[h],
-                          rely={"t": 0.22, "m": 0.5, "b": 0.78}[v], anchor="center")
-                # Hover reads live theme tokens so it tracks dark<->light too.
-                for w in (cell, dot):
-                    w.bind("<Button-1>", lambda e, hh=h, vv=v: self._place_text(hh, vv))
-                    w.bind("<Enter>", lambda e, cc=cell, dd=dot:
-                           (cc.configure(bg=self.theme["hover"]),
-                            dd.configure(bg=self.theme["fg"])))
-                    w.bind("<Leave>", lambda e, cc=cell, dd=dot:
-                           (cc.configure(bg=self.theme["chip"]),
-                            dd.configure(bg=self.theme["fg_dim"])))
+        grid.pack(fill="x")
+        self._text_align_widgets = {}          # key -> (tile, icon-label, icon-name)
+        h = self._edit_dpi_w(36)               # = a tintkit Button's height
+        for i, (icon_name, key, tip) in enumerate(self._TEXT_ALIGN_TILES):
+            grid.columnconfigure(i, weight=1, uniform="al")
+            tile = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1,
+                            height=h), bg="chip", hl="border")
+            tile.grid(row=0, column=i, sticky="ew", padx=2)
+            tile.grid_propagate(False)         # hold the height; width fills the cell
+            ic = tk.Label(tile, bd=0)
+            ic.place(relx=0.5, rely=0.5, anchor="center")
+            self._text_align_widgets[key] = (tile, ic, icon_name)
+            for w in (tile, ic):
+                w.bind("<Button-1>", lambda e, k=key: self._set_text_align(k))
+                w.bind("<Enter>", lambda e, k=key: self._text_align_hover(k, True))
+                w.bind("<Leave>", lambda e, k=key: self._text_align_hover(k, False))
+            tintkit.HoverTip(tile, self.theme, t(tip))
+        self.theme.subscribe(self._paint_text_align_tiles)   # panel built once → safe
+        self._paint_text_align_tiles()
+
+    def _text_align_current(self):
+        "The selected text's alignment (default 'center' when nothing is selected)."
+        ov = self.text_overlay
+        return ov.get("align", "center") if ov is not None else "center"
+
+    def _text_align_hover(self, key, on):
+        "Hover an alignment tile — but leave the active (accent) one alone."
+        if key == self._text_align_current():
+            return
+        tile, ic, _ = self._text_align_widgets[key]
+        bg = self.theme["hover"] if on else self.theme["chip"]
+        tile.configure(bg=bg)
+        ic.configure(bg=bg)
+
+    def _paint_text_align_tiles(self):
+        "Colour the alignment tiles: the active one accent, the rest neutral, each"
+        " icon tinted to match. Re-tints on the dark<->light switch too."
+        if not hasattr(self, "_text_align_widgets"):
+            return
+        cur = self._text_align_current()
+        for key, (tile, ic, icon_name) in self._text_align_widgets.items():
+            active = key == cur
+            base = self.theme["accent"] if active else self.theme["chip"]
+            col = self.theme["on_accent"] if active else self.theme["fg"]
+            tile.configure(bg=base)
+            ic.configure(bg=base)
+            img = self.icon(icon_name, 16, col)
+            ic.configure(image=img or "")
+            ic.image = img
 
     # --- State + entry ------------------------------------------------------
 
@@ -229,7 +326,12 @@ class TextMixin:
         return {"text": "", "cx": iw / 2.0, "cy": ih / 2.0,
                 "size": max(12.0, min(iw, ih) * 0.08),
                 "color": "#ffffff", "opacity": 1.0, "font": "Sans",
-                "align": "center", "shadow": True, "angle": 0.0}
+                "align": "center", "shadow": True, "angle": 0.0,
+                # A NEW text starts with a gently blurred shadow; overlays saved
+                # before these knobs existed keep the old crisp look (the imaging
+                # .get defaults have blur 0), so nothing already placed changes.
+                "shadow_dist": 10.0, "shadow_angle": 45.0, "shadow_blur": 20.0,
+                "shadow_opacity": 0.6, "shadow_color": "#000000"}
 
     def _add_text(self):
         "‘Add text’: drop ONE new, real, editable text element on the photo and"
@@ -335,16 +437,22 @@ class TextMixin:
             if self._text_font_dd.selected != fidx:
                 self._text_font_dd.selected = fidx
                 self._text_font_dd.repaint()
-        active_align = ov.get("align", "center") if has else "center"
-        if hasattr(self, "_text_align_tabs"):
-            aidx = (self._text_aligns.index(active_align)
-                    if active_align in self._text_aligns else 1)
-            if self._text_align_tabs.selected != aidx:
-                self._text_align_tabs.selected = aidx
-                self._text_align_tabs.repaint()
-        if hasattr(self, "_text_shadow_chk"):
-            self._text_shadow_chk.state = "on" if (has and ov.get("shadow")) else "off"
-            self._text_shadow_chk.repaint()
+        self._paint_text_align_tiles()         # light the active alignment tile
+        if hasattr(self, "_text_shadow_tgl"):
+            want = bool(has and ov.get("shadow"))
+            if self._text_shadow_tgl.value != want:
+                self._text_shadow_tgl.value = want
+                self._text_shadow_tgl.repaint()
+        if hasattr(self, "s_text_sh_dist"):
+            # .get fallbacks mirror the imaging defaults, so an overlay saved
+            # before the shadow knobs existed shows the values it renders with.
+            self.s_text_sh_dist.set(round(ov.get("shadow_dist", 10.0)) if has else 10)
+            self.s_text_sh_angle.set(round(ov.get("shadow_angle", 45.0)) if has else 45)
+            self.s_text_sh_blur.set(round(ov.get("shadow_blur", 0.0)) if has else 20)
+            self.s_text_sh_opacity.set(
+                round(ov.get("shadow_opacity", 0.6) * 100) if has else 60)
+            self._text_sh_swatch.configure(
+                bg=ov.get("shadow_color", "#000000") if has else "#000000")
         self._refresh_text_buttons()
 
     def _refresh_text_buttons(self):
@@ -451,10 +559,56 @@ class TextMixin:
     def _toggle_text_shadow(self):
         "Flip the drop shadow on / off (undoable)."
         if self.text_overlay is None:
+            self._sync_text_controls()       # snap the toggle back to 'off'
             return
         before = self._edit_state()
         self.text_overlay = {**self.text_overlay,
                              "shadow": not self.text_overlay.get("shadow")}
+        self._sync_text_controls()
+        self._edits_saved = False
+        self._render_preview()
+        self._record_edit(before)
+
+    # Slider neutrals for the shadow knobs (what their reset buttons return to —
+    # the same values a NEW text starts with).
+    _TEXT_SHADOW_NEUTRAL = {"shadow_dist": 10.0, "shadow_angle": 45.0,
+                            "shadow_blur": 20.0, "shadow_opacity": 0.6}
+
+    def _set_text_shadow_param(self, key, value):
+        "Slider: one shadow knob on the selected element (live, no undo step)."
+        if self.text_overlay is None:
+            return
+        self.text_overlay = {**self.text_overlay, key: value}
+        self._edits_saved = False
+        self._schedule_preview()
+
+    def _reset_text_shadow_slider(self, key):
+        "Return one shadow slider to neutral on the selected element (one undo step)."
+        if self.text_overlay is None:
+            return
+        before = self._edit_state()
+        val = self._TEXT_SHADOW_NEUTRAL[key]
+        self.text_overlay = {**self.text_overlay, key: val}
+        slider = {"shadow_dist": self.s_text_sh_dist,
+                  "shadow_angle": self.s_text_sh_angle,
+                  "shadow_blur": self.s_text_sh_blur,
+                  "shadow_opacity": self.s_text_sh_opacity}[key]
+        slider.set(round(val * 100) if key == "shadow_opacity" else round(val))
+        self._edits_saved = False
+        self._render_preview()
+        self._record_edit(before)
+
+    def _pick_text_shadow_color(self):
+        "Open the colour chooser; apply the picked shadow colour (undoable)."
+        if self.text_overlay is None:
+            return
+        cur = self.text_overlay.get("shadow_color", "#000000")
+        rgb, hexv = colorchooser.askcolor(color=cur, parent=self.root,
+                                          title=t("Shadow colour"))
+        if not hexv:
+            return
+        before = self._edit_state()
+        self.text_overlay = {**self.text_overlay, "shadow_color": hexv}
         self._sync_text_controls()
         self._edits_saved = False
         self._render_preview()
@@ -472,21 +626,6 @@ class TextMixin:
         before = self._edit_state()
         self.text_overlay = {**self.text_overlay, "color": hexv}
         self._sync_text_controls()
-        self._edits_saved = False
-        self._render_preview()
-        self._record_edit(before)
-
-    def _place_text(self, h, v):
-        "Snap the text to a 3×3 anchor (h in l/c/r, v in t/m/b) with a margin. Undoable."
-        if self.text_overlay is None or self.current_pil is None:
-            return
-        before = self._edit_state()
-        iw, ih = self.current_pil.size
-        tw, th = imaging.text_extent(self.text_overlay)
-        margin = min(iw, ih) * self.TEXT_MARGIN
-        cx = {"l": margin + tw / 2, "c": iw / 2, "r": iw - margin - tw / 2}[h]
-        cy = {"t": margin + th / 2, "m": ih / 2, "b": ih - margin - th / 2}[v]
-        self.text_overlay = {**self.text_overlay, "cx": cx, "cy": cy}
         self._edits_saved = False
         self._render_preview()
         self._record_edit(before)

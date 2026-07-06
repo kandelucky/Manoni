@@ -9,7 +9,7 @@ AND the font size together. Pure Pillow, no Tk / state.
 
 import math
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 # Friendly font name -> candidate Windows font files (first that loads wins).
@@ -115,8 +115,19 @@ def _text_tile(overlay, scale):
     color = overlay.get("color", "#ffffff")
     angle = float(overlay.get("angle", 0.0))
     shadow = bool(overlay.get("shadow"))
+    # Shadow parameters — distance and blur are % of the font size, so the
+    # shadow scales with the text and the preview matches the full-res save.
+    # The .get defaults reproduce the old fixed look (crisp, down-right, 60%
+    # black), so overlays saved before these knobs existed render unchanged.
+    sh_dist = float(overlay.get("shadow_dist", 10.0))
+    sh_angle = float(overlay.get("shadow_angle", 45.0))
+    sh_blur = float(overlay.get("shadow_blur", 0.0))
+    sh_op = max(0.0, min(1.0, float(overlay.get("shadow_opacity", 0.6))))
+    sh_color = overlay.get("shadow_color", "#000000")
     a = int(round(opacity * 255))
-    key = (text, family, round(px), align, color, a, shadow, round(angle, 1))
+    key = (text, family, round(px), align, color, a, angle and round(angle, 1),
+           shadow and (round(sh_dist, 1), round(sh_angle), round(sh_blur, 1),
+                       round(sh_op, 2), sh_color))
     tile = _tile_cache.get(key)
     if tile is not None:
         return tile
@@ -131,16 +142,31 @@ def _text_tile(overlay, scale):
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
     if tw <= 0 or th <= 0:
         return None
-    # A soft dark drop-shadow lifts light text off a bright photo; its offset
-    # scales with the font so it reads the same on preview and full-res.
-    off = max(1, int(round(px * 0.07))) if shadow else 0
-    m = off + 2                              # margin so the shadow + AA edges never clip
-    tile = Image.new("RGBA", (int(tw + 2 * m), int(th + 2 * m)), (0, 0, 0, 0))
-    d = ImageDraw.Draw(tile)
+    # A drop-shadow lifts light text off a bright photo. Its offset comes from
+    # the distance + angle knobs (0° = right, 90° = down, matching the y-down
+    # image axes) and everything scales with the font so it reads the same on
+    # preview and full-res.
+    sh_a = int(round(a * sh_op)) if shadow else 0
+    dx = dy = 0.0
+    blur_r = 0.0
+    if sh_a:
+        d_px = px * sh_dist / 100.0
+        dx = d_px * math.cos(math.radians(sh_angle))
+        dy = d_px * math.sin(math.radians(sh_angle))
+        blur_r = px * sh_blur / 200.0        # 100 → half the font height: very soft
+    # Margin so the shadow (offset + ~3σ of blur spread) + AA edges never clip.
+    m = int(math.ceil(max(abs(dx), abs(dy)) + 3.0 * blur_r)) + 2
+    size = (int(tw + 2 * m), int(th + 2 * m))
+    tile = Image.new("RGBA", size, (0, 0, 0, 0))
     ox, oy = m - bbox[0], m - bbox[1]        # ink box lands at (m, m) → centred in the tile
-    if off:
-        d.multiline_text((ox + off, oy + off), text, font=font,
-                         fill=(0, 0, 0, int(a * 0.6)), align=align)
+    if sh_a:
+        sh_rgb = _hex_to_rgb(sh_color, (0, 0, 0))
+        ImageDraw.Draw(tile).multiline_text(
+            (ox + dx, oy + dy), text, font=font,
+            fill=(sh_rgb[0], sh_rgb[1], sh_rgb[2], sh_a), align=align)
+        if blur_r > 0.1:
+            tile = tile.filter(ImageFilter.GaussianBlur(blur_r))
+    d = ImageDraw.Draw(tile)
     d.multiline_text((ox, oy), text, font=font,
                      fill=(rgb[0], rgb[1], rgb[2], a), align=align)
 

@@ -33,7 +33,8 @@ from PIL import Image, ImageDraw, ImageTk
 
 import tintkit
 
-from ..config import ACCENT, FG_DIM, ON_ACCENT, EDIT_PAD, LOGO_DIR, LOGO_PRESET_DIR
+from ..config import (ACCENT, FG_DIM, ON_ACCENT, EDIT_PAD, CHIP_GAP,
+                      LOGO_DIR, LOGO_PRESET_DIR)
 from ..i18n import t
 from ..storage import unique_path
 from .. import imaging
@@ -53,20 +54,14 @@ class LogoMixin:
     # --- Panel --------------------------------------------------------------
 
     def _build_logo_section(self, parent):
-        "Logo panel: presets + import, then size / opacity / tint / flip / place."
+        "Logo panel: presets + import, then Appearance + Flip cards, then footer."
         f = self._tw(tk.Frame(parent), bg="bar")
-
-        self._tw(tk.Label(f, text=t("Pick a saved logo or choose a PNG, then drag it "
-                           "on the photo to place it. The corner handle resizes it."),
-                 font=("Segoe UI", 8), justify="left",
-                 anchor="w", wraplength=self._edit_dpi_w(190)),
-                 bg="bar", fg="fg_dim").pack(fill="x", padx=EDIT_PAD, pady=(10, 6))
 
         # Top row: ‘Choose PNG…’ (import a file — it is copied into the user logo
         # folder so it is offered again next time) and a trash icon that removes
         # the selected logo.
         addrow = self._tw(tk.Frame(f), bg="bar")
-        addrow.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        addrow.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
         add = tintkit.Button(addrow, self.theme, t("Choose PNG…"), role="primary",
                              variant="filled", stretch=True, bg="bar",
                              command=self._import_logo)
@@ -90,109 +85,136 @@ class LogoMixin:
         self._build_logo_group(f, "user", t("Your logos"))
         self._refresh_logo_presets()
 
-        # Size (as % of the photo's short side) and opacity, each a TitledSlider
-        # with its own reset. The press/release hooks fold a whole drag into one
-        # undo step.
+        # Appearance card: size / opacity / rotation, then tint + colour swatch.
+        # Controls pack WITHOUT EDIT_PAD — the card's own inset aligns them.
+        ap = self._panel_card(f, t("Appearance"))
         self.s_logo_size = tintkit.TitledSlider(
-            f, self.theme, t("Size"), value=30, lo=2, hi=100, neutral=30, bg="bar",
-            command=self._set_logo_size, on_press=self._edit_gesture_start,
-            on_release=self._edit_gesture_end, reset_tip=t("Reset this slider"),
-            value_fmt=lambda v, n: str(v),
+            ap, self.theme, t("Size"), value=30, lo=2, hi=100, neutral=30,
+            bg="bar", compact=True, command=self._set_logo_size,
+            on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
+            reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_logo_slider("size"))
-        self.s_logo_size.pack(fill="x", padx=EDIT_PAD, pady=(8, 2))
+        self.s_logo_size.pack(fill="x", pady=(3, 0))
         self.s_logo_opacity = tintkit.TitledSlider(
-            f, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
-            bg="bar", command=self._set_logo_opacity,
+            ap, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
+            bg="bar", compact=True, command=self._set_logo_opacity,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_logo_slider("opacity"))
-        self.s_logo_opacity.pack(fill="x", padx=EDIT_PAD, pady=2)
+        self.s_logo_opacity.pack(fill="x", pady=(3, 0))
         # Rotation: −180…180° (0 = upright). Positive turns clockwise.
         self.s_logo_rotation = tintkit.TitledSlider(
-            f, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
-            bg="bar", command=self._set_logo_rotation,
+            ap, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
+            bg="bar", compact=True, command=self._set_logo_rotation,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: f"{v}°",
             on_reset=lambda: self._reset_logo_slider("rotation"))
-        self.s_logo_rotation.pack(fill="x", padx=EDIT_PAD, pady=2)
+        self.s_logo_rotation.pack(fill="x", pady=(3, 0))
 
         # Tint: a checkbox that recolours the whole logo to the swatch colour
-        # (turns a black logo white, etc.), with the colour swatch beside it.
-        row = self._tw(tk.Frame(f), bg="bar")
-        row.pack(fill="x", padx=EDIT_PAD, pady=(10, 2))
+        # (turns a black logo white, etc.), with the colour swatch beside it —
+        # two equal halves.
+        row = self._tw(tk.Frame(ap), bg="bar")
+        row.pack(fill="x", pady=(8, 0))
+        row.grid_columnconfigure(0, weight=1, uniform="lg")
+        row.grid_columnconfigure(1, weight=1, uniform="lg")
         self._logo_tint_chk = tintkit.Checkbox(
             row, self.theme, t("Tint"), state="off", bg="bar",
             command=lambda _st: self._toggle_logo_tint())
-        self._logo_tint_chk.pack(side="left")
+        self._logo_tint_chk.grid(row=0, column=0, sticky="w")
         tintkit.HoverTip(self._logo_tint_chk.canvas, self.theme,
                          t("Recolour the whole logo to one flat colour"))
         self._logo_swatch = self._tw(tk.Frame(row, bg="#ffffff", cursor="hand2",
-                                     width=self._edit_dpi_w(28),
-                                     height=self._edit_dpi_w(16),
+                                     width=self._edit_dpi_w(40),
+                                     height=self._edit_dpi_w(20),
                                      highlightthickness=1), hl="border")
-        self._logo_swatch.pack(side="right")
-        self._logo_swatch.pack_propagate(False)
+        self._logo_swatch.grid(row=0, column=1, sticky="e")
         self._logo_swatch.bind("<Button-1>", lambda e: self._pick_logo_color())
         tintkit.HoverTip(self._logo_swatch, self.theme, t("Pick the tint colour"))
 
-        # Flip: two independent toggles (horizontal / vertical mirror).
-        self._group_header(f, t("Flip"))
-        fliprow = self._tw(tk.Frame(f), bg="bar")
-        fliprow.pack(fill="x", padx=EDIT_PAD, pady=2)
-        self._logo_fliph_chk = tintkit.Checkbox(
-            fliprow, self.theme, t("Horizontal"), state="off", bg="bar",
-            command=lambda _st: self._toggle_logo_flip("flip_h"))
-        self._logo_fliph_chk.pack(side="left")
-        self._logo_flipv_chk = tintkit.Checkbox(
-            fliprow, self.theme, t("Vertical"), state="off", bg="bar",
-            command=lambda _st: self._toggle_logo_flip("flip_v"))
-        self._logo_flipv_chk.pack(side="right")
+        # Flip card: two equal icon-only tiles (mirror horizontally / vertically),
+        # each lit accent while on. No corner-placement grid — a logo is dragged
+        # straight onto the photo, so snapping it to an anchor is redundant.
+        fl = self._panel_card(f, t("Flip"))
+        self._build_logo_flip_tiles(fl)
 
-        # One-click placement: a 3×3 grid snapping the logo to a corner / edge /
-        # centre with a small margin — the watermark staple.
-        self._group_header(f, t("Position"))
-        self._build_logo_position_grid(f)
-
-        # Footer: Done closes the tool (the logos stay live on the photo); Delete
-        # all wipes every logo. 'Delete logo' (the selected one) is the trash icon
-        # up by 'Choose PNG…'. Delete all dims to disabled while there's nothing.
-        done = tintkit.Button(
-            f, self.theme, t("Done"), role="primary", variant="filled",
-            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
-        done.pack(fill="x", padx=EDIT_PAD, pady=(14, 0))
+        # Footer: Done + Delete all on one row, two equal halves. Done closes the
+        # tool (logos stay live); Delete all wipes every logo and dims to disabled
+        # while there's nothing. ('Delete logo' is the trash icon above.)
+        foot = self._tw(tk.Frame(f), bg="bar")
+        foot.pack(fill="x", padx=EDIT_PAD, pady=(12, 10))
+        foot.grid_columnconfigure(0, weight=1, uniform="ft")
+        foot.grid_columnconfigure(1, weight=1, uniform="ft")
+        tintkit.Button(foot, self.theme, t("Done"), role="primary",
+                       variant="filled", stretch=True, bg="bar",
+                       command=lambda: self.set_section("basic")).grid(
+                           row=0, column=0, sticky="ew", padx=(0, CHIP_GAP))
         self._logo_delall_btn = tintkit.Button(
-            f, self.theme, t("Delete all"), role="neutral", variant="outline",
+            foot, self.theme, t("Delete all"), role="neutral", variant="outline",
             icon="x", stretch=True, bg="bar", command=self._delete_all_logo)
-        self._logo_delall_btn.pack(fill="x", padx=EDIT_PAD, pady=(8, 8))
+        self._logo_delall_btn.grid(row=0, column=1, sticky="ew", padx=(CHIP_GAP, 0))
         tintkit.HoverTip(self._logo_delall_btn.canvas, self.theme,
                          t("Remove every logo from the photo"))
         self._refresh_logo_buttons()           # start Delete-all disabled if empty
         return f
 
-    def _build_logo_position_grid(self, parent):
-        "A 3×3 grid of buttons; each snaps the logo to that anchor with a margin."
+    # (icon, overlay-key, tooltip) for the two mirror tiles.
+    _LOGO_FLIP_TILES = [
+        ("flip-horizontal-2", "flip_h", "Mirror the logo horizontally"),
+        ("flip-vertical-2", "flip_v", "Mirror the logo vertically"),
+    ]
+
+    def _build_logo_flip_tiles(self, parent):
+        "Two equal icon-only tiles that mirror the logo; each lights accent while"
+        " its flip is on (repainted by _paint_logo_flip_tiles on select / theme)."
+        " Fixed to the standard button height so they match the footer buttons —"
+        " the grid gives them equal width, the icon is centred with place()."
         grid = self._tw(tk.Frame(parent), bg="bar")
-        grid.pack(padx=EDIT_PAD, pady=2)
-        for r, v in enumerate(("t", "m", "b")):
-            for c, h in enumerate(("l", "c", "r")):
-                cell = self._tw(tk.Frame(grid, cursor="hand2",
-                                width=self._edit_dpi_w(34),
-                                height=self._edit_dpi_w(22)), bg="chip")
-                cell.grid(row=r, column=c, padx=2, pady=2)
-                cell.pack_propagate(False)
-                dot = self._tw(tk.Frame(cell,
-                               width=self._edit_dpi_w(6), height=self._edit_dpi_w(6)),
-                               bg="fg_dim")
-                dot.place(relx={"l": 0.18, "c": 0.5, "r": 0.82}[h],
-                          rely={"t": 0.22, "m": 0.5, "b": 0.78}[v], anchor="center")
-                for w in (cell, dot):
-                    w.bind("<Button-1>", lambda e, hh=h, vv=v: self._place_logo(hh, vv))
-                    w.bind("<Enter>", lambda e, cc=cell, dd=dot:
-                           (cc.configure(bg=self.theme["hover"]),
-                            dd.configure(bg=self.theme["fg"])))
-                    w.bind("<Leave>", lambda e, cc=cell, dd=dot:
-                           (cc.configure(bg=self.theme["chip"]),
-                            dd.configure(bg=self.theme["fg_dim"])))
+        grid.pack(fill="x")
+        self._logo_flip_widgets = {}           # key -> (tile, icon-label, icon-name)
+        h = self._edit_dpi_w(36)               # = a tintkit Button's height
+        for i, (icon_name, key, tip) in enumerate(self._LOGO_FLIP_TILES):
+            grid.columnconfigure(i, weight=1, uniform="lf")
+            tile = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1,
+                            height=h), bg="chip", hl="border")
+            tile.grid(row=0, column=i, sticky="ew", padx=2)
+            tile.grid_propagate(False)         # hold the height; width fills the cell
+            ic = tk.Label(tile, bd=0)
+            ic.place(relx=0.5, rely=0.5, anchor="center")
+            self._logo_flip_widgets[key] = (tile, ic, icon_name)
+            for w in (tile, ic):
+                w.bind("<Button-1>", lambda e, k=key: self._toggle_logo_flip(k))
+                w.bind("<Enter>", lambda e, k=key: self._logo_flip_hover(k, True))
+                w.bind("<Leave>", lambda e, k=key: self._logo_flip_hover(k, False))
+            tintkit.HoverTip(tile, self.theme, t(tip))
+        self.theme.subscribe(self._paint_logo_flip_tiles)   # panel built once → safe
+        self._paint_logo_flip_tiles()
+
+    def _logo_flip_hover(self, key, on):
+        "Hover a flip tile — but leave an active (accent) tile alone."
+        ov = self.logo_overlay
+        if ov is not None and ov.get(key):
+            return
+        tile, ic, _ = self._logo_flip_widgets[key]
+        bg = self.theme["hover"] if on else self.theme["chip"]
+        tile.configure(bg=bg)
+        ic.configure(bg=bg)
+
+    def _paint_logo_flip_tiles(self):
+        "Colour each flip tile by the selected logo's flip state (accent = on) and"
+        " tint its icon to match. Re-tints on the dark<->light switch too."
+        if not hasattr(self, "_logo_flip_widgets"):
+            return
+        ov = self.logo_overlay
+        for key, (tile, ic, icon_name) in self._logo_flip_widgets.items():
+            active = bool(ov is not None and ov.get(key))
+            base = self.theme["accent"] if active else self.theme["chip"]
+            col = self.theme["on_accent"] if active else self.theme["fg"]
+            tile.configure(bg=base)
+            ic.configure(bg=base)
+            img = self.icon(icon_name, 16, col)
+            ic.configure(image=img or "")
+            ic.image = img
 
     # --- Preset strip -------------------------------------------------------
 
@@ -552,12 +574,7 @@ class LogoMixin:
         if hasattr(self, "_logo_tint_chk"):
             self._logo_tint_chk.state = "on" if tint else "off"
             self._logo_tint_chk.repaint()
-        if hasattr(self, "_logo_fliph_chk"):
-            self._logo_fliph_chk.state = "on" if (has and ov.get("flip_h")) else "off"
-            self._logo_fliph_chk.repaint()
-        if hasattr(self, "_logo_flipv_chk"):
-            self._logo_flipv_chk.state = "on" if (has and ov.get("flip_v")) else "off"
-            self._logo_flipv_chk.repaint()
+        self._paint_logo_flip_tiles()          # recolour the flip tiles by state
         self._refresh_logo_buttons()
 
     def _refresh_logo_buttons(self):
@@ -668,21 +685,6 @@ class LogoMixin:
         before = self._edit_state()
         self.logo_overlay = {**self.logo_overlay, "tint": hexv}
         self._sync_logo_controls()
-        self._edits_saved = False
-        self._render_preview()
-        self._record_edit(before)
-
-    def _place_logo(self, h, v):
-        "Snap the logo to a 3×3 anchor (h in l/c/r, v in t/m/b) with a margin. Undoable."
-        if self.logo_overlay is None or self.current_pil is None:
-            return
-        before = self._edit_state()
-        iw, ih = self.current_pil.size
-        lw, lh = imaging.logo_extent(self.logo_overlay)
-        margin = min(iw, ih) * self.LOGO_MARGIN
-        cx = {"l": margin + lw / 2, "c": iw / 2, "r": iw - margin - lw / 2}[h]
-        cy = {"t": margin + lh / 2, "m": ih / 2, "b": ih - margin - lh / 2}[v]
-        self.logo_overlay = {**self.logo_overlay, "cx": cx, "cy": cy}
         self._edits_saved = False
         self._render_preview()
         self._record_edit(before)

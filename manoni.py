@@ -409,7 +409,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.show_rulers = False  # top + left pixel rulers (Ctrl+R); persisted
         self.show_filter_strip = False  # the filter-preview filmstrip; persisted
         self.show_histogram = False  # the edit panel's live histogram; persisted
-        self.basic_full = False  # Basic Edits: show all sliders vs the simple 7; persisted
+        # Basic Edits foldout states (key -> open). Essentials starts open, the
+        # advanced groups shut; every header click persists here.
+        self.basic_folds = {"essentials": True, "wb": False,
+                            "tone": False, "detail": False}
         self.fast_preview = True  # drop heavy filters during a slider drag; persisted
         self.async_render = True  # render off the UI thread so a heavy edit can't
                                   # freeze the window; persisted (Settings → General)
@@ -597,7 +600,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "show_rulers": self.show_rulers,
                  "show_filter_strip": self.show_filter_strip,
                  "show_histogram": self.show_histogram,
-                 "basic_full": self.basic_full,
+                 "basic_folds": self.basic_folds,
                  "fast_preview": self.fast_preview,
                  "async_render": self.async_render,
                  "restore_session": self.restore_session,
@@ -682,10 +685,17 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "autosave_copy", "confirm_overwrite",
                     "show_filter_strip", "show_histogram",
-                    "basic_full", "fast_preview", "async_render", "first_run_done"):
+                    "fast_preview", "async_render", "first_run_done"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)
+        # Basic Edits foldout states (the old basic_full flag is ignored — a
+        # first run on this layout starts with just Essentials open).
+        folds = state.get("basic_folds")
+        if isinstance(folds, dict):
+            self.basic_folds.update(
+                {k: v for k, v in folds.items()
+                 if k in self.basic_folds and isinstance(v, bool)})
         # UI language. Falls back to the default (Georgian) if unset/unknown.
         lang = state.get("language")
         if isinstance(lang, str):

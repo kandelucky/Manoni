@@ -179,47 +179,45 @@ class EditPanelMixin:
             self._bind_section_wheel(c)
 
     def _build_basic_section(self, parent):
-        "Basic Edits: a simple seven-slider set + a toggle that reveals the full"
-        " slider set (every tone / detail / colour control)."
+        "Basic Edits: tintkit.Foldout groups — Essentials open by default, the"
+        " advanced groups collapsed. Each fold's state persists via basic_folds."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Simple version: the seven most-used controls, always visible. No group
-        # headers — a short flat list reads simpler. The rest live in the advanced
-        # block below, revealed by the Full-version toggle.
-        ess = self._tw(tk.Frame(f), bg="bar")
-        ess.pack(fill="x", pady=(8, 0))
-        self.s_exposure   = self._slider(ess, t("Exposure"), "brightness")
-        self.s_exposure_g = self._slider(ess, t("Brightness/Fill"), "exposure_g")
-        self.s_contrast   = self._slider(ess, t("Contrast"), "contrast")
-        self.s_highlights = self._slider(ess, t("Highlights"), "highlights")
-        self.s_shadows    = self._slider(ess, t("Shadows"), "shadows")
-        self.s_vibrance   = self._slider(ess, t("Vibrance"), "vibrance")
-        self.s_sharpen    = self._slider(ess, t("Sharpen"), "sharpen")
+        def group(key, title, pady=(0, 8)):
+            fo = tintkit.Foldout(
+                f, self.theme, title, bg="bar",
+                open=self.basic_folds.get(key, key == "essentials"),
+                on_toggle=lambda o, k=key: self._on_basic_fold(k, o))
+            fo.pack(fill="x", padx=EDIT_PAD, pady=pady)
+            return fo.body
 
-        # Advanced version: everything else, in the Photoshop groups. Built now
-        # (so its sliders still join the shared reset / undo / filter machinery)
-        # but only shown while basic_full is on — see _apply_basic_full. It is NOT
-        # packed here; the toggle packs it in above itself when the user expands.
-        adv = self._tw(tk.Frame(f), bg="bar")
-        self._basic_adv = adv
-        self._group_header(adv, t("White balance"))
-        self.s_temp       = self._slider(adv, t("Temperature"), "temperature")
-        self.s_tint       = self._slider(adv, t("Tint"), "tint")
-        self._group_header(adv, t("Tone"))
-        self.s_whites     = self._slider(adv, t("Whites"), "whites")
-        self.s_blacks     = self._slider(adv, t("Blacks"), "blacks")
-        self._group_header(adv, t("Detail & Color"))
-        self.s_clarity    = self._slider(adv, t("Clarity"), "clarity")
-        self.s_dehaze     = self._slider(adv, t("Dehaze"), "dehaze")
-        self.s_color      = self._slider(adv, t("Color"), "color")
-        self.s_texture    = self._slider(adv, t("Texture"), "texture")
+        # Essentials: the seven most-used controls.
+        ess = group("essentials", t("Essentials"), pady=(8, 8))
+        self.s_exposure   = self._slider(ess, t("Exposure"), "brightness", pad=0)
+        self.s_exposure_g = self._slider(ess, t("Brightness/Fill"), "exposure_g",
+                                         pad=0)
+        self.s_contrast   = self._slider(ess, t("Contrast"), "contrast", pad=0)
+        self.s_highlights = self._slider(ess, t("Highlights"), "highlights", pad=0)
+        self.s_shadows    = self._slider(ess, t("Shadows"), "shadows", pad=0)
+        self.s_vibrance   = self._slider(ess, t("Vibrance"), "vibrance", pad=0)
+        self.s_sharpen    = self._slider(ess, t("Sharpen"), "sharpen", pad=0)
+
+        # The rest, in the Photoshop groups — collapsed until needed, but built
+        # now so every slider joins the shared reset / undo / filter machinery.
+        wb = group("wb", t("White balance"))
+        self.s_temp       = self._slider(wb, t("Temperature"), "temperature", pad=0)
+        self.s_tint       = self._slider(wb, t("Tint"), "tint", pad=0)
+        tone = group("tone", t("Tone"))
+        self.s_whites     = self._slider(tone, t("Whites"), "whites", pad=0)
+        self.s_blacks     = self._slider(tone, t("Blacks"), "blacks", pad=0)
+        det = group("detail", t("Detail & Color"))
+        self.s_clarity    = self._slider(det, t("Clarity"), "clarity", pad=0)
+        self.s_dehaze     = self._slider(det, t("Dehaze"), "dehaze", pad=0)
+        self.s_color      = self._slider(det, t("Color"), "color", pad=0)
+        self.s_texture    = self._slider(det, t("Texture"), "texture", pad=0)
         # Noise reduction rests at 0 (off → full strength), like the effects.
-        self.s_denoise    = self._slider(adv, t("Noise reduction"), "denoise",
-                                         hi=100, neutral=0)
-
-        # The Simple/Full toggle sits under the seven essentials; the advanced
-        # block is revealed just above it (a "show more / show less" at the foot).
-        self._basic_more = self._basic_toggle(f)
+        self.s_denoise    = self._slider(det, t("Noise reduction"), "denoise",
+                                         hi=100, neutral=0, pad=0)
 
         self.sliders = {"brightness": self.s_exposure,
                         "exposure_g": self.s_exposure_g,
@@ -239,60 +237,13 @@ class EditPanelMixin:
                         "tint": self.s_tint}
 
         self._clear_button(f)
-        self._apply_basic_full()      # honour the saved simple/full choice
         return f
 
-    def _basic_toggle(self, parent):
-        "Full-width Simple/Full-version toggle: reveals or hides the advanced basic"
-        " sliders. Its chevron + caption flip with the state (see _apply_basic_full)."
-        btn = self._tw(tk.Frame(parent, cursor="hand2"), bg="chip")
-        btn.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
-        inner = self._tw(tk.Frame(btn), bg="chip")   # centres the chevron + label
-        inner.pack(pady=6)
-        ic = self._tw(tk.Label(inner), bg="chip")    # image set by _sync_basic_chevron
-        ic.pack(side="left", padx=(0, 6))
-        self._basic_chevron = ic
-        tx = self._tw(tk.Label(inner, font=("Segoe UI", 9, "bold")), bg="chip", fg="fg")
-        tx.pack(side="left")
-        self._basic_more_label = tx
-        parts = [btn, inner, ic, tx]
-        for w in parts:
-            w.bind("<Button-1>", lambda e: self._toggle_basic_full())
-            w.bind("<Enter>", lambda e: [p.configure(bg=self.theme["hover"]) for p in parts])
-            w.bind("<Leave>", lambda e: [p.configure(bg=self.theme["chip"]) for p in parts])
-        btn._tip = Tooltip(btn, t("Show every Basic Edit slider"))
-        self.theme.subscribe(self._sync_basic_chevron)   # re-tint on dark<->light
-        return btn
-
-    def _toggle_basic_full(self):
-        "Flip the Basic Edits simple/full view and remember the choice."
-        self.basic_full = not getattr(self, "basic_full", False)
-        self._apply_basic_full()
+    def _on_basic_fold(self, key, open):
+        "Remember one Basic group's open/closed state and re-fit the scroll."
+        self.basic_folds[key] = bool(open)
         self._save_state()
-
-    def _apply_basic_full(self):
-        "Show/hide the advanced basic sliders and sync the toggle's caption + chevron"
-        " to self.basic_full."
-        full = getattr(self, "basic_full", False)
-        if full:
-            self._basic_adv.pack(fill="x", before=self._basic_more)
-        else:
-            self._basic_adv.pack_forget()
-        self._basic_more_label.configure(
-            text=t("Simple version") if full else t("Full version"))
-        self._sync_basic_chevron()
         self.root.after_idle(self._sync_section_scroll)   # content height changed
-
-    def _sync_basic_chevron(self):
-        "Point the toggle's chevron: down = collapsed (expand), up = expanded."
-        ic = getattr(self, "_basic_chevron", None)
-        if ic is None:
-            return
-        name = "chevron-up" if getattr(self, "basic_full", False) else "chevron-down"
-        im = self.icon(name, size=15, color=self.theme["fg"])
-        if im is not None:
-            ic.configure(image=im)
-            ic._icon_ref = im
 
     def _group_header(self, parent, text):
         "A thin divider + small bold caption that splits the basic sliders into"
@@ -303,6 +254,20 @@ class EditPanelMixin:
         self._tw(tk.Label(parent, text=text, anchor="w",
                  font=("Segoe UI", 8, "bold")), bg="bar", fg="fg_dim").pack(
                      fill="x", padx=EDIT_PAD, pady=(4, 2))
+
+    def _panel_card(self, parent, title):
+        "A bordered card titled with a small dim bold caption — the boxed field the"
+        " crop panel uses for Straighten / Flip & rotate. Boxing a group and giving"
+        " it one caption reads tidier than a loose divider + stacked controls."
+        " Returns the inner content frame for the caller to fill (its 10px inset"
+        " means children pack WITHOUT the usual EDIT_PAD)."
+        card = self._tw(tk.Frame(parent, highlightthickness=1), bg="bar", hl="border")
+        card.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        inner = self._tw(tk.Frame(card), bg="bar")
+        inner.pack(fill="x", padx=10, pady=(8, 9))
+        self._tw(tk.Label(inner, text=title, font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(anchor="w", pady=(0, 6))
+        return inner
 
     def _refresh_auto_buttons(self):
         "Repaint the auto buttons so the active mode is accent-filled, rest neutral."
@@ -680,10 +645,12 @@ class EditPanelMixin:
             else:
                 ic.configure(fg=self.theme[itok])
 
-    def _slider(self, parent, label, attr, lo=0, hi=200, neutral=100):
+    def _slider(self, parent, label, attr, lo=0, hi=200, neutral=100,
+                pad=EDIT_PAD):
         "A labeled live TitledSlider bound to an attribute, with its own reset icon."
         " Default 0–200 → factor 0.0–2.0 (neutral 1.0). Effects pass hi=100,"
-        " neutral=0 → 0.0–1.0 (off→full)."
+        " neutral=0 → 0.0–1.0 (off→full). Pass pad=0 inside a Foldout body —"
+        " the body's own inset already aligns the control."
         s = tintkit.TitledSlider(
             parent, self.theme, label, value=neutral, lo=lo, hi=hi,
             neutral=neutral, bg="bar", compact=True,
@@ -692,7 +659,7 @@ class EditPanelMixin:
             reset_tip=t("Reset this slider"),
             value_fmt=self._slider_fmt(lo, hi, neutral),
             on_reset=lambda a=attr: self._reset_slider(a))
-        s.pack(fill="x", padx=EDIT_PAD, pady=(1, 2))
+        s.pack(fill="x", padx=pad, pady=(1, 2))
         return s
 
     def _slider_fmt(self, lo, hi, neutral):
