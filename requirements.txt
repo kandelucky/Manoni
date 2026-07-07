@@ -1,3 +1,5 @@
 # Manoni dependencies — intentionally tiny (runs on a weak laptop)
 # tkinter is part of the Python standard library (no install needed)
 pillow
+tkinterdnd2
+tintkit

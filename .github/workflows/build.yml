@@ -1,0 +1,53 @@
+# Builds the Windows app + installer on GitHub's servers, so every release
+# is compiled from this public repository in a verifiable way (required for
+# free code signing by SignPath Foundation — signing step added once approved).
+#
+# Triggers:
+#   * pushing a tag like v1.2.0  -> builds and attaches the installer to a
+#     DRAFT GitHub release (write the notes, then publish it by hand)
+#   * "Run workflow" button      -> test build; installer kept as an artifact
+
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create the draft release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build app (PyInstaller)
+        run: pyinstaller manoni.spec --noconfirm
+
+      - name: Build installer (Inno Setup)
+        run: iscc manoni.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Manoni-Setup
+          path: installer/*.exe
+          if-no-files-found: error
+
+      - name: Attach installer to draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: installer/*.exe
