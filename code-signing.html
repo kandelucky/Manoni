@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code signing policy — Manoni</title>
+<meta name="description" content="How Manoni's Windows releases are built and signed: GitHub Actions builds from public source, free code signing by SignPath.io with a certificate by SignPath Foundation.">
+<link rel="icon" href="manoni-icon.png">
+<style>
+  :root{
+    --bg:#161616; --panel:#232323; --hover:#333333; --chip:#2c2c2c;
+    --border:#343434; --border2:#3f3f3f; --divider:#2e2e2e;
+    --fg:#ededed; --fg2:#c4c4c4; --dim:#8f8f8f;
+    --acc:#4aa3ff; --acc-h:#5ab0ff; --on-acc:#f4f9ff;
+    --r-ctrl:5px; --r-card:10px; --hair:1px;
+    --sans:"Segoe UI Variable","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    --mono:"Cascadia Code",ui-monospace,Consolas,"SFMono-Regular",monospace;
+    --maxw:760px;
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f6f4; --panel:#ffffff; --hover:#e6e6e2; --chip:#ececea;
+    --border:#dcdcd6; --border2:#cfcfc9; --divider:#e4e4de;
+    --fg:#1a1a1a; --fg2:#3a3a38; --dim:#6a6a66;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    line-height:1.65;font-size:16px;-webkit-font-smoothing:antialiased;
+    transition:background .3s ease,color .3s ease}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+  a{color:var(--acc);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h1,h2{margin:0;letter-spacing:-.02em}
+
+  .top{position:sticky;top:0;z-index:20;
+    background:color-mix(in srgb,var(--bg) 82%,transparent);
+    backdrop-filter:saturate(1.4) blur(12px);
+    border-bottom:var(--hair) solid var(--border)}
+  .top .wrap{display:flex;align-items:center;gap:14px;height:62px;max-width:1120px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:650;
+    font-size:17px;color:var(--fg)}
+  .brand:hover{text-decoration:none}
+  .brand img{width:27px;height:27px;border-radius:7px}
+  .grow{flex:1}
+  .nav{display:flex;align-items:center;gap:2px}
+  .nav a{padding:8px 12px;border-radius:var(--r-ctrl);font-size:14px;color:var(--dim)}
+  .nav a:hover{background:var(--hover);color:var(--fg);text-decoration:none}
+  .tt{width:36px;height:36px;border-radius:var(--r-ctrl);display:grid;
+    place-items:center;font-size:16px;color:var(--dim);margin-left:4px}
+  .tt:hover{background:var(--hover);color:var(--fg)}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--acc)}
+  main{padding:64px 0 80px}
+  h1{font-size:clamp(30px,5vw,42px);font-weight:700;margin:.35em 0 .3em}
+  .lead{color:var(--fg2);font-size:17px;margin:0 0 8px}
+  h2{font-size:20px;font-weight:650;margin:44px 0 12px}
+  p{color:var(--fg2);margin:0 0 14px}
+  b{color:var(--fg);font-weight:600}
+  ul{margin:0 0 14px;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+  li{position:relative;padding-left:20px;color:var(--fg2)}
+  li::before{content:"";position:absolute;left:2px;top:11px;
+    width:6px;height:6px;border-radius:50%;background:var(--acc)}
+  code{font-family:var(--mono);font-size:13.5px;background:var(--chip);
+    border:var(--hair) solid var(--border2);border-radius:5px;padding:2px 6px}
+  .card{background:var(--panel);border:var(--hair) solid var(--border);
+    border-radius:var(--r-card);padding:20px 22px;margin:20px 0}
+  .card p:last-child{margin-bottom:0}
+
+  .foot{border-top:var(--hair) solid var(--border);padding:34px 0 50px;color:var(--dim)}
+  .foot .wrap{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;max-width:1120px}
+  .foot .mono{font-family:var(--mono);font-size:12.5px}
+  .foot a{color:var(--dim)}
+  .foot a:hover{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="manoni-icon.png" alt="Manoni"> Manoni</a>
+    <div class="grow"></div>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/kandelucky/Manoni">GitHub</a>
+      <button class="tt" id="tt" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="eyebrow">Trust &amp; releases</div>
+    <h1>Code signing policy</h1>
+    <p class="lead">How Manoni's Windows releases are built, signed and kept honest.</p>
+
+    <div class="card">
+      <p>Free code signing provided by <a href="https://signpath.io">SignPath.io</a>,
+      certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+    </div>
+
+    <h2>How releases are built</h2>
+    <p>Every release of Manoni is compiled from the public source code in the
+    <a href="https://github.com/kandelucky/Manoni">GitHub repository</a> by an automated
+    <a href="https://github.com/kandelucky/Manoni/actions">GitHub Actions build</a> —
+    not on a private machine. The workflow file
+    (<code>.github/workflows/build.yml</code>) is part of the repository, so anyone can
+    see exactly how the executable and the installer are produced.</p>
+
+    <h2>Team &amp; roles</h2>
+    <p>Manoni is developed and maintained by a single person:</p>
+    <ul>
+      <li><b>Lasha Kandelaki</b> (<a href="https://github.com/kandelucky">@kandelucky</a>) —
+      committer, reviewer, and release / signing approver.</li>
+    </ul>
+    <p>Two-factor authentication is enforced on the accounts used for the source
+    repository and for signing.</p>
+
+    <h2>Privacy</h2>
+    <p>Manoni runs entirely on your computer. It does <b>not</b> collect, transmit or
+    share any data — no telemetry, no analytics, no background network calls.
+    The program will never transfer data to outside services without your explicit
+    action and consent.</p>
+
+    <h2>License</h2>
+    <p>Manoni is free software under the
+    <a href="https://github.com/kandelucky/Manoni/blob/main/LICENSE">GNU General Public
+    License v3.0</a>.</p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <span class="mono">© 2026 Manoni · GPL-3.0</span>
+    <span><a href="index.html">manoni</a> · <a href="https://github.com/kandelucky/Manoni">github</a></span>
+  </div>
+</footer>
+
+<script>
+  var root=document.documentElement;
+  document.getElementById('tt').onclick=function(){
+    root.setAttribute('data-theme', root.getAttribute('data-theme')==='light'?'dark':'light');
+  };
+</script>
+</body>
+</html>
