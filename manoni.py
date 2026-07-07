@@ -147,7 +147,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             try:
                 import ctypes
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                    "voxe.manoni.photoculler")
+                    "kandelucky.manoni.photoculler")
             except Exception:
                 pass
 

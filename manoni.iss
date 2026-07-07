@@ -17,7 +17,7 @@
 #define AppName    "Manoni"
 #define AppVersion "1.1.0"
 #define AppExe     "Manoni.exe"
-#define Publisher  "Voxe Studio"
+#define Publisher  "Lasha Kandelaki"
 
 [Setup]
 ; AppId uniquely identifies Manoni for upgrades/uninstall — never change it.
