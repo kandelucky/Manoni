@@ -17,7 +17,7 @@ Browse a folder → keep the good ones → cull the rest → quick edits → exp
 <img src="assets/readme/image.png" width="22" alt="">&nbsp;&nbsp;
 <img src="assets/readme/save-all.png" width="22" alt="">
 
-Pure **Python + Tkinter + Pillow**. Tiny, MIT-friendly, fully ours to extend.
+Pure **Python + Tkinter + Pillow**. Tiny, open source, fully ours to extend.
 
 **[Website](https://kandelucky.github.io/Manoni)** · **[Download](https://github.com/kandelucky/Manoni/releases/latest)** · **[Community & sharing](https://github.com/kandelucky/Manoni/discussions)**
 
@@ -189,3 +189,9 @@ someone else's — on the
   publish or grab a pack without leaving the app.
 - [ ] **RAW support** — an optional add-on (installer tick-box or on-demand
   download) so the base app stays light; export as JPEG or 16-bit TIFF.
+
+## License
+
+Manoni is free software, released under the
+[GNU General Public License v3.0](LICENSE). You can use, study, share and
+modify it; anything built on it must stay under the same license.
