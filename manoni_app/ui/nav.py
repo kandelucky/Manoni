@@ -16,7 +16,7 @@ import tintkit
 # nav's dialogs are transient modals — they read live theme colours at build time
 # (they can't outlive a dark<->light switch). Only the scheme-independent cull
 # icon tints + SUPPORTED stay as config constants.
-from ..config import SUPPORTED
+from ..config import SUPPORTED, CULL_KEEP_TINT, CULL_REJECT_TINT
 from ..i18n import t
 from .dialogs import center_over
 
@@ -58,6 +58,70 @@ class NavMixin:
         if lbl is not None:
             lbl.configure(text=getattr(self, "_info_text", ""),
                           fg=self.theme["fg_dim"])
+
+    # --- Arrow-action pop: a brief, self-fading label over the preview ------
+    #
+    # A small pill flashes what an arrow key just did ("Next photo", "Kept →
+    # …") then fades out on its own. Unlike the bottom info line (easy to miss)
+    # it floats over the photo. It's a borderless, alpha-blended Toplevel so it
+    # can fade smoothly and sit above any image; one window is reused, and a
+    # fresh flash cancels the previous one's fade so rapid keypresses stay snappy.
+
+    _FLASH_COLORS = {          # text tint per outcome — all light so they read
+        "nav":    "#ececec",   # on the always-dark letterbox and over any photo
+        "keep":   CULL_KEEP_TINT,
+        "reject": CULL_REJECT_TINT,
+    }
+
+    def flash(self, message, kind="nav"):
+        "Pop `message` over the preview for a moment, then fade it out. `kind` is"
+        " 'nav' (neutral), 'keep' (green) or 'reject' (red)."
+        win = getattr(self, "_flash_win", None)
+        if win is None or not win.winfo_exists():
+            win = tk.Toplevel(self.root)
+            win.overrideredirect(True)          # borderless, no title bar
+            win.withdraw()                       # hidden until placed (no corner flash)
+            try:
+                win.attributes("-topmost", True)
+            except tk.TclError:
+                pass
+            lbl = tk.Label(win, font=("Segoe UI", 13), bg="#141414",
+                           padx=18, pady=9)
+            lbl.pack()
+            self._flash_win, self._flash_lbl = win, lbl
+        win, lbl = self._flash_win, self._flash_lbl
+
+        for aid in getattr(self, "_flash_after", ()):   # drop a previous fade
+            try:
+                self.root.after_cancel(aid)
+            except Exception:
+                pass
+        self._flash_after = []
+
+        lbl.configure(text=message, fg=self._FLASH_COLORS.get(kind, "#ececec"))
+        try:
+            win.attributes("-alpha", 0.96)
+        except tk.TclError:
+            pass
+        win.update_idletasks()
+        cv = self.preview                        # centre over the preview canvas
+        cx = cv.winfo_rootx() + cv.winfo_width() // 2
+        cy = cv.winfo_rooty() + max(24, cv.winfo_height() // 12)
+        win.geometry(f"+{cx - win.winfo_width() // 2}+{cy}")
+        win.deiconify()
+
+        def fade(step):
+            a = 0.96 - step * 0.16
+            if a <= 0.02:
+                win.withdraw()
+                return
+            try:
+                win.attributes("-alpha", a)
+            except tk.TclError:
+                return
+            self._flash_after.append(self.root.after(45, fade, step + 1))
+
+        self._flash_after.append(self.root.after(650, fade, 1))
 
     def _cull_hint_line(self, folder):
         "Trailing note for a cull button: where it saves, or that it's unset."
@@ -285,7 +349,10 @@ class NavMixin:
         if not self._browse_keys_active():
             return
         if self.index > 0:
+            before = self.index
             self.go_to(self.index - 1)
+            if self.index != before:             # actually moved (not save-cancelled)
+                self.flash(t("Previous photo"), "nav")
         else:
             self._folder_edge(-1)
 
@@ -294,7 +361,10 @@ class NavMixin:
         if not self._browse_keys_active():
             return
         if self.index < len(self.files) - 1:
+            before = self.index
             self.go_to(self.index + 1)
+            if self.index != before:             # actually moved (not save-cancelled)
+                self.flash(t("Next photo"), "nav")
         else:
             self._folder_edge(1)
 
@@ -514,8 +584,10 @@ class NavMixin:
             return
         os.makedirs(self.cull_keep, exist_ok=True)
         if self._move_current_to(self.cull_keep):
-            self.toast(t("Kept → {name}  ·  Ctrl+Z").format(
-                name=os.path.basename(self.cull_keep)))
+            msg = t("Kept → {name}  ·  Ctrl+Z").format(
+                name=os.path.basename(self.cull_keep))
+            self.toast(msg)
+            self.flash(msg, "keep")
 
     def delete(self):
         "Reject: move the current photo into the configured ✗ reject folder."
@@ -528,8 +600,10 @@ class NavMixin:
             return
         os.makedirs(self.cull_reject, exist_ok=True)
         if self._move_current_to(self.cull_reject):
-            self.toast(t("Rejected → {name}  ·  Ctrl+Z").format(
-                name=os.path.basename(self.cull_reject)))
+            msg = t("Rejected → {name}  ·  Ctrl+Z").format(
+                name=os.path.basename(self.cull_reject))
+            self.toast(msg)
+            self.flash(msg, "reject")
 
     # --- Cull configuration + help dialogs ----------------------------------
 
