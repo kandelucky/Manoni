@@ -39,7 +39,7 @@ from ..i18n import t
 from .. import update
 from .about import (APP_VERSION, AUTHOR_NAME, AUTHOR_HANDLE, BUILT_WITH,
                     PROJECT_LINKS, BMC_URL, BMC_BG, BMC_BG_HOVER, BMC_FG,
-                    DEV_EMAIL, ISSUES_URL)
+                    DEV_EMAIL, ISSUES_URL, LINKEDIN_URL)
 
 # The window's controls (toggle / segmented / slider / dropdown / buttons) and
 # now its whole body (rail + scroll pane + section headers + rows) are stock
@@ -599,6 +599,12 @@ class SettingsMixin:
                  font=("Segoe UI", 9), justify="left"),
                  bg="bg", fg="fg_dim").pack(anchor="w", pady=(2, 0))
 
+        # A promo call-to-action: opens the "Work with me" pitch (hire the dev).
+        self._tw(tk.Frame(box, height=12), bg="bg").pack()
+        tintkit.Button(box, self.theme, t("Need something built?"), role="primary",
+                       variant="filled", bg="bg",
+                       command=self._offer_dialog).pack(anchor="w")
+
         # The three reasons someone might get in touch (plain text, one button below).
         win.group(t("Get in touch about"))
         for reason in (t("Ordering a custom program"),
@@ -641,6 +647,53 @@ class SettingsMixin:
         self._copy_revert_job = self.root.after(
             3000,
             lambda: lbl.winfo_exists() and lbl.configure(text=t("Copy email")))
+
+    def _offer_dialog(self):
+        "A small 'work with me' pitch modal: what I build + a LinkedIn link."
+        parent = getattr(self, "_settings_win", None) or self.root
+        dlg = tk.Toplevel(parent)
+        dlg.title(t("Work with me"))
+        self._tw(dlg, bg="bg")
+        dlg.transient(parent)
+        dlg.resizable(False, False)
+
+        wrap = self._tw(tk.Frame(dlg, padx=28, pady=24), bg="bg")
+        wrap.pack(fill="both", expand=True)
+
+        self._tw(tk.Label(wrap, text=t("Work with me"),
+                 font=("Segoe UI", 15, "bold")), bg="bg", fg="fg").pack(anchor="w")
+        self._tw(tk.Label(wrap, text=t(
+            "Manoni is a free tool I build in my spare time. I'm also available "
+            "for paid, custom work:"), font=("Segoe UI", 9),
+            justify="left", wraplength=360), bg="bg", fg="fg_dim").pack(
+            anchor="w", pady=(8, 0))
+
+        for line in (t("Programs and games — small to medium complexity"),
+                     t("Websites — almost any complexity")):
+            self._tw(tk.Label(wrap, text="•  " + line, anchor="w",
+                     font=("Segoe UI", 9), justify="left", wraplength=360),
+                     bg="bg", fg="fg").pack(anchor="w", pady=(6, 0))
+
+        self._tw(tk.Label(wrap, text=t(
+            "Got an idea? Let's build it — see my work and get in touch on LinkedIn."),
+            font=("Segoe UI", 9), justify="left", wraplength=360),
+            bg="bg", fg="fg_dim").pack(anchor="w", pady=(12, 0))
+
+        self._tw(tk.Frame(wrap, height=16), bg="bg").pack()
+        btns = self._tw(tk.Frame(wrap), bg="bg")
+        btns.pack(fill="x")
+        tintkit.Button(btns, self.theme, t("Open LinkedIn"), role="primary",
+                       variant="filled", bg="bg",
+                       command=lambda: webbrowser.open(LINKEDIN_URL)).pack(side="left")
+        tintkit.Button(btns, self.theme, t("Close"), role="neutral",
+                       variant="outline", bg="bg",
+                       command=dlg.destroy).pack(side="right")
+
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        self._center_dialog(dlg)
+        dlg.grab_set()
+        dlg.focus_set()
 
     # --- Manual update check (About tab) ------------------------------------
     # Strictly on demand: the network is touched only on this click, never on a

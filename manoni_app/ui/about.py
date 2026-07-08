@@ -38,6 +38,8 @@ PROJECT_LINKS = [
 # tracker above is the second channel offered on that tab.
 DEV_EMAIL = "kandelucky.dev@gmail.com"
 ISSUES_URL = "https://github.com/kandelucky/Manoni/issues"
+# The developer's portfolio / hire-me link, shown in the "Work with me" pitch.
+LINKEDIN_URL = "https://www.linkedin.com/in/lasha-kandelaki/"
 
 BMC_URL = "https://buymeacoffee.com/Kandelucky_dev"
 # Official Buy-Me-a-Coffee palette so the in-app button reads as the brand.
