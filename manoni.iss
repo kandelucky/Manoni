@@ -15,7 +15,7 @@
 ;   * clean uninstall (user data under %APPDATA%\Manoni is intentionally KEPT)
 
 #define AppName    "Manoni"
-#define AppVersion "1.1.0"
+#define AppVersion "1.1.1"
 #define AppExe     "Manoni.exe"
 #define Publisher  "Lasha Kandelaki"
 
