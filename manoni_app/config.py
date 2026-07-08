@@ -40,9 +40,6 @@ ICON_DIR = os.path.join(_RES_DIR, "icons")
 # filter's look reads the same regardless of the current photo.
 FILTER_SHOW_IMG = os.path.join(_RES_DIR, "Filter_Show.jpg")
 
-# Demo photo opened once on the very first launch ever (see manoni.py). Ships in
-# its OWN folder so opening it browses only this one image, not its neighbours.
-FIRST_RUN_IMAGE = os.path.join(_RES_DIR, "sample", "test_chart.png")
 SUPPORTED = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff", ".tif"}
 
 # Remembers the last opened folder + image, restored on the next launch.

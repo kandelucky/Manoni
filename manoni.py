@@ -21,7 +21,7 @@ import tkinter as tk
 import tintkit  # DPI + theme; declares DPI awareness at import, before tk.Tk()
 
 from manoni_app.config import (BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR,
-                               ICON_DIR, THEME_DARK, FIRST_RUN_IMAGE)
+                               ICON_DIR, THEME_DARK)
 from manoni_app import i18n
 from manoni_app import translations  # noqa: F401 — registers language packs on import
 from manoni_app import single_instance
@@ -45,12 +45,6 @@ from manoni_app.ui.about import AboutMixin
 from manoni_app.ui.metadata import MetadataMixin
 from manoni_app.ui.settings import SettingsMixin
 from manoni_app.ui.help import HelpMixin
-
-
-# The very first time Manoni is ever launched (no photo given), it opens the one
-# bundled demo image (config.FIRST_RUN_IMAGE), then never again (a one-time flag
-# lives in the state file). The image ships in its own folder so this browses only
-# it; the startup check skips it when missing, so a source run is unaffected.
 
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
@@ -323,7 +317,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.warn_unsaved = True      # offer to save when leaving an edited photo
         self.autosave_copy = False    # cull mode: silently save an edited copy on ←/→ and ↑/↓
         self.confirm_overwrite = True # ask before Ctrl+S overwrites the original in place
-        self.first_run_done = False   # flips true after the very first launch ever
         # Where the Save dialog defaults to (Settings → Export → Output):
         #   "subfolder" → a folder named export_subfolder beside each photo,
         #   "fixed"     → one fixed export_fixed_dir for every export.
@@ -407,7 +400,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # canvas; the choice then persists across sessions (an existing state file
         # keeps whatever the user last set).
         self.show_rulers = False  # top + left pixel rulers (Ctrl+R); persisted
-        self.show_filter_strip = False  # the filter-preview filmstrip; persisted
+        self.show_filter_strip = True   # the filter-preview filmstrip; persisted
         self.show_histogram = False  # the edit panel's live histogram; persisted
         # Edit-panel foldout states (key -> open) — Basic, Effects and Color
         # mixer share one dict (kept under the historic "basic_folds" state key).
@@ -511,13 +504,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
         if folder:
             self._open_launch_target(folder)
-        elif (not self.first_run_done) and os.path.exists(FIRST_RUN_IMAGE):
-            # Very first launch ever: show the demo image once, then never again.
-            self.first_run_done = True
-            self._save_state()               # persist the flag now (survives a crash)
-            self._open_launch_target(FIRST_RUN_IMAGE)
         else:
-            self.first_run_done = True        # any later launch is no longer "first"
             self._restore_last_session()
 
     # --- Keyboard shortcuts (layout-independent) ----------------------------
@@ -620,7 +607,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "warn_unsaved": self.warn_unsaved,
                  "autosave_copy": self.autosave_copy,
                  "confirm_overwrite": self.confirm_overwrite,
-                 "first_run_done": self.first_run_done,
                  "scheme": self.theme.scheme,   # dark / light interface theme
                  "accent": self.theme.accent,   # highlight colour (accent picker)
                  "language": i18n.get_language()}
@@ -696,7 +682,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "autosave_copy", "confirm_overwrite",
                     "show_filter_strip", "show_histogram",
-                    "fast_preview", "async_render", "first_run_done"):
+                    "fast_preview", "async_render"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)

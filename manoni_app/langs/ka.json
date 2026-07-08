@@ -574,6 +574,23 @@
     "The info button on the bottom bar — the strip showing which file you're editing right now — opens the photo's metadata, and its red Delete metadata button wipes the colour profile and all EXIF (including GPS) from the file, keeping the pixels exactly.": "ქვედა ზოლის ინფო ღილაკი — ის ზოლი, სადაც ჩანს, რომელ ფაილს ამუშავებ ახლა — ხსნის ფოტოს მეტამონაცემებს, ხოლო იქ არსებული წითელი „წაშალე მონაცემები“ ღილაკი ფაილიდან შლის ფერის პროფილსა და მთელ EXIF-ს (GPS-ის ჩათვლით), პიქსელებს კი უცვლელად ტოვებს.",
     "Keep or strip on export": "შენახვა ან მოცილება ექსპორტისას",
     "The same camera info, date, GPS and colour profile can also be kept or removed when you export.": "იგივე კამერის ინფო, თარიღი, GPS და ფერის პროფილი ექსპორტისასაც შეიძლება შეინახო ან მოაცილო.",
-    "The export defaults live in Settings → Export.": "ექსპორტის ნაგულისხმევები პარამეტრები → ექსპორტშია."
+    "The export defaults live in Settings → Export.": "ექსპორტის ნაგულისხმევები პარამეტრები → ექსპორტშია.",
+    "Check for updates": "განახლების შემოწმება",
+    "Checking…": "მიმდინარეობს შემოწმება…",
+    "Couldn't check — check your connection.": "შემოწმება ვერ მოხერხდა — შეამოწმე კავშირი.",
+    "New version available: v{ver} — download": "ხელმისაწვდომია ახალი ვერსია: v{ver} — ჩამოტვირთვა",
+    "You have the latest version (v{ver})": "უახლესი ვერსია გაქვს (v{ver})",
+    "Contact developer": "დეველოპერთან კავშირი",
+    "Contact the developer": "დაუკავშირდი დეველოპერს",
+    "Questions, bugs or ideas — write to me directly.": "კითხვები, ბაგები თუ იდეები — მომწერე პირდაპირ.",
+    "Get in touch about": "დაკავშირების საბაბები",
+    "Ordering a custom program": "პროგრამის შეკვეთა",
+    "Reporting a bug": "ბაგის შეტყობინება",
+    "Suggesting an improvement": "გაუმჯობესების შემოთავაზება",
+    "Email the developer": "მისწერე დეველოპერს",
+    "Or on GitHub": "ან GitHub-ზე",
+    "Issues": "საკითხები",
+    "Copy email": "მაილის კოპირება",
+    "Copied": "დაკოპირდა"
   }
 }

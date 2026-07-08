@@ -34,6 +34,11 @@ PROJECT_LINKS = [
     ("Issues", "https://github.com/kandelucky/Manoni/issues"),
 ]
 
+# Where "Contact the developer" (Settings → Contact) writes to. The GitHub issues
+# tracker above is the second channel offered on that tab.
+DEV_EMAIL = "kandelucky.dev@gmail.com"
+ISSUES_URL = "https://github.com/kandelucky/Manoni/issues"
+
 BMC_URL = "https://buymeacoffee.com/Kandelucky_dev"
 # Official Buy-Me-a-Coffee palette so the in-app button reads as the brand.
 BMC_BG = "#FFDD00"

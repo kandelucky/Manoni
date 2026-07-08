@@ -26,6 +26,7 @@ ui mixins.
 """
 
 import os
+import threading
 import webbrowser
 import tkinter as tk
 import tkinter.filedialog as tkfd
@@ -35,8 +36,10 @@ import tintkit
 from ..config import ACCENTS
 from .. import i18n
 from ..i18n import t
+from .. import update
 from .about import (APP_VERSION, AUTHOR_NAME, AUTHOR_HANDLE, BUILT_WITH,
-                    PROJECT_LINKS, BMC_URL, BMC_BG, BMC_BG_HOVER, BMC_FG)
+                    PROJECT_LINKS, BMC_URL, BMC_BG, BMC_BG_HOVER, BMC_FG,
+                    DEV_EMAIL, ISSUES_URL)
 
 # The window's controls (toggle / segmented / slider / dropdown / buttons) and
 # now its whole body (rail + scroll pane + section headers + rows) are stock
@@ -55,6 +58,7 @@ _TABS = [
     ("export",      "Export",      "upload",       "_set_tab_export"),
     ("culling",     "Culling",     "folder-check", "_set_tab_culling"),
     ("about",       "About",       "info",         "_set_tab_about"),
+    ("contact",     "Contact developer", "share-2", "_set_tab_contact"),
 ]
 
 
@@ -124,6 +128,20 @@ class SettingsMixin:
                   for key, label, icon, method in _TABS],
             header=None, rail_w=180, icon_loader=self.icon)
         self._settings_body.root.grid(row=1, column=0, sticky="nsew")
+        self._set_pin_contact_bottom()
+
+    def _set_pin_contact_bottom(self):
+        "Float the Contact row at the very bottom of the rail, set off by a rule."
+        # The kit packs rail rows top-to-bottom in order and never re-packs them
+        # (rebuild() only redraws the right pane), so re-packing here is stable.
+        body = self._settings_body
+        rail = body._rail
+        contact_row = body._rows["contact"][0]
+        contact_row.pack_forget()
+        # An expanding spacer pushes Contact down; a hairline rule sets it apart.
+        self._tw(tk.Frame(rail), bg="sidebar").pack(fill="both", expand=True)
+        self._tw(tk.Frame(rail, height=1), bg="divider").pack(fill="x")
+        contact_row.pack(fill="x")
 
     def _set_build_footer(self, dlg):
         self._tw(tk.Frame(dlg, height=1), bg="border").grid(
@@ -524,6 +542,19 @@ class SettingsMixin:
                  font=("Segoe UI", 9)), bg="bg", fg="fg_dim").pack(
             anchor="w", pady=(2, 0))
 
+        # --- Check for updates (manual only — no background / auto check) ------
+        upd = self._tw(tk.Frame(box), bg="bg")
+        upd.pack(anchor="w", fill="x", pady=(14, 0))
+        status = self._tw(tk.Label(upd, text="", font=("Segoe UI", 9),
+                                   anchor="w", justify="left"),
+                          bg="bg", fg="fg_dim")
+        btn = tintkit.Button(
+            upd, self.theme, t("Check for updates"), role="neutral",
+            variant="outline", bg="bg",
+            command=lambda: self._check_updates(btn, status))
+        btn.pack(side="left")
+        status.pack(side="left", padx=(12, 0))
+
         win.group(t("Built with"))
         for name, url, lic in BUILT_WITH:
             self._set_link_row(p, name, url, lic)
@@ -555,6 +586,107 @@ class SettingsMixin:
             self._tw(tk.Label(row, text="  (" + lic + ")",
                      font=("Segoe UI", 8)), bg="bg", fg="fg_dim").pack(side="left")
 
+    # --- Contact tab --------------------------------------------------------
+
+    def _set_tab_contact(self, win):
+        "Reach the developer: one email button + a GitHub issues link (both channels)."
+        p = win.body.widget
+        box = self._tw(tk.Frame(p), bg="bg")
+        box.pack(fill="x", pady=(16, 0))
+        self._tw(tk.Label(box, text=t("Contact the developer"),
+                 font=("Segoe UI", 17, "bold")), bg="bg", fg="fg").pack(anchor="w")
+        self._tw(tk.Label(box, text=t("Questions, bugs or ideas — write to me directly."),
+                 font=("Segoe UI", 9), justify="left"),
+                 bg="bg", fg="fg_dim").pack(anchor="w", pady=(2, 0))
+
+        # The three reasons someone might get in touch (plain text, one button below).
+        win.group(t("Get in touch about"))
+        for reason in (t("Ordering a custom program"),
+                       t("Reporting a bug"),
+                       t("Suggesting an improvement")):
+            row = self._tw(tk.Frame(p), bg="bg")
+            row.pack(fill="x", pady=1)
+            self._tw(tk.Label(row, text="•  " + reason, anchor="w",
+                     font=("Segoe UI", 9)), bg="bg", fg="fg").pack(side="left")
+
+        # Primary channel: one email button (opens the user's mail client).
+        self._tw(tk.Frame(p, height=14), bg="bg").pack()
+        mailto = "mailto:{}?subject=Manoni".format(DEV_EMAIL)
+        tintkit.Button(p, self.theme, t("Email the developer"), role="primary",
+                       variant="filled", bg="bg",
+                       command=lambda: webbrowser.open(mailto)).pack(anchor="w")
+        # The address, with a small dim "copy" affordance that flips to "Copied"
+        # for a few seconds so the user gets feedback without a popup.
+        erow = self._tw(tk.Frame(p), bg="bg")
+        erow.pack(anchor="w", pady=(6, 0))
+        self._tw(tk.Label(erow, text=DEV_EMAIL, font=("Segoe UI", 9)),
+                 bg="bg", fg="fg_dim").pack(side="left")
+        copy = self._tw(tk.Label(erow, text=t("Copy email"), cursor="hand2",
+                        font=("Segoe UI", 8)), bg="bg", fg="fg_dim")
+        copy.pack(side="left", padx=(10, 0))
+        copy.bind("<Button-1>", lambda e: self._copy_email(copy))
+
+        # Second channel: GitHub issues (handy for bugs and suggestions).
+        win.group(t("Or on GitHub"))
+        self._set_link_row(p, t("Issues"), ISSUES_URL)
+
+    def _copy_email(self, lbl):
+        "Copy DEV_EMAIL to the clipboard; flash the label to 'Copied' for 3s."
+        self.root.clipboard_clear()
+        self.root.clipboard_append(DEV_EMAIL)
+        lbl.configure(text=t("Copied"))
+        job = getattr(self, "_copy_revert_job", None)
+        if job:
+            self.root.after_cancel(job)
+        self._copy_revert_job = self.root.after(
+            3000,
+            lambda: lbl.winfo_exists() and lbl.configure(text=t("Copy email")))
+
+    # --- Manual update check (About tab) ------------------------------------
+    # Strictly on demand: the network is touched only on this click, never on a
+    # timer or at launch. The blocking GitHub call runs on a short daemon thread
+    # and the result is marshalled back to the UI thread with root.after.
+
+    def _check_updates(self, btn, status):
+        "Ask GitHub for the latest release and report the result in `status`."
+        if getattr(self, "_update_checking", False):
+            return                      # ignore re-clicks while one is in flight
+        self._update_checking = True
+        status.unbind("<Button-1>")     # clear any prior 'download' affordance
+        status.configure(text=t("Checking…"), cursor="",
+                         fg=self.theme["fg_dim"], font=("Segoe UI", 9))
+
+        def work():
+            try:
+                latest, err = update.fetch_latest_version(), None
+            except Exception:
+                latest, err = None, True
+            self.root.after(0, lambda: self._update_done(status, latest, err))
+
+        threading.Thread(target=work, name="manoni-update-check",
+                         daemon=True).start()
+
+    def _update_done(self, status, latest, err):
+        "Back on the UI thread: show the outcome of an update check."
+        self._update_checking = False
+        if not status.winfo_exists():
+            return                      # Settings closed mid-check
+        if err or not latest:
+            status.configure(text=t("Couldn't check — check your connection."),
+                             fg=self.theme["fg_dim"], font=("Segoe UI", 9))
+            return
+        if update.is_newer(latest, APP_VERSION):
+            status.configure(
+                text=t("New version available: v{ver} — download").format(ver=latest),
+                fg=self.theme["accent"], cursor="hand2",
+                font=("Segoe UI", 9, "underline"))
+            status.bind("<Button-1>",
+                        lambda e: webbrowser.open(update.RELEASES_PAGE))
+        else:
+            status.configure(
+                text=t("You have the latest version (v{ver})").format(ver=APP_VERSION),
+                fg=self.theme["fg_dim"], font=("Segoe UI", 9))
+
     # --- Restore defaults ---------------------------------------------------
 
     def _set_restore_defaults(self):
@@ -567,7 +699,7 @@ class SettingsMixin:
         self.set_view("large")                       # default sidebar view
         if getattr(self, "show_rulers", False):      # rulers default = off
             self.toggle_rulers()
-        self.show_filter_strip = False               # filter strip default = off
+        self.show_filter_strip = True                # filter strip default = on
         self._refresh_filter_strip()
         self.show_histogram = False                  # histogram default = off
         self._refresh_histogram()

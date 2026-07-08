@@ -18,7 +18,6 @@ datas = [
     ('logos', 'logos'),          # Logo tool preset PNGs (config.LOGO_PRESET_DIR)
     ('manoni_app/langs', 'manoni_app/langs'),  # bundled language packs (translations._LANGS_DIR)
     ('Filter_Show.jpg', '.'),
-    ('sample', 'sample'),        # first-run demo image (config.FIRST_RUN_IMAGE)
     ('manoni.ico', '.'),
     ('manoni-icon.png', '.'),
 ]
