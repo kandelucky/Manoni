@@ -19,7 +19,7 @@ import tkinter as tk
 
 import tintkit
 
-from ..config import ACCENT, EDIT_PANEL_W, EDIT_PAD
+from ..config import ACCENT, EDIT_PAD
 from .. import imaging
 from ..i18n import t
 
@@ -39,46 +39,53 @@ class HealMixin:
         "Retouch panel: heal/clone mode, a hint, brush sliders, and the footer."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Mode toggle: auto heal vs manual clone stamp — a segmented control
-        # (the two modes are exclusive), matching the focus-tool shape toggle.
+        # Mode: auto heal vs manual clone stamp — two equal, full-width buttons
+        # (icon + label). The active mode is filled, the other outlined; a click
+        # re-styles both (see _refresh_heal_mode). The two modes are exclusive.
         self._heal_modes = ["auto", "clone"]
-        self._heal_mode_tabs = tintkit.SegmentedTabs(
-            f, self.theme, [t("Auto heal"), t("Clone")], selected=0, bg="bar",
-            command=lambda i, _l: self._set_heal_mode(self._heal_modes[i]))
-        self._heal_mode_tabs.pack(padx=EDIT_PAD, pady=(10, 2))
+        mode_row = self._tw(tk.Frame(f), bg="bar")
+        mode_row.pack(fill="x", padx=EDIT_PAD, pady=(10, 4))
+        self._heal_mode_btns = {}
+        for mode, label, icon, pad in (
+                ("auto",  t("Auto heal"), "wand-sparkles", (0, 3)),
+                ("clone", t("Clone"),     "stamp",         (3, 0))):
+            b = tintkit.Button(mode_row, self.theme, label, icon=icon,
+                               stretch=True, min_w=0, bg="bar",
+                               command=lambda m=mode: self._set_heal_mode(m))
+            b.pack(side="left", fill="x", expand=True, padx=pad)
+            self._heal_mode_btns[mode] = b
 
-        self._heal_hint = self._tw(tk.Label(f, text="", anchor="w",
-                                   font=("Segoe UI", 8), justify="left",
-                                   wraplength=self._edit_dpi_w(
-                                       EDIT_PANEL_W - 2 * EDIT_PAD)),
-                                   bg="bar", fg="fg_dim")
-        self._heal_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
+        # The per-mode how-to lives in a small "?" hover icon, so it never eats a
+        # whole paragraph of the panel. Its tooltip text is swapped per mode.
+        help_row = self._tw(tk.Frame(f), bg="bar")
+        help_row.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        help_ic = tintkit.IconButton(help_row, self.theme, "circle-help",
+                                     w=22, h=22, icon_px=15, bg="bar")
+        help_ic.pack(side="right")
+        self._heal_hint_tip = tintkit.HoverTip(help_ic.canvas, self.theme, "",
+                                               wrap=220)
 
         # The brush group in the shared Foldout visual: the aligned/mirror source
         # options over the three brush sliders. Children pack WITHOUT EDIT_PAD —
         # the fold body's own inset aligns them.
         brush = self._fold_group(f, "hl_brush", t("Brush"))
 
-        # Aligned + mirror — independent on/off toggles, so checkboxes, not the
-        # exclusive segmented control. They govern any Alt+click source pick,
-        # in either mode, so both modes show them (set up by _refresh_heal_mode).
+        # Aligned + mirror — independent on/off options as UI-kit toggle switches,
+        # both on one line. They govern any Alt+click source pick, in either mode,
+        # so both modes show them (set up by _refresh_heal_mode).
         self._clone_opts = self._tw(tk.Frame(brush), bg="bar")
-        self._chk_aligned = tintkit.Checkbox(
-            self._clone_opts, self.theme, t("Aligned"),
-            state="on" if self.clone_aligned else "off", bg="bar",
-            command=lambda st: self._set_clone_opt("aligned", st == "on"))
-        self._chk_aligned.pack(anchor="w", pady=(2, 0))
-        tintkit.HoverTip(self._chk_aligned.canvas, self.theme, t(
-            "On: the source keeps the same offset from the brush across every "
-            "stroke. Off: each new stroke re-anchors to the picked source point."))
-        self._chk_flip = tintkit.Checkbox(
-            self._clone_opts, self.theme, t("Mirror"),
-            state="on" if self.clone_flip else "off", bg="bar",
-            command=lambda st: self._set_clone_opt("flip", st == "on"))
-        self._chk_flip.pack(anchor="w", pady=(2, 0))
-        tintkit.HoverTip(self._chk_flip.canvas, self.theme, t(
-            "Mirror the source left-right about its point — handy for "
-            "symmetric retouching (e.g. copying from the other eye)."))
+        self._tog_aligned = self._heal_toggle_cell(
+            self._clone_opts, t("Aligned"), self.clone_aligned,
+            lambda on: self._set_clone_opt("aligned", on), t(
+                "On: the source keeps the same offset from the brush across every "
+                "stroke. Off: each new stroke re-anchors to the picked source point."),
+            side="left")
+        self._tog_flip = self._heal_toggle_cell(
+            self._clone_opts, t("Mirror"), self.clone_flip,
+            lambda on: self._set_clone_opt("flip", on), t(
+                "Mirror the source left-right about its point — handy for "
+                "symmetric retouching (e.g. copying from the other eye)."),
+            side="right")
 
         # Brush sliders. Each carries its title on its own strip (label + value
         # + reset icon) above a full-width track, so the label never sits on the
@@ -102,12 +109,8 @@ class HealMixin:
                  anchor="w", font=("Segoe UI", 8)), bg="bar", fg="fg_dim").pack(
                      fill="x", padx=EDIT_PAD, pady=(12, 4))
 
-        # Footer: Done closes the tool (the strokes are already baked into the
-        # photo); Remove all lifts every retouch on this photo in one undo step.
-        done = tintkit.Button(
-            f, self.theme, t("Done"), role="primary", variant="filled",
-            stretch=True, bg="bar", command=lambda: self.set_section("basic"))
-        done.pack(fill="x", padx=EDIT_PAD, pady=(6, 0))
+        # Footer: Remove all lifts every retouch on this photo in one undo step.
+        # (No Done button — the strokes are already baked in; switch tools freely.)
         remove = tintkit.Button(
             f, self.theme, t("Remove all"), role="neutral", variant="outline",
             icon="x", stretch=True, bg="bar", command=self._remove_all_heal)
@@ -127,6 +130,21 @@ class HealMixin:
             command=setter, bg="bar", reset_tip=t("Reset this slider"),
             value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_heal_slider(which))
+
+    def _heal_toggle_cell(self, parent, label, value, command, tip, side):
+        "One brush option as a compact label + Toggle switch, packed to `side`."
+        " Two of these share one horizontal line. Returns the Toggle."
+        cell = self._tw(tk.Frame(parent), bg="bar")
+        cell.pack(side=side)
+        lbl = self._tw(tk.Label(cell, text=label, anchor="w",
+                       font=("Segoe UI", 10)), bg="bar", fg="fg")
+        lbl.pack(side="left", padx=(0, 6))
+        tog = tintkit.Toggle(cell, self.theme, value=value, bg="bar",
+                             command=command)
+        tog.pack(side="left")
+        for w in (lbl, tog.canvas):
+            tintkit.HoverTip(w, self.theme, tip, wrap=210)
+        return tog
 
     def _reset_heal_slider(self, which):
         "Return one brush slider to its default. Not an image edit, so no undo."
@@ -153,13 +171,13 @@ class HealMixin:
         self._render_preview()
 
     def _sync_clone_opts(self):
-        "Sync the aligned / mirror checkboxes to the current bool state."
-        if not hasattr(self, "_chk_aligned"):
+        "Sync the aligned / mirror toggle switches to the current bool state."
+        if not hasattr(self, "_tog_aligned"):
             return
-        self._chk_aligned.state = "on" if self.clone_aligned else "off"
-        self._chk_aligned.repaint()
-        self._chk_flip.state = "on" if self.clone_flip else "off"
-        self._chk_flip.repaint()
+        self._tog_aligned.value = self.clone_aligned
+        self._tog_aligned.repaint()
+        self._tog_flip.value = self.clone_flip
+        self._tog_flip.repaint()
 
     def _set_heal_mode(self, mode):
         "Switch retouch mode; clear any clone source so the next one is deliberate."
@@ -170,19 +188,18 @@ class HealMixin:
         self._render_preview()
 
     def _refresh_heal_mode(self):
-        "Sync the mode toggle, swap the hint, and sync the aligned/mirror options."
-        if hasattr(self, "_heal_mode_tabs"):
-            idx = (self._heal_modes.index(self.heal_mode)
-                   if self.heal_mode in self._heal_modes else 0)
-            if self._heal_mode_tabs.selected != idx:
-                self._heal_mode_tabs.selected = idx
-                self._heal_mode_tabs.repaint()
-        if self.heal_mode == "clone":
-            self._heal_hint.configure(
-                text=t("Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size."))
-        else:
-            self._heal_hint.configure(
-                text=t("Click or drag over a blemish — I erase it with nearby clean background, or Alt+click to pick your own source. The wheel or [ ] changes the brush size."))
+        "Restyle the mode buttons, swap the hint tooltip, sync aligned/mirror."
+        if hasattr(self, "_heal_mode_btns"):
+            for mode, btn in self._heal_mode_btns.items():
+                active = (mode == self.heal_mode)
+                btn.role = "primary" if active else "neutral"
+                btn.variant = "filled" if active else "outline"
+                btn.repaint()
+        if hasattr(self, "_heal_hint_tip"):
+            self._heal_hint_tip.text = (
+                t("Alt+click — pick a source; then paint an exact copy. The wheel or [ ] changes the brush size.")
+                if self.heal_mode == "clone" else
+                t("Click or drag over a blemish — I erase it with nearby clean background, or Alt+click to pick your own source. The wheel or [ ] changes the brush size."))
         self._clone_opts.pack(fill="x", pady=(0, 6), before=self.s_heal_size.frame)
         self._sync_clone_opts()
 

@@ -21,7 +21,7 @@ import tkinter as tk
 
 import tintkit
 
-from ..config import ACCENT, EDIT_PANEL_W, EDIT_PAD, ON_ACCENT
+from ..config import ACCENT, EDIT_PAD, ON_ACCENT
 from ..i18n import t
 
 
@@ -37,19 +37,31 @@ class FocusMixin:
         "Focus-blur panel: a shape toggle, a hint, blur + feather sliders, remove."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Shape toggle: circle vs line (tilt-shift) — a segmented control.
+        # Shape: circle vs line (tilt-shift) — two equal, full-width buttons
+        # (icon + label). The active shape is filled, the other outlined; a click
+        # re-styles both (see _refresh_focus_mode). The two shapes are exclusive.
         self._focus_shapes = ["circle", "line"]
-        self._focus_shape_tabs = tintkit.SegmentedTabs(
-            f, self.theme, [t("Circle"), t("Line")], selected=0, bg="bar",
-            command=lambda i, _l: self._set_focus_shape(self._focus_shapes[i]))
-        self._focus_shape_tabs.pack(padx=EDIT_PAD, pady=(10, 2))
+        shape_row = self._tw(tk.Frame(f), bg="bar")
+        shape_row.pack(fill="x", padx=EDIT_PAD, pady=(10, 4))
+        self._focus_shape_btns = {}
+        for shape, label, icon, pad in (
+                ("circle", t("Circle"), "circle", (0, 3)),
+                ("line",   t("Line"),   "minus",  (3, 0))):
+            b = tintkit.Button(shape_row, self.theme, label, icon=icon,
+                               stretch=True, min_w=0, bg="bar",
+                               command=lambda sh=shape: self._set_focus_shape(sh))
+            b.pack(side="left", fill="x", expand=True, padx=pad)
+            self._focus_shape_btns[shape] = b
 
-        self._focus_hint = self._tw(tk.Label(f, text="", anchor="w",
-                                    font=("Segoe UI", 8), justify="left",
-                                    wraplength=self._edit_dpi_w(
-                                        EDIT_PANEL_W - 2 * EDIT_PAD)),
-                                    bg="bar", fg="fg_dim")
-        self._focus_hint.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
+        # The per-shape how-to lives in a small "?" hover icon, so it never eats a
+        # whole paragraph of the panel. Its tooltip text is swapped per shape.
+        help_row = self._tw(tk.Frame(f), bg="bar")
+        help_row.pack(fill="x", padx=EDIT_PAD, pady=(0, 4))
+        help_ic = tintkit.IconButton(help_row, self.theme, "circle-help",
+                                     w=22, h=22, icon_px=15, bg="bar")
+        help_ic.pack(side="right")
+        self._focus_hint_tip = tintkit.HoverTip(help_ic.canvas, self.theme, "",
+                                                wrap=220)
 
         # Blur strength and edge softness, in the shared Foldout visual. Absolute
         # magnitudes (neutral = the low end), so the accent fill reads as a gauge
@@ -130,20 +142,19 @@ class FocusMixin:
         self._record_edit(before)
 
     def _refresh_focus_mode(self):
-        "Sync the shape toggle and swap the hint to match the active shape."
-        if not hasattr(self, "_focus_shape_tabs"):
+        "Restyle the shape buttons and swap the hint tooltip to the active shape."
+        if not hasattr(self, "_focus_shape_btns"):
             return
         active = (self.focus or {}).get("shape", "circle")
-        idx = self._focus_shapes.index(active) if active in self._focus_shapes else 0
-        if self._focus_shape_tabs.selected != idx:
-            self._focus_shape_tabs.selected = idx
-            self._focus_shape_tabs.repaint()
-        if active == "line":
-            self._focus_hint.configure(
-                text=t("Drag the band to set the focus; an edge changes its width, the end dot rotates it. Sharp in the band, blurred outside."))
-        else:
-            self._focus_hint.configure(
-                text=t("Drag the circle to set the focus; the edge resizes it. Sharp inside, blurred outside."))
+        for shape, btn in self._focus_shape_btns.items():
+            on = (shape == active)
+            btn.role = "primary" if on else "neutral"
+            btn.variant = "filled" if on else "outline"
+            btn.repaint()
+        self._focus_hint_tip.text = (
+            t("Drag the band to set the focus; an edge changes its width, the end dot rotates it. Sharp in the band, blurred outside.")
+            if active == "line" else
+            t("Drag the circle to set the focus; the edge resizes it. Sharp inside, blurred outside."))
 
     # --- State + entry ------------------------------------------------------
 
@@ -164,8 +175,9 @@ class FocusMixin:
             self._render_preview()
             return
         if self.focus is None:
+            self._focus_prev_saved = self._edits_saved   # to restore if left untouched
             self.focus = self._default_focus("circle")
-            self._focus_auto = True       # untouched auto-default: ask before leaving
+            self._focus_auto = True       # untouched auto-default: dropped on leave
             self._edits_saved = False
         self._refresh_focus_mode()
         self._sync_focus_controls()
@@ -173,19 +185,18 @@ class FocusMixin:
         self.fit_view()          # fit so the whole photo is visible to place it
 
     def _prompt_keep_focus_if_untouched(self):
-        "Leaving the focus tool with the auto-applied default still untouched: ask"
-        " whether to keep the blur. Any edit or the Done button clears _focus_auto,"
-        " so this only fires when the user opened the tool and changed nothing."
+        "Leaving the focus tool with the auto-applied default still untouched:"
+        " drop it silently and leave without the blur — the expected behaviour"
+        " when nothing was changed. Any edit, a drag, or the Done button clears"
+        " _focus_auto first, so a blur the user actually wants survives."
         if self.focus is None or not getattr(self, "_focus_auto", False):
             return
-        self._focus_auto = False          # decided now — don't ask again this pass
-        # Nothing was changed, so removal is the likely intent: make it the primary
-        # (Enter) button. Escape / the secondary button keeps the blur.
-        remove = self._confirm(
-            t("Blur was added automatically. Remove it?"),
-            ok_label=t("Remove blur"), cancel_label=t("Keep blur"))
-        if remove:
-            self._remove_focus()
+        self._focus_auto = False
+        self.focus = None                 # the auto-default was never committed —
+        self._focus_cache.clear()         # drop it without an undo entry
+        self._edits_saved = getattr(self, "_focus_prev_saved", self._edits_saved)
+        self._sync_focus_controls()
+        self._render_preview()
 
     def _focus_active(self):
         "True when the focus tool is open with a live shape (drives overlay + clicks)."
