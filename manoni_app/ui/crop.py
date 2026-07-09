@@ -37,7 +37,7 @@ class CropMixin:
 
     def _build_crop_section(self, parent):
         "Crop's scrollable content: form segment + ratio cards + orientation +"
-        " foldable social/saved-size presets. Crop/Cancel are a separate pinned"
+        " foldable social/saved-size presets. Crop/Reset are a separate pinned"
         " footer — see _build_crop_footer."
         f = self._tw(tk.Frame(parent), bg="bar")
         # Every selectable element registers a (widget, paint) pair so one of them
@@ -67,7 +67,7 @@ class CropMixin:
         self._build_social_rows(
             self._fold_group(f, "cr_social", t("Social networks")))
         self._build_my_sizes(self._fold_group(f, "cr_sizes", t("My sizes")))
-        # Crop/Cancel are NOT built here — they're a pinned footer (see
+        # Crop/Reset are NOT built here — they're a pinned footer (see
         # _build_crop_footer) so folding Social/My sizes open can't push them
         # out of view.
         return f
@@ -185,6 +185,8 @@ class CropMixin:
             w.bind("<Enter>", lambda e: hover(True))
             w.bind("<Leave>", lambda e: hover(False))
         self._crop_register(cell, paint)
+        if kind == "orig":
+            self._seg_orig = cell    # remembered so crop opens on it by default
 
     def _pick_segment(self, cell, kind):
         "Segment clicked: free, the photo's own ratio, or a one-off custom ratio."
@@ -673,8 +675,8 @@ class CropMixin:
         if self.current_pil is not None:
             self._set_crop_ratio(sz["w"] / sz["h"])
 
-    # --- Pinned footer: Crop + Cancel ----------------------------------------
-    # Crop/Cancel used to live inline at the bottom of the scrollable section
+    # --- Pinned footer: Crop + Reset -----------------------------------------
+    # Crop/Reset used to live inline at the bottom of the scrollable section
     # content, so opening the (now-foldable) Social networks / My sizes groups
     # pushed them down out of view. Same fix as the Filters manager's pinned
     # Create/Undo footer: built once in editpanel._build_edit_panel, OUTSIDE the
@@ -683,7 +685,7 @@ class CropMixin:
     # crop tool is open (see _enter_crop / editpanel.set_section).
 
     def _build_crop_footer(self, panel):
-        "Scaffold the pinned Crop/Cancel row; hidden until the crop tool opens."
+        "Scaffold the pinned Crop/Reset row; hidden until the crop tool opens."
         wrap = self._tw(tk.Frame(panel), bg="bar")
         wrap.pack(side="bottom", fill="x", before=self._sec_host)
         self._tw(tk.Frame(wrap, height=1), bg="divider").pack(side="top", fill="x")
@@ -693,11 +695,11 @@ class CropMixin:
             stretch=True, bg="bar", command=self.apply_crop)
         apply_btn.pack(fill="x", padx=EDIT_PAD, pady=(8, 6))
 
-        cancel = tintkit.Button(
-            wrap, self.theme, t("Cancel"), role="neutral", variant="outline",
-            icon="x", stretch=True, bg="bar", command=self._reset_crop)
-        cancel.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
-        tintkit.HoverTip(cancel.canvas, self.theme,
+        reset = tintkit.Button(
+            wrap, self.theme, t("Reset"), role="neutral", variant="outline",
+            icon="rotate-ccw", stretch=True, bg="bar", command=self._reset_crop)
+        reset.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
+        tintkit.HoverTip(reset.canvas, self.theme,
                          t("Reset the selection to the whole image"))
 
         self._crop_footer = wrap
@@ -857,15 +859,16 @@ class CropMixin:
         self._render_preview()
 
     def _reset_crop(self):
-        "Clear the selection back to the whole image (free ratio)."
+        "Reset both the box and the ratio back to the default: the photo's own"
+        " ratio ('Orig.'), full frame, tilt cleared."
         if self.current_pil is None:
             return
         iw, ih = self.current_pil.size
         self.crop_rect = [0.0, 0.0, float(iw), float(ih)]
-        self.crop_ratio = None
-        self._crop_btn_active = None
+        self.crop_ratio = iw / ih
+        self._crop_btn_active = getattr(self, "_seg_orig", None)
         self._restyle_crop_chips()
-        self._reset_straighten()         # cancel drops any pending tilt too
+        self._reset_straighten()         # reset drops any pending tilt too
         self._render_preview()
 
     def _enter_crop(self):
@@ -874,9 +877,12 @@ class CropMixin:
         if self.current_pil is None:
             self._render_preview()
             return
-        if self.crop_rect is None:
+        if self.crop_rect is None:       # fresh open → default to the photo's own ratio
             iw, ih = self.current_pil.size
             self.crop_rect = [0.0, 0.0, float(iw), float(ih)]
+            self.crop_ratio = iw / ih                # "Orig." — locked, full frame
+            self._crop_btn_active = getattr(self, "_seg_orig", None)
+            self._restyle_crop_chips()
         if self.straighten:              # a pending tilt → re-fit its inscribed box
             self._straighten_box()
         self.preview.configure(cursor="crosshair")
