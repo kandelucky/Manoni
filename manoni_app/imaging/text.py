@@ -210,8 +210,3 @@ def apply_text_overlay(img, overlay, scale, src_box):
     return Image.alpha_composite(img.convert("RGBA"), layer)
 
 
-def _apply_texts(img, texts, scale, src_box):
-    "Draw every text / watermark overlay in list order (later over earlier)."
-    for ov in texts:
-        img = apply_text_overlay(img, ov, scale, src_box)
-    return img

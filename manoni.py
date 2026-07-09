@@ -39,6 +39,7 @@ from manoni_app.ui.heal import HealMixin
 from manoni_app.ui.focus import FocusMixin
 from manoni_app.ui.text import TextMixin
 from manoni_app.ui.logo import LogoMixin
+from manoni_app.ui.layers import LayersMixin
 from manoni_app.ui.filters import FiltersMixin
 from manoni_app.ui.actions import ActionsMixin
 from manoni_app.ui.about import AboutMixin
@@ -49,8 +50,9 @@ from manoni_app.ui.help import HelpMixin
 
 class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
              ViewerMixin, NavMixin, CropMixin, ResizeMixin, PerspectiveMixin,
-             HealMixin, FocusMixin, TextMixin, LogoMixin, FiltersMixin,
-             ActionsMixin, AboutMixin, MetadataMixin, SettingsMixin, HelpMixin):
+             HealMixin, FocusMixin, TextMixin, LogoMixin, LayersMixin,
+             FiltersMixin, ActionsMixin, AboutMixin, MetadataMixin,
+             SettingsMixin, HelpMixin):
     "Main application window"
 
     # Zoom is an ABSOLUTE scale: display-pixels per source-pixel.
@@ -464,6 +466,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         # The ttk scrollbar style is global (not per-widget), so re-run it on a
         # dark<->light switch to recolour the sidebar / folder / section scrollbars.
         self.theme.subscribe(self._init_scrollbar_style)
+        # The preview's canvas chrome (layer chips, selection frames) reads the
+        # live theme at draw time — re-render on a switch so it restyles at once.
+        self.theme.subscribe(self._render_preview)
         self._build_infobar()
         self._build_toolbar()
         self._build_body()

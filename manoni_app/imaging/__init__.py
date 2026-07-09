@@ -37,4 +37,5 @@ from .effects import (apply_vignette, apply_grain, apply_denoise,    # noqa: F40
                       apply_clarity, apply_texture, apply_vibrance,
                       apply_temperature, apply_tint, apply_bw, apply_sepia,
                       apply_sharpen)
-from .pipeline import edit_stages, apply_edits, apply_edits_cached    # noqa: F401
+from .pipeline import (edit_stages, apply_edits, apply_edits_cached,  # noqa: F401
+                       overlay_order)

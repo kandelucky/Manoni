@@ -163,10 +163,3 @@ def apply_logo_overlay(img, overlay, scale, src_box):
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     layer.paste(logo, (x, y))
     return Image.alpha_composite(img.convert("RGBA"), layer)
-
-
-def _apply_logos(img, logos, scale, src_box):
-    "Draw every logo overlay in list order (later over earlier)."
-    for ov in logos:
-        img = apply_logo_overlay(img, ov, scale, src_box)
-    return img

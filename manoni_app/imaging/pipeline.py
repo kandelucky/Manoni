@@ -14,12 +14,37 @@ from PIL import ImageEnhance
 
 from .levels import apply_auto_luts, tone_lut, contrast_lut
 from .colormix import apply_color_mixer, color_mixer_active, _mixer_sig
-from .text import _apply_texts
-from .logo import _apply_logos
+from .text import apply_text_overlay
+from .logo import apply_logo_overlay
 from .effects import (apply_vignette, apply_grain, apply_denoise, apply_split_tone,
                       apply_dehaze, apply_focus_blur, apply_clarity, apply_texture,
                       apply_vibrance, apply_temperature, apply_tint, apply_bw,
                       apply_sepia, apply_sharpen, apply_exposure_gamma)
+
+
+def overlay_order(texts, logos):
+    """Bottom→top compose order of ALL overlays, as (kind, index) pairs.
+
+    Texts and logos stack in ONE z-ordered sequence: each overlay dict may carry
+    a "z" layer number, and the UI's layer arrows renumber those to move an
+    element through the stack — so a text can sit above a logo. Overlays saved
+    before layers existed have no "z" (read as 0), which reproduces the
+    historical order exactly: every text below every logo, each in list order.
+    """
+    items = ([("text", i, ov) for i, ov in enumerate(texts or [])]
+             + [("logo", i, ov) for i, ov in enumerate(logos or [])])
+    items.sort(key=lambda kio: (kio[2].get("z", 0), kio[0] != "text", kio[1]))
+    return [(kind, i) for kind, i, _ov in items]
+
+
+def _apply_overlays(img, order, texts, logos, scale, src_box):
+    "Draw every text + logo overlay in the z order overlay_order() resolved."
+    for kind, i in order:
+        if kind == "text":
+            img = apply_text_overlay(img, texts[i], scale, src_box)
+        else:
+            img = apply_logo_overlay(img, logos[i], scale, src_box)
+    return img
 
 
 def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
@@ -104,14 +129,16 @@ def edit_stages(e, auto_luts, scale, src_box, full_size, fast,
     if e.grain > 0.0 and not fast:
         add((("grain", e.grain, scale),
              lambda img, a=e.grain, s=scale: apply_grain(img, a, s)))
-    if e.texts:
-        sig_texts = tuple(tuple(sorted(ov.items())) for ov in e.texts)
-        add((("texts", scale, src_box, sig_texts),
-             lambda img, ts=e.texts, s=scale, sb=src_box: _apply_texts(img, ts, s, sb)))
-    if e.logos:
-        sig_logos = tuple(tuple(sorted(ov.items())) for ov in e.logos)
-        add((("logos", scale, src_box, sig_logos),
-             lambda img, ls=e.logos, s=scale, sb=src_box: _apply_logos(img, ls, s, sb)))
+    if e.texts or e.logos:
+        # Texts + logos compose as ONE stage in their combined z order (see
+        # overlay_order), so an element can be layered anywhere in the stack.
+        ts, ls = e.texts or [], e.logos or []
+        order = overlay_order(ts, ls)
+        sig = tuple((k, tuple(sorted((ts if k == "text" else ls)[i].items())))
+                    for k, i in order)
+        add((("overlays", scale, src_box, sig),
+             lambda img, o=order, ts=ts, ls=ls, s=scale, sb=src_box:
+                 _apply_overlays(img, o, ts, ls, s, sb)))
     return stages
 
 

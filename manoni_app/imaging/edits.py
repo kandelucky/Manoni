@@ -74,10 +74,12 @@ class Edits:
     # Text / watermark overlays. None or [] = off, else a LIST of dicts, each a
     # string with its centre + size in SOURCE px (so it stays glued to the photo
     # through zoom / pan and the preview matches the full-res save), colour,
-    # opacity, font key, alignment and an optional drop shadow. Drawn in list
-    # order (later = on top). See apply_text_overlay.
+    # opacity, font key, alignment and an optional drop shadow. See
+    # apply_text_overlay; texts + logos stack by each dict's "z" layer number
+    # (see pipeline.overlay_order — missing "z" keeps texts below logos).
     texts:       object = None
     # Logo / sticker overlays. None or [] = off, else a LIST of dicts, each a PNG
     # path with its centre + width in SOURCE px, opacity, flip flags and an
-    # optional flat-colour tint. Drawn after the texts (on top). See apply_logo_overlay.
+    # optional flat-colour tint. See apply_logo_overlay; layered with the texts
+    # by "z" (see pipeline.overlay_order).
     logos:       object = None

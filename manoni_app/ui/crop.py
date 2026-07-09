@@ -936,7 +936,7 @@ class CropMixin:
 
     # --- Crop overlay geometry + mouse interaction --------------------------
 
-    CROP_HANDLE = 6    # half-size of a handle square, in screen px
+    CROP_HANDLE = 6    # half-size of a handle square, logical px (DPI-scaled)
     CROP_MIN    = 16   # smallest crop side, in source px
     _CROP_CURSORS = {"nw": "top_left_corner", "se": "bottom_right_corner",
                      "ne": "top_right_corner", "sw": "bottom_left_corner",
@@ -972,7 +972,7 @@ class CropMixin:
 
     def _crop_hit(self, x, y):
         "Handle/'move' under screen (x, y), or None. Handles take priority."
-        tol = self.CROP_HANDLE + 4
+        tol = self._edit_dpi_w(self.CROP_HANDLE + 4)
         for mode, (hx, hy) in self._crop_handles().items():
             if abs(x - hx) <= tol and abs(y - hy) <= tol:
                 return mode
@@ -1109,10 +1109,11 @@ class CropMixin:
             gy = y0 + (y1 - y0) * k / 3
             c.create_line(gx, y0, gx, y1, fill="#ffffff", stipple="gray25")
             c.create_line(x0, gy, x1, gy, fill="#ffffff", stipple="gray25")
-        c.create_rectangle(x0, y0, x1, y1, outline="#ffffff", width=1)
+        c.create_rectangle(x0, y0, x1, y1, outline="#ffffff",
+                           width=max(1, self._edit_dpi_w(1.4)))
         if self.straighten:           # tilting: the box is auto-fitted, no handles
             return
-        r = self.CROP_HANDLE
+        r = self._edit_dpi_w(self.CROP_HANDLE)
         for hx, hy in self._crop_handles().values():
             c.create_rectangle(hx - r, hy - r, hx + r, hy + r,
                                fill=ACCENT, outline=ON_ACCENT)

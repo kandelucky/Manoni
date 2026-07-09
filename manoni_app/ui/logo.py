@@ -43,8 +43,8 @@ from .. import imaging
 class LogoMixin:
     # --- Logo overlay (col 3 panel + interactive box on the preview) ---------
 
-    LOGO_HANDLE   = 5      # half-size of the resize handle square, screen px
-    LOGO_HIT_PAD  = 4      # click slack around a logo box for selection, screen px
+    LOGO_HANDLE   = 5      # half-size of the resize handle square, logical px (×DPI)
+    LOGO_HIT_PAD  = 4      # click slack around a logo box for selection, logical px
     LOGO_MIN_SIZE = 8.0    # smallest logo width, source px
     LOGO_MARGIN   = 0.04   # corner-placement inset, as a fraction of the short side
     LOGO_PRESET_PX = 46    # preset thumbnail square, logical px
@@ -505,6 +505,7 @@ class LogoMixin:
             k = n % 10
             ov["cx"] = min(max(0.0, ov["cx"] + step * k), float(iw))
             ov["cy"] = min(max(0.0, ov["cy"] + step * k), float(ih))
+        ov["z"] = self._layer_next_z()         # a new logo lands on top of everything
         self.logos = self.logos + [ov]         # rebind (never alias an undo snapshot)
         self.logo_sel = len(self.logos) - 1
         self._edits_saved = False
@@ -697,17 +698,27 @@ class LogoMixin:
         cxs, cys = self._src_to_scr(ov["cx"], ov["cy"])
         lw, lh = imaging.logo_extent(ov)
         if lw <= 0 or lh <= 0:                 # unreadable PNG → a placeholder box
-            return cxs, cys, 24.0, 24.0
+            r = float(self._edit_dpi_w(24))
+            return cxs, cys, r, r
         return cxs, cys, lw * scale / 2.0, lh * scale / 2.0
 
     def _logo_at(self, x, y):
-        "Topmost logo under screen (x, y): (index, 'resize'|'move') or (None, None)."
+        "Topmost logo under screen (x, y): (index, 'resize'|'move'|'layer_up'|"
+        "'layer_down') or (None, None)."
+        # The layer chips + resize handle belong to the selected element only.
         if self.logo_sel is not None and 0 <= self.logo_sel < len(self.logos):
+            chip = self._layer_chip_at(x, y)
+            if chip is not None:
+                return self.logo_sel, chip
             cxs, cys, hw, hh = self._logo_box_screen(self.logos[self.logo_sel])
-            if math.hypot(x - (cxs + hw), y - (cys + hh)) <= self.LOGO_HANDLE + 5:
+            if math.hypot(x - (cxs + hw), y - (cys + hh)) \
+                    <= self._edit_dpi_w(self.LOGO_HANDLE + 5):
                 return self.logo_sel, "resize"
-        pad = self.LOGO_HIT_PAD
-        for i in range(len(self.logos) - 1, -1, -1):
+        # Otherwise the front-most box, walking the LAYER order top-down — what
+        # the eye sees on top is what a click lands on.
+        pad = self._edit_dpi_w(self.LOGO_HIT_PAD)
+        order = [i for k, i in self._layer_seq() if k == "logo"]
+        for i in reversed(order):
             cxs, cys, hw, hh = self._logo_box_screen(self.logos[i])
             if abs(x - cxs) <= hw + pad and abs(y - cys) <= hh + pad:
                 return i, "move"
@@ -722,6 +733,9 @@ class LogoMixin:
         i, hit = self._logo_at(event.x, event.y)
         if hit is None:
             return "break"                     # empty click: keep the selection
+        if hit in ("layer_up", "layer_down"):
+            self._layer_move("logo", 1 if hit == "layer_up" else -1)
+            return "break"                     # a chip click reorders, no drag
         if i != self.logo_sel:
             self.logo_sel = i                  # clicking a box selects it
             self._sync_logo_controls()
@@ -772,21 +786,27 @@ class LogoMixin:
         if not self._logo_active() or self._logo_drag is not None:
             return
         _, hit = self._logo_at(event.x, event.y)
-        cur = {"resize": "bottom_right_corner", "move": "fleur"}.get(hit, "")
+        cur = {"resize": "bottom_right_corner", "move": "fleur",
+               "layer_up": "hand2", "layer_down": "hand2"}.get(hit, "")
         self.preview.configure(cursor=cur)
 
     # --- Overlay ------------------------------------------------------------
 
     def _draw_logo_overlay(self):
-        "Chrome for the SELECTED logo only (a bright box + resize handle); the"
-        " other logos show as their plain composited pixels, with no outline."
+        "Chrome for the SELECTED logo only (a bright box + resize handle + layer"
+        " chips); the other logos show as their plain composited pixels, with no"
+        " outline. All chrome is DPI-scaled so it reads the same at 100% / 150%."
         c = self.preview
+        self._layer_chips = {}                 # no selection drawn → no chip hits
+        lw = max(1, self._edit_dpi_w(1.4))
+        dash = (self._edit_dpi_w(4), self._edit_dpi_w(3))
         for i, ov in enumerate(self.logos):
             cxs, cys, hw, hh = self._logo_box_screen(ov)
             if i == self.logo_sel:
                 x0, y0, x1, y1 = cxs - hw, cys - hh, cxs + hw, cys + hh
                 c.create_rectangle(x0, y0, x1, y1,
-                                   outline=ACCENT, dash=(4, 3), width=1)
-                r = self.LOGO_HANDLE
+                                   outline=ACCENT, dash=dash, width=lw)
+                r = self._edit_dpi_w(self.LOGO_HANDLE)
                 c.create_rectangle(x1 - r, y1 - r, x1 + r, y1 + r,
                                    fill=ACCENT, outline=ON_ACCENT)
+                self._draw_layer_chips("logo", x0, y0, x1, y1)

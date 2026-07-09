@@ -34,12 +34,12 @@ from .. import imaging
 class TextMixin:
     # --- Text overlay (col 3 panel + interactive box on the preview) ---------
 
-    TEXT_HANDLE   = 5      # half-size of the resize handle square, screen px
-    TEXT_HIT_PAD  = 4      # click slack around a text box for selection, screen px
+    TEXT_HANDLE   = 5      # half-size of the resize handle square, logical px (×DPI)
+    TEXT_HIT_PAD  = 4      # click slack around a text box for selection, logical px
     TEXT_MIN_SIZE = 6.0    # smallest font height, source px
     TEXT_MARGIN   = 0.04   # corner-placement inset, as a fraction of the short side
-    TEXT_EMPTY_HW = 46     # placeholder half-width while no text is typed, screen px
-    TEXT_EMPTY_HH = 16     # placeholder half-height while no text is typed, screen px
+    TEXT_EMPTY_HW = 46     # placeholder half-width while no text is typed, logical px
+    TEXT_EMPTY_HH = 16     # placeholder half-height while no text is typed, logical px
 
     # --- Panel --------------------------------------------------------------
 
@@ -350,6 +350,7 @@ class TextMixin:
             k = n % 10                        # wrap so it never marches off-frame
             ov["cx"] = min(max(0.0, ov["cx"] + step * k), float(iw))
             ov["cy"] = min(max(0.0, ov["cy"] + step * k), float(ih))
+        ov["z"] = self._layer_next_z()       # a new text lands on top of everything
         self.texts = self.texts + [ov]       # rebind (never alias an undo snapshot)
         self.text_sel = len(self.texts) - 1
         self._edits_saved = False
@@ -638,21 +639,29 @@ class TextMixin:
         cxs, cys = self._src_to_scr(ov["cx"], ov["cy"])
         tw, th = imaging.text_extent(ov)
         if tw <= 0 or th <= 0:               # nothing typed yet → a placeholder box
-            return cxs, cys, self.TEXT_EMPTY_HW, self.TEXT_EMPTY_HH
+            return (cxs, cys, self._edit_dpi_w(self.TEXT_EMPTY_HW),
+                    self._edit_dpi_w(self.TEXT_EMPTY_HH))
         return cxs, cys, tw * scale / 2.0, th * scale / 2.0
 
     def _text_at(self, x, y):
-        "Topmost text under screen (x, y): (index, 'resize'|'move') or (None, None)."
-        # The resize handle belongs to the selected element only.
+        "Topmost text under screen (x, y): (index, 'resize'|'move'|'layer_up'|"
+        "'layer_down') or (None, None)."
+        # The layer chips + resize handle belong to the selected element only.
         if self.text_sel is not None and 0 <= self.text_sel < len(self.texts):
+            chip = self._layer_chip_at(x, y)
+            if chip is not None:
+                return self.text_sel, chip
             cxs, cys, hw, hh = self._text_box_screen(self.texts[self.text_sel])
-            if math.hypot(x - (cxs + hw), y - (cys + hh)) <= self.TEXT_HANDLE + 5:
+            if math.hypot(x - (cxs + hw), y - (cys + hh)) \
+                    <= self._edit_dpi_w(self.TEXT_HANDLE + 5):
                 return self.text_sel, "resize"
-        # Otherwise the front-most box (last drawn) that contains the point. A
-        # few px of slack makes selecting a glyph-tight box forgiving — it no
+        # Otherwise the front-most box (top of the LAYER order — what the eye
+        # sees on top is what a click lands on) that contains the point. A few
+        # px of slack makes selecting a glyph-tight box forgiving — it no
         # longer needs a pixel-perfect click right on the letters.
-        pad = self.TEXT_HIT_PAD
-        for i in range(len(self.texts) - 1, -1, -1):
+        pad = self._edit_dpi_w(self.TEXT_HIT_PAD)
+        order = [i for k, i in self._layer_seq() if k == "text"]
+        for i in reversed(order):
             cxs, cys, hw, hh = self._text_box_screen(self.texts[i])
             if abs(x - cxs) <= hw + pad and abs(y - cys) <= hh + pad:
                 return i, "move"
@@ -667,6 +676,9 @@ class TextMixin:
         i, hit = self._text_at(event.x, event.y)
         if hit is None:
             return "break"                   # empty click: keep the selection
+        if hit in ("layer_up", "layer_down"):
+            self._layer_move("text", 1 if hit == "layer_up" else -1)
+            return "break"                   # a chip click reorders, no drag
         if i != self.text_sel:
             self.text_sel = i                # clicking a box selects it
             self._sync_text_controls()
@@ -717,25 +729,31 @@ class TextMixin:
         if not self._text_active() or self._text_drag is not None:
             return
         _, hit = self._text_at(event.x, event.y)
-        cur = {"resize": "bottom_right_corner", "move": "fleur"}.get(hit, "")
+        cur = {"resize": "bottom_right_corner", "move": "fleur",
+               "layer_up": "hand2", "layer_down": "hand2"}.get(hit, "")
         self.preview.configure(cursor=cur)
 
     # --- Overlay ------------------------------------------------------------
 
     def _draw_text_overlay(self):
-        "Chrome for the SELECTED text only (a bright box + resize handle); the"
-        " other texts show as their plain composited glyphs, with no outline."
+        "Chrome for the SELECTED text only (a bright box + resize handle + layer"
+        " chips); the other texts show as their plain composited glyphs, with no"
+        " outline. All chrome is DPI-scaled so it reads the same at 100% / 150%."
         c = self.preview
+        self._layer_chips = {}               # no selection drawn → no chip hits
+        lw = max(1, self._edit_dpi_w(1.4))
+        dash = (self._edit_dpi_w(4), self._edit_dpi_w(3))
         for i, ov in enumerate(self.texts):
             cxs, cys, hw, hh = self._text_box_screen(ov)
             sel = (i == self.text_sel)
             if sel:
                 x0, y0, x1, y1 = cxs - hw, cys - hh, cxs + hw, cys + hh
                 c.create_rectangle(x0, y0, x1, y1,
-                                   outline=ACCENT, dash=(4, 3), width=1)
-                r = self.TEXT_HANDLE
+                                   outline=ACCENT, dash=dash, width=lw)
+                r = self._edit_dpi_w(self.TEXT_HANDLE)
                 c.create_rectangle(x1 - r, y1 - r, x1 + r, y1 + r,
                                    fill=ACCENT, outline=ON_ACCENT)
+                self._draw_layer_chips("text", x0, y0, x1, y1)
             if not (ov.get("text") or "").strip():
                 # An empty text has no glyphs — keep a faint hint so it stays
                 # findable / clickable even when it isn't the selected one.
