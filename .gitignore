@@ -24,6 +24,9 @@ Thumbs.db
 
 # App runtime output (deleted photos are moved here)
 _deleted/
+# The logos the person running Manoni imported (config.LOGO_DIR). The presets
+# that ship with the app live in logos/ and ARE tracked; this folder is theirs.
+my_logos/
 
 # App data + persisted state stores (machine-specific paths, user data):
 # manoni_state / manoni_filters / manoni_actions / manoni-language / manoni-filters
