@@ -5,7 +5,7 @@
 ;     .venv\Scripts\pyinstaller.exe manoni.spec --noconfirm
 ;
 ; Compile:  "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" manoni.iss
-; Output:   installer\Manoni-1.1.0-Setup.exe
+; Output:   installer\Manoni-1.2.0-Setup.exe
 ;
 ; What it does:
 ;   * installs the one-folder PyInstaller build into Program Files
@@ -15,7 +15,7 @@
 ;   * clean uninstall (user data under %APPDATA%\Manoni is intentionally KEPT)
 
 #define AppName    "Manoni"
-#define AppVersion "1.1.1"
+#define AppVersion "1.2.0"
 #define AppExe     "Manoni.exe"
 #define Publisher  "Lasha Kandelaki"
 

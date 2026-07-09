@@ -16,7 +16,7 @@ from ..i18n import t
 
 # --- Static content (kept here so the dialog body stays declarative) --------
 
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.2.0"
 AUTHOR_NAME = "Lasha Kandelaki"
 AUTHOR_HANDLE = "kandelucky"
 
