@@ -468,12 +468,17 @@ class ChromeMixin:
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
                           t("Open folder")).pack(side="left", padx=4, pady=8)
-        # Save (overwrite the open file) then Save as… (a fresh copy) sit next to
-        # Open — all three are file operations, one click away. Save is the
-        # standard in-place save (Ctrl+S); Save as… opens the copy dialog
-        # (Ctrl+Shift+S). Distinct icons so the two don't read as one button.
+        # The three saves sit next to Open — all file operations, one click away,
+        # ordered by how much they ask of you. Save overwrites the open file in
+        # place (Ctrl+S); Save a copy drops a numbered file into the quick-copy
+        # folder without a dialog (Ctrl+E); Save as… opens the full copy dialog
+        # (Ctrl+Shift+S). Distinct icons so the three don't read as one button.
         self._tool_button(left, "save", self.overwrite_save,
                           t("Save — overwrite the original (Ctrl+S)")).pack(
+                              side="left", padx=4, pady=8)
+        self._tool_button(left, "folder-output", self.quick_copy_save,
+                          t("Save a copy — a numbered file in your quick-copy "
+                            "folder (Ctrl+E)")).pack(
                               side="left", padx=4, pady=8)
         self._tool_button(left, "save-all", self._save_as_dialog,
                           t("Save as… — a new copy (Ctrl+Shift+S)")).pack(

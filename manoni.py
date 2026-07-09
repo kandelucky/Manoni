@@ -325,6 +325,10 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.export_dir_mode = "subfolder"
         self.export_subfolder = "_edited"   # subfolder name (mode "subfolder")
         self.export_fixed_dir = ""          # absolute folder (mode "fixed")
+        # Quick copy (Ctrl+E): one folder every "save a copy" lands in, chosen
+        # once. Deliberately its OWN setting — the culling / Save-as export dirs
+        # above answer a different question and must stay free to differ.
+        self.quick_copy_dir = ""            # absolute folder; "" = not set yet
         # Crop tool: a non-destructive selection drawn over the preview, stored in
         # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
         self.crop_rect = None         # [x0, y0, x1, y1] in source px, or None
@@ -521,7 +525,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
     # VK code in event.keycode and it does NOT change with the keyboard layout,
     # so we use it as a fallback when a non-Latin layout hides the keysym.
     _VK_Z, _VK_Y, _VK_R, _VK_S, _VK_O = 90, 89, 82, 83, 79
-    _VK_P = 80
+    _VK_P, _VK_E = 80, 69
     _VK_LBRACKET, _VK_RBRACKET = 219, 221
 
     def _on_ctrl_shortcut(self, event):
@@ -542,6 +546,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
             # Ctrl+S saves in place (overwrite the original); Ctrl+Shift+S opens
             # the Save-as dialog for a fresh copy.
             self._save_as_dialog() if shift else self.overwrite_save()
+            return "break"
+        if ks == "e" or kc == self._VK_E:
+            self.quick_copy_save()          # a numbered copy into the quick folder
             return "break"
         if ks == "o" or kc == self._VK_O:
             self.open_folder()              # native folder picker
@@ -632,6 +639,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         state["export_subfolder"] = self.export_subfolder
         if self.export_fixed_dir:
             state["export_fixed_dir"] = self.export_fixed_dir
+        if self.quick_copy_dir:
+            state["quick_copy_dir"] = self.quick_copy_dir   # Ctrl+E destination
         if self.crop_sizes:
             state["crop_sizes"] = self.crop_sizes    # user's saved crop sizes
         if self.folder:
@@ -736,6 +745,9 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         efd = state.get("export_fixed_dir")
         if isinstance(efd, str):
             self.export_fixed_dir = efd
+        qcd = state.get("quick_copy_dir")
+        if isinstance(qcd, str):
+            self.quick_copy_dir = qcd
         # User's saved custom crop sizes. Keep only well-formed {name,w,h} with
         # positive dimensions, so a hand-edited state file can't break the panel.
         cs = state.get("crop_sizes")

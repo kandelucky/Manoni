@@ -1,4 +1,6 @@
-"""Saving: quick non-destructive save and the full 'Save as...' dialog.
+"""Saving, in three flavours — overwrite the original in place (Ctrl+S), drop a
+numbered copy into the quick-copy folder (Ctrl+E), or open the full 'Save as...'
+dialog (Ctrl+Shift+S). Only the first one replaces an existing file.
 
 Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
@@ -198,6 +200,19 @@ class SaveMixin:
         self.toast(t("Saved → {name}").format(name=fname))
         return True
 
+    def _copy_cfg(self, out_dir):
+        """Settings for a dialog-less copy into `out_dir`: the last save's format /
+        quality / metadata choices, else a format that matches the source file."""
+        src_ext = os.path.splitext(self.files[self.index])[1].lower()
+        default_fmt = ("PNG" if src_ext == ".png" else
+                       "WEBP" if src_ext == ".webp" else "JPEG")
+        ls = getattr(self, "last_save", None) or {}
+        return {"dir": out_dir,
+                "fmt": ls.get("fmt") or default_fmt,
+                "quality": int(ls.get("quality", 95)),
+                "keep_meta": bool(ls.get("keep_meta", True)),
+                "to_srgb": bool(ls.get("to_srgb", False))}
+
     def _auto_save_copy(self):
         """Silently write an edited COPY using the Export defaults, no dialog — the
         culling auto-save that fires when you arrow off an edited photo with
@@ -205,16 +220,48 @@ class SaveMixin:
         Returns True if a file was written."""
         if not self.files or self.current_pil is None or not self.folder:
             return False
-        src_ext = os.path.splitext(self.files[self.index])[1].lower()
-        default_fmt = ("PNG" if src_ext == ".png" else
-                       "WEBP" if src_ext == ".webp" else "JPEG")
-        ls = getattr(self, "last_save", None) or {}
-        cfg = {"dir": self._default_export_dir(),
-               "fmt": ls.get("fmt") or default_fmt,
-               "quality": int(ls.get("quality", 95)),
-               "keep_meta": bool(ls.get("keep_meta", True)),
-               "to_srgb": bool(ls.get("to_srgb", False))}
+        cfg = self._copy_cfg(self._default_export_dir())
         return bool(self._write_save(cfg, self._save_basename()))
+
+    # --- Quick copy: the third save — no overwrite, no dialog ----------------
+
+    def _quick_copy_dir(self):
+        """The one folder every quick copy lands in, asked for on first use and
+        then remembered. Returns "" if it is unset and the picker was cancelled."""
+        if self.quick_copy_dir:
+            return self.quick_copy_dir
+        self.toast(t("Choose the folder your copies go to"))
+        d = tkfd.askdirectory(parent=self.root, title=t("Quick-copy folder"),
+                              initialdir=self.folder or os.path.expanduser("~"))
+        if not d:
+            return ""
+        self.quick_copy_dir = d
+        self._save_state()
+        return d
+
+    def quick_copy_save(self):
+        """Ctrl+E / the top-bar copy button: write the edits into the quick-copy
+        folder as a fresh, numbered file. Returns True if written.
+
+        This is the overwrite save without the overwrite — same precondition (no
+        edits means there is nothing to save, so nothing is written), but the
+        original is never touched and neither is any earlier copy: _write_save
+        runs the name through unique_path, so a second copy of the same photo
+        lands beside the first as "… (1)" rather than replacing it."""
+        if not self.files or self.current_pil is None or not self.folder:
+            self.toast(t("Open an image first"))
+            return False
+        if not self._has_any_edits():
+            self.toast(t("No edits to save"))
+            return False
+        dest = self._quick_copy_dir()
+        if not dest:
+            return False                   # unset, and the user cancelled the picker
+        out = self._write_save(self._copy_cfg(dest), self._save_basename())
+        if not out:
+            return False
+        self.toast(t("Copy saved → {name}").format(name=os.path.basename(out)))
+        return True
 
     def _save_as_dialog(self):
         """Full save (Ctrl+Shift+S): pick folder, name, format, quality. Defaults

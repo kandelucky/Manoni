@@ -406,6 +406,13 @@ class SettingsMixin:
 
         win.note(t("These are the defaults the Save dialog opens with."))
 
+        win.group(t("Quick copy (Ctrl+E)"))
+        self._set_quick_copy_row(win)
+        win.note(t("Ctrl+E and the copy button write your edits here as a new, "
+                   "numbered file — the original is never touched, and an earlier "
+                   "copy is never replaced. Left unset, the first copy asks for "
+                   "the folder."))
+
         win.group(t("Overwrite (Ctrl+S)"))
         r = win.row(t("Ask before overwriting the original"),
                     t("Ctrl+S and the Save button write your edits back over the "
@@ -432,6 +439,28 @@ class SettingsMixin:
             self._save_state()
         ent.bind("<FocusOut>", commit)
         ent.bind("<Return>", commit)
+
+    def _set_quick_copy_row(self, win):
+        "Pick the one folder every Ctrl+E copy lands in (independent of Output)."
+        right = win.row(t("Folder"))
+        cur = self.quick_copy_dir
+        lbl = self._tw(tk.Label(right,
+                       text=self._set_short_path(cur) if cur else t("Not set"),
+                       font=("Segoe UI", 9), anchor="e", padx=10, pady=5),
+                       bg="chip", fg="fg" if cur else "fg_dim")
+        lbl.pack(side="left", padx=(0, 8))
+
+        def change():
+            d = tkfd.askdirectory(
+                parent=self._settings_win, title=t("Quick-copy folder"),
+                initialdir=cur or self.folder or os.path.expanduser("~"))
+            if not d:
+                return
+            self.quick_copy_dir = d
+            self._save_state()
+            self._settings_body.rebuild()   # rebuild → label re-threaded fg="fg"
+        tintkit.Button(right, self.theme, t("Change…"), role="neutral",
+                       variant="outline", bg="bg", command=change).pack(side="left")
 
     def _set_export_fixed_row(self, win):
         "Pick one fixed output folder for every export (mode “fixed”)."

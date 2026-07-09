@@ -243,6 +243,8 @@ class HelpMixin:
         win.group(t("Anytime"))
         self._help_key_row(win, "Ctrl + O", "Open a folder of photos.")
         self._help_key_row(win, "Ctrl + S", "Save — overwrite the open file.")
+        self._help_key_row(win, "Ctrl + E",
+                           "Save a copy — a numbered file in the quick-copy folder.")
         self._help_key_row(win, "Ctrl + Shift + S", "Save as… — write a new copy.")
         self._help_key_row(win, "Ctrl + Z", "Undo.")
         self._help_key_row(win, "Ctrl + Y", "Redo  (or Ctrl + Shift + Z).")
@@ -361,11 +363,16 @@ class HelpMixin:
                        "Save button in the top bar) writes your edits straight "
                        "back onto the open file, replacing it. There is no "
                        "backup, so the first time it asks you to confirm.")
+        self._help_row(win, "folder-output", "Save a copy — no overwrite",
+                       "Ctrl+E (or the copy button in the top bar) saves the same "
+                       "edits as a NEW, numbered file in your quick-copy folder — "
+                       "no dialog, and neither the original nor an earlier copy is "
+                       "replaced. Pick the folder in Settings → Export.")
         self._help_row(win, "upload", "Save as… — a copy",
                        "Ctrl+Shift+S (or Save as… in the top bar) opens a dialog "
                        "to write a NEW file — pick the format (JPEG / PNG / WEBP), "
                        "quality and folder. The original is left untouched.")
-        self._help_row(win, "folder-check", "Quick copy while culling",
+        self._help_row(win, "folder-check", "Auto-copy while culling",
                        "Turn on Settings → Culling → Auto-save, and each time you "
                        "step away from or cull an edited photo Manoni silently "
                        "drops a copy in the export folder — no clicks. With it off, it "
