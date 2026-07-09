@@ -41,7 +41,8 @@ You'll feel at home if you:
 - shoot in **volume** and need to sort keepers from rejects quickly;
 - want **real edits** — tone, colour, crop, heal, filters — without a heavy install;
 - work on a **weak or old laptop** and want it to stay fast;
-- care that your **originals are never altered** (culling only *moves* files, edits export copies).
+- care that your **originals stay untouched** — culling only *moves* files, and edits
+  go to exported copies unless you deliberately reach for Overwrite.
 
 ---
 
@@ -52,6 +53,9 @@ You'll feel at home if you:
 [Releases page](https://github.com/kandelucky/Manoni/releases/latest), run it,
 and launch Manoni from the Start menu. No Python needed — and it registers
 `.mnf` / `.mnl` files so a double-click opens them in Manoni.
+
+Manoni never phones home on its own. **Settings → About → Check for updates** asks
+GitHub for the latest release only when you click it.
 
 **Run from source** (for development):
 
@@ -73,12 +77,13 @@ python -m venv .venv
 ## Browse & cull
 
 <img src="assets/readme/folder-check.png" width="18" alt=""> A virtualized thumbnail
-strip (handles thousands of files) beside a nested folder-tree sidebar. Click or
-press <kbd>←</kbd> / <kbd>→</kbd> to browse, <kbd>↑</kbd> / <kbd>↓</kbd> to cull
-each photo into configurable **keep** / **reject** folders. Info bar (name, size,
-date), before/after compare, and your session is restored on the next launch.
-Nothing is deleted — culling only *moves* files, and <kbd>Ctrl</kbd>+<kbd>Z</kbd>
-undoes any move.
+strip (handles thousands of files) beside a nested folder-tree sidebar. Click a
+thumbnail, or walk the strip with the **arrow keys** — <kbd>←</kbd> / <kbd>↑</kbd>
+back, <kbd>→</kbd> / <kbd>↓</kbd> forward. <kbd>Enter</kbd> keeps the photo and
+<kbd>Backspace</kbd> rejects it, each into a configurable **keep** / **reject**
+folder. Info bar (name, size, date), before/after compare, and your session is
+restored on the next launch. Nothing is deleted — culling only *moves* files, and
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes any move.
 
 ---
 
@@ -96,10 +101,14 @@ A tool rail on the right — click a tool to open its panel.
 | <img src="assets/readme/frame.png" width="22" alt=""> | **Perspective** | Fix keystoning, straighten converging lines |
 | <img src="assets/readme/bandage.png" width="22" alt=""> | **Heal & Clone** | Remove blemishes (auto, or <kbd>Alt</kbd>+click a clone source) |
 | <img src="assets/readme/circle-dot.png" width="22" alt=""> | **Focus blur** | Blur the surroundings, keep the subject sharp |
-| <img src="assets/readme/type.png" width="22" alt=""> | **Text & Watermark** | Live text overlays — many per photo, snap to a corner |
+| <img src="assets/readme/type.png" width="22" alt=""> | **Text & Watermark** | Live text overlays — many per photo, with fonts, bold / italic, colour, shadow and corner-snap |
 | <img src="assets/readme/image.png" width="22" alt=""> | **Logo** | Drop a transparent PNG onto the photo — many per photo, with size / opacity / tint / flip and corner-snap |
 | <img src="assets/readme/blend.png" width="22" alt=""> | **Filters** | Saved slider presets with a clickable preview strip |
 | <img src="assets/readme/circle-play.png" width="22" alt=""> | **Actions** | Record a macro and replay it on one photo or a whole folder |
+
+Text and logo overlays share **one layer stack** — a text can sit above a logo or
+below it. The `…` chip beside the selected overlay moves it up or down through the
+others, or deletes it.
 
 Undo / redo · a live histogram · before / after compare (a split line, or a
 press-and-hold peek) · dark / light theme with an accent colour · an English,
@@ -126,13 +135,29 @@ panel (or just double-click the file). Swap looks with other people on the
 
 ---
 
-## Export
+## Save & export
 
-<img src="assets/readme/save-all.png" width="18" alt=""> **Save as…** writes a
-full-resolution copy as JPEG / PNG / WEBP — to an `_edited/` subfolder or one
-fixed folder. Metadata (camera info, date, GPS, colour profile) is kept or
-stripped per your choice, and colours can be **converted to sRGB** so a
-wide-gamut photo still looks right on the web. The original is **never touched**.
+Three ways to save, at full resolution. **Only the first one replaces a file.**
+
+<img src="assets/readme/save.png" width="18" alt=""> **Save**
+(<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes your edits straight **back over the open
+file**. There is no backup, so it asks you to confirm — the one save that alters
+an original.
+
+<img src="assets/readme/folder-output.png" width="18" alt=""> **Save a copy**
+(<kbd>Ctrl</kbd>+<kbd>E</kbd>) drops the same edits into your **quick-copy folder**
+as a new, numbered file — no dialog. Neither the original nor an earlier copy is
+replaced; a second copy of the same photo lands beside the first. Choose the folder
+in **Settings → Export** (or the first copy asks for it).
+
+<img src="assets/readme/save-all.png" width="18" alt=""> **Save as…**
+(<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) opens a dialog — pick the format
+(JPEG / PNG / WEBP), quality and folder, either an `_edited/` subfolder or one
+fixed folder. The original is left untouched.
+
+For every save, metadata (camera info, date, GPS, colour profile) is kept or
+stripped per your choice, and colours can be **converted to sRGB** so a wide-gamut
+photo still looks right on the web.
 
 <img src="assets/readme/circle-help.png" width="18" alt=""> An **info** button in
 the top bar shows a photo's full metadata — camera, capture, colour profile and
@@ -144,10 +169,14 @@ location — and can **wipe GPS & EXIF** from a file before you share it.
 
 | Keys | Action |
 |---|---|
-| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next photo |
-| <kbd>↑</kbd> / <kbd>↓</kbd> | Keep / reject the current photo |
+| <kbd>←</kbd> / <kbd>↑</kbd> | Previous photo |
+| <kbd>→</kbd> / <kbd>↓</kbd> | Next photo |
+| <kbd>Enter</kbd> | Keep the current photo |
+| <kbd>Backspace</kbd> | Reject the current photo |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a folder of photos |
-| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Quick-save an edited copy *(Save-as the first time)* |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save — **overwrite** the open file |
+| <kbd>Ctrl</kbd>+<kbd>E</kbd> | Save a copy — a numbered file in the quick-copy folder |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save as… — pick format, quality and folder |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo *(or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>)* |
 | <kbd>Ctrl</kbd>+<kbd>R</kbd> | Show / hide the pixel rulers |

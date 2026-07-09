@@ -289,7 +289,7 @@
           <li>You shoot in <b>volume</b> and need to sort keepers from rejects quickly.</li>
           <li>You want <b>real edits</b> — tone, colour, crop, heal, filters — without a heavy install.</li>
           <li>You work on a <b>weak or old laptop</b> and want it to stay fast.</li>
-          <li>You care that your <b>originals are never altered</b> — culling only moves files, edits export copies.</li>
+          <li>You care that your <b>originals stay untouched</b> — culling only moves files, and edits go to exported copies unless you deliberately reach for Overwrite.</li>
         </ul>
       </div>
     </div>
@@ -315,11 +315,11 @@
         <button class="tool" type="button" data-tool="perspective"><div class="ic"><img src="assets/readme/frame.png" alt=""></div><h3>Perspective</h3><p>Fix keystoning and straighten converging lines.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="heal"><div class="ic"><img src="assets/readme/bandage.png" alt=""></div><h3>Heal &amp; Clone</h3><p>Remove blemishes automatically, or Alt-click to pick a clone source.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="focus"><div class="ic"><img src="assets/readme/circle-dot.png" alt=""></div><h3>Focus blur</h3><p>Blur the surroundings and keep your subject sharp.</p><span class="more">Details →</span></button>
-        <button class="tool" type="button" data-tool="text"><div class="ic"><img src="assets/readme/type.png" alt=""></div><h3>Text &amp; Watermark</h3><p>Live text overlays — many per photo, snapped to any corner.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="text"><div class="ic"><img src="assets/readme/type.png" alt=""></div><h3>Text &amp; Watermark</h3><p>Live text overlays — many per photo, with fonts, bold / italic and corner-snap.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="logo"><div class="ic"><img src="assets/readme/image.png" alt=""></div><h3>Logo</h3><p>Drop a transparent PNG — with size, opacity, tint, flip and corner-snap.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="actions"><div class="ic"><img src="assets/readme/circle-play.png" alt=""></div><h3>Actions</h3><p>Record a macro and replay it on one photo — or a whole folder.</p><span class="more">Details →</span></button>
       </div>
-      <p class="toolnote reveal">Undo / redo · live histogram · before / after compare · dark &amp; light theme with an accent colour · an <b>English, Georgian &amp; Polish</b> interface.</p>
+      <p class="toolnote reveal">Text and logo overlays share one layer stack, reordered from the … chip beside the selection · undo / redo · live histogram · before / after compare · dark &amp; light theme with an accent colour · an <b>English, Georgian &amp; Polish</b> interface.</p>
     </div>
   </section>
 
@@ -332,7 +332,7 @@
         <div class="cell">
           <div class="ic"><img src="assets/readme/folder-check.png" alt=""></div>
           <h3>Browse &amp; cull</h3>
-          <p>A virtualized thumbnail strip — thousands of files stay smooth — beside a nested folder tree. Arrow keys browse and cull each photo into <b>keep</b> / <b>reject</b> folders. Nothing is deleted: culling only <b>moves</b> files, and Ctrl+Z undoes any move.</p>
+          <p>A virtualized thumbnail strip — thousands of files stay smooth — beside a nested folder tree. The <b>arrow keys</b> walk the strip; <b>Enter</b> keeps a photo and <b>Backspace</b> rejects it, each into its own folder. Nothing is deleted: culling only <b>moves</b> files, and Ctrl+Z undoes any move.</p>
         </div>
         <div class="cell">
           <div class="ic"><img src="assets/readme/blend.png" alt=""></div>
@@ -341,8 +341,8 @@
         </div>
         <div class="cell">
           <div class="ic"><img src="assets/readme/save-all.png" alt=""></div>
-          <h3>Export</h3>
-          <p>Save a full-resolution copy as <b>JPEG / PNG / WEBP</b> — to an <b>_edited/</b> subfolder or one fixed folder. Metadata is kept, stripped, or <b>converted to sRGB</b> for the web per your choice, and the original is <b>never touched</b>.</p>
+          <h3>Save &amp; export</h3>
+          <p>Three ways to save, at full resolution — <b>overwrite</b> the open file (Ctrl+S), drop a <b>numbered copy</b> into your quick-copy folder (Ctrl+E), or <b>Save as…</b> a JPEG / PNG / WEBP wherever you like. Only the first one replaces a file. Metadata is kept, stripped, or <b>converted to sRGB</b> for the web per your choice.</p>
         </div>
       </div>
     </div>
@@ -359,10 +359,14 @@
         <p>Browse and cull without reaching for the mouse. The Help button in the top bar opens a tabbed guide covering all of it.</p>
       </div>
       <div class="keys reveal">
-        <div class="krow"><span class="combo"><kbd>←</kbd><kbd>→</kbd></span><span class="act">Previous / next photo</span></div>
-        <div class="krow"><span class="combo"><kbd>↑</kbd><kbd>↓</kbd></span><span class="act">Keep / reject the current photo</span></div>
+        <div class="krow"><span class="combo"><kbd>←</kbd><kbd>↑</kbd></span><span class="act">Previous photo</span></div>
+        <div class="krow"><span class="combo"><kbd>→</kbd><kbd>↓</kbd></span><span class="act">Next photo</span></div>
+        <div class="krow"><span class="combo"><kbd>Enter</kbd></span><span class="act">Keep the current photo</span></div>
+        <div class="krow"><span class="combo"><kbd>Backspace</kbd></span><span class="act">Reject the current photo</span></div>
         <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>O</kbd></span><span class="act">Open a folder of photos</span></div>
-        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>S</kbd></span><span class="act">Quick-save an edited copy</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>S</kbd></span><span class="act">Save — overwrite the open file</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>E</kbd></span><span class="act">Save a copy — numbered, in the quick-copy folder</span></div>
+        <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd></span><span class="act">Save as… — pick format, quality and folder</span></div>
         <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>Z</kbd></span><span class="act">Undo</span></div>
         <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>Y</kbd></span><span class="act">Redo</span></div>
         <div class="krow"><span class="combo"><kbd>Ctrl</kbd><kbd>R</kbd></span><span class="act">Show / hide the pixel rulers</span></div>
@@ -504,14 +508,16 @@
       '<p>Live text and watermark overlays, rendered right on the photo.</p>'+
       '<h4>What it does</h4><ul>'+
       '<li><b>Many texts per photo</b> — add, edit and delete each independently.</li>'+
-      '<li>Control <b>font, size, colour, opacity and shadow</b>.</li>'+
-      '<li><b>Snap to any corner</b>, or place it freely.</li></ul>'},
+      '<li>Control <b>font, bold / italic, size, colour, opacity and shadow</b>.</li>'+
+      '<li><b>Snap to any corner</b>, or place it freely.</li>'+
+      '<li><b>Layer it</b> — texts and logos share one stack, so a text can sit above a logo or below it. The … chip beside the selection reorders or deletes it.</li></ul>'},
     logo:{icon:IC+'image.png',title:'Logo',body:
       '<p>Stamp a transparent-PNG logo or signature onto the photo.</p>'+
       '<h4>What it does</h4><ul>'+
       '<li>Drop in any <b>transparent PNG</b>.</li>'+
       '<li>Control <b>size, opacity, tint and flip</b>, and <b>snap to a corner</b>.</li>'+
-      '<li>Keep your logos as <b>presets</b> for one-click reuse.</li></ul>'},
+      '<li>Keep your logos as <b>presets</b> for one-click reuse.</li>'+
+      '<li><b>Layer it</b> — logos and texts share one stack, reordered from the … chip beside the selection.</li></ul>'},
     filters:{icon:IC+'blend.png',title:'Filters',body:
       '<p>A filter is a <b>saved slider preset</b> — one click applies the whole look at once.</p>'+
       '<h4>What it does</h4><ul>'+
