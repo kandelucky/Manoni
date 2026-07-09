@@ -10,9 +10,9 @@ multiplies position AND size by the same `scale`).
 The photo can hold MANY texts: `self.texts` is the list, `self.text_sel` the
 selected index, and the `text_overlay` property exposes the selected element so
 every per-control method stays single-overlay-simple. Text appears ONLY via the
-"Add text" button (nothing is auto-inserted); "Delete text" drops the selected
-one and "Delete all" wipes them. Each gesture rides one undo entry, shared with
-the slider-edit machinery.
+"Add text" button (nothing is auto-inserted); the ✕ chip on a text's selection
+frame drops that one and "Delete all" wipes them. Each gesture rides one undo
+entry, shared with the slider-edit machinery.
 
 Click a text to select it, drag to move it, drag its bottom-right handle to
 resize. The panel also offers a font, colour, opacity, a drop shadow and
@@ -48,8 +48,9 @@ class TextMixin:
         " (tintkit.Foldout — Unity-style collapsible groups), then the footer."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Top row: ‘Add text’ (the ONLY way a text appears — accent primary) and
-        # a trash icon that removes the selected one.
+        # Top row: ‘Add text’ — the ONLY way a text appears (accent primary, full
+        # width). A single text is removed by the ✕ chip on its own selection frame
+        # (see layers._draw_layer_chips); ‘Delete all’ lives in the footer.
         addrow = self._tw(tk.Frame(f), bg="bar")
         addrow.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
         add = tintkit.Button(addrow, self.theme, t("Add text"), role="primary",
@@ -58,12 +59,6 @@ class TextMixin:
         add.pack(side="left", fill="x", expand=True)
         tintkit.HoverTip(add.canvas, self.theme,
                          t("Drop a new text element on the photo"))
-        self._text_del_btn = tintkit.IconButton(
-            addrow, self.theme, "trash-2", w=36, h=36, icon_px=15, bg="bar",
-            command=self._delete_text)
-        self._text_del_btn.pack(side="left", padx=(6, 0))
-        tintkit.HoverTip(self._text_del_btn.canvas, self.theme,
-                         t("Remove the selected text from the photo"))
 
         # The string itself: a small multi-line box (tintkit.TextArea — a themed,
         # focus-accented frame around a real tk.Text). A whole typing session is
@@ -457,8 +452,8 @@ class TextMixin:
         self._refresh_text_buttons()
 
     def _refresh_text_buttons(self):
-        "Disable ‘Delete all’ while there's no text to wipe (the trash icon by"
-        " 'Add text' just no-ops when nothing is selected)."
+        "Disable ‘Delete all’ while there's no text to wipe (a single text is"
+        " removed by the ✕ chip on its selection frame)."
         if hasattr(self, "_text_delall_btn"):
             want = not bool(self.texts)
             if self._text_delall_btn.disabled != want:
@@ -644,8 +639,8 @@ class TextMixin:
         return cxs, cys, tw * scale / 2.0, th * scale / 2.0
 
     def _text_at(self, x, y):
-        "Topmost text under screen (x, y): (index, 'resize'|'move'|'layer_up'|"
-        "'layer_down') or (None, None)."
+        "Topmost text under screen (x, y): (index, 'resize'|'move'|'delete'|"
+        "'layer_up'|'layer_down') or (None, None)."
         # The layer chips + resize handle belong to the selected element only.
         if self.text_sel is not None and 0 <= self.text_sel < len(self.texts):
             chip = self._layer_chip_at(x, y)
@@ -676,6 +671,9 @@ class TextMixin:
         i, hit = self._text_at(event.x, event.y)
         if hit is None:
             return "break"                   # empty click: keep the selection
+        if hit == "delete":
+            self._delete_text()              # ✕ chip on the frame removes it
+            return "break"
         if hit in ("layer_up", "layer_down"):
             self._layer_move("text", 1 if hit == "layer_up" else -1)
             return "break"                   # a chip click reorders, no drag
@@ -729,7 +727,7 @@ class TextMixin:
         if not self._text_active() or self._text_drag is not None:
             return
         _, hit = self._text_at(event.x, event.y)
-        cur = {"resize": "bottom_right_corner", "move": "fleur",
+        cur = {"resize": "bottom_right_corner", "move": "fleur", "delete": "hand2",
                "layer_up": "hand2", "layer_down": "hand2"}.get(hit, "")
         self.preview.configure(cursor=cur)
 

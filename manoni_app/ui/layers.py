@@ -75,18 +75,18 @@ class LayersMixin:
 
     # --- Canvas chrome ---------------------------------------------------------
 
-    def _layer_chip_image(self, direction, on):
+    def _layer_chip_image(self, icon, on):
         """One chip disc as a crisp PhotoImage: a solid theme-surface circle with
-        a thin ring and the lucide chevron PNG dead-centre, drawn 4× oversize
-        with PIL and LANCZOS-downscaled so the edge is smoothly anti-aliased.
-        Cached per size + resolved theme colours — both schemes coexist and the
-        cache keeps the Tk image references alive."""
+        a thin ring and a lucide PNG (by icon name — 'chevron-up' / 'chevron-down'
+        / 'x') dead-centre, drawn 4× oversize with PIL and LANCZOS-downscaled so
+        the edge is smoothly anti-aliased. Cached per icon + size + resolved theme
+        colours — both schemes coexist and the cache keeps the Tk image refs alive."""
         t = self.theme
         s = self._edit_dpi_w(self.LAYER_CHIP)
         fill = t["bar"]
         ring = t["ring"] if on else t["border"]
         col = t["fg"] if on else t["fg_dim"]
-        key = (direction, s, fill, ring, col)
+        key = (icon, s, fill, ring, col)
         cache = getattr(self, "_layer_chip_cache", None)
         if cache is None:
             cache = self._layer_chip_cache = {}
@@ -105,7 +105,7 @@ class LayersMixin:
                    fill=rgb(fill) + (255,), outline=rgb(ring) + (255,), width=ow)
         try:
             ic = Image.open(os.path.join(
-                ICON_DIR, f"chevron-{direction}.png")).convert("RGBA")
+                ICON_DIR, f"{icon}.png")).convert("RGBA")
             ipx = round(d * 0.62)                   # icon box ≈ the mock's 14/24
             ic = ic.resize((ipx, ipx), Image.LANCZOS)
             tint = Image.new("RGBA", ic.size, rgb(col) + (0,))
@@ -117,38 +117,46 @@ class LayersMixin:
         cache[key] = photo
         return photo
 
+    def _place_layer_chip(self, key, icon, on, bx0, by0, s):
+        "Blit one chip disc at (bx0, by0); register its hit box when enabled."
+        img = self._layer_chip_image(icon, on)
+        self.preview.create_image(round(bx0), round(by0), anchor="nw", image=img)
+        if on:
+            self._layer_chips[key] = (bx0, by0, bx0 + s, by0 + s)
+
     def _draw_layer_chips(self, kind, x0, y0, x1, y1):
-        """Two round ∧ / ∨ buttons above the selection frame's top-right corner
-        (flipped to just below it when the frame touches the canvas top). Solid,
-        theme-styled discs (see _layer_chip_image) — the dark<->light switch
-        restyles them with the rest of the app. Hit boxes land in
-        `self._layer_chips`; a direction that can't move draws dimmed and takes
-        no clicks. Nothing shows while the photo holds fewer than two overlays —
-        there is no stack to move through."""
+        """Round buttons above the SELECTED overlay's frame: a ✕ delete chip on
+        the top-LEFT corner (always — a lone overlay is deleted here too) and the
+        ∧ / ∨ reorder chips on the top-RIGHT corner (only with two+ overlays, i.e.
+        a stack to move through). Both flip to just below the frame when it touches
+        the canvas top. Solid, theme-styled discs (see _layer_chip_image) — the
+        dark<->light switch restyles them with the rest of the app. Hit boxes land
+        in `self._layer_chips`; a reorder direction that can't move draws dimmed and
+        takes no clicks."""
         self._layer_chips = {}
         idx = self.text_sel if kind == "text" else self.logo_sel
         pos, total = self._layer_pos(kind, idx)
-        if pos is None or total < 2:
+        if pos is None:
             return
-        c = self.preview
         s = self._edit_dpi_w(self.LAYER_CHIP)
         gap = self._edit_dpi_w(self.LAYER_CHIP_GAP)
         cy0 = y0 - gap - s
         if cy0 < 0:                        # frame at the canvas top → flip inside
             cy0 = y0 + gap
-        cx1 = max(x1, x0 + 2 * s + gap)    # a tiny frame still fits both chips
-        boxes = {"layer_up":   (cx1 - 2 * s - gap, cy0, cx1 - s - gap, cy0 + s),
-                 "layer_down": (cx1 - s, cy0, cx1, cy0 + s)}
-        can = {"layer_up": pos < total - 1, "layer_down": pos > 0}
-        for key, (bx0, by0, bx1, by1) in boxes.items():
-            on = can[key]
-            img = self._layer_chip_image(key.split("_")[1], on)
-            c.create_image(round(bx0), round(by0), anchor="nw", image=img)
-            if on:
-                self._layer_chips[key] = (bx0, by0, bx1, by1)
+        # Delete: top-left, opposite the arrows, for any selection (even one).
+        self._place_layer_chip("delete", "x", True, min(x0, x1 - s), cy0, s)
+        # Reorder: top-right, only when there is a stack to move through. Keep the
+        # pair clear of the delete chip even on a tiny frame (delete + gap + 2 chips).
+        if total >= 2:
+            cx1 = max(x1, x0 + 3 * s + 2 * gap)
+            xs = {"layer_up": cx1 - 2 * s - gap, "layer_down": cx1 - s}
+            can = {"layer_up": pos < total - 1, "layer_down": pos > 0}
+            for key in ("layer_up", "layer_down"):
+                self._place_layer_chip(key, "chevron-" + key.split("_")[1],
+                                       can[key], xs[key], cy0, s)
 
     def _layer_chip_at(self, x, y):
-        "'layer_up' / 'layer_down' when (x, y) sits on an enabled chip, else None."
+        "'delete' / 'layer_up' / 'layer_down' when (x, y) sits on an enabled chip."
         for key, (bx0, by0, bx1, by1) in getattr(self, "_layer_chips", {}).items():
             if bx0 <= x <= bx1 and by0 <= y <= by1:
                 return key

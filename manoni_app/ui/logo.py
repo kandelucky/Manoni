@@ -11,8 +11,8 @@ The photo can hold MANY logos: `self.logos` is the list, `self.logo_sel` the
 selected index, and the `logo_overlay` property exposes the selected element so
 every per-control method stays single-overlay-simple. A logo appears ONLY by
 clicking a preset thumbnail or picking a PNG file (nothing is auto-inserted);
-'Delete logo' drops the selected one and 'Delete all' wipes them. Each gesture
-rides one undo entry, shared with the slider-edit machinery.
+the ✕ chip on a logo's selection frame drops that one and 'Delete all' wipes
+them. Each gesture rides one undo entry, shared with the slider-edit machinery.
 
 Presets come from two folders (see config): the bundled LOGO_PRESET_DIR and the
 user's LOGO_DIR, into which 'Choose PNG…' copies an imported file so it is
@@ -54,12 +54,14 @@ class LogoMixin:
     # --- Panel --------------------------------------------------------------
 
     def _build_logo_section(self, parent):
-        "Logo panel: presets + import, then Appearance + Flip cards, then footer."
+        "Logo panel: import + presets, then Appearance + Flip cards, then footer."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Top row: ‘Choose PNG…’ (import a file — it is copied into the user logo
-        # folder so it is offered again next time) and a trash icon that removes
-        # the selected logo.
+        # ‘Choose PNG…’ imports a file — it is copied into the user logo folder so
+        # it is offered again next time — and heads the ‘Your logos’ group right
+        # below it, because that is exactly where an imported logo lands. (The
+        # trash that removes the selected logo lives in the footer now, paired with
+        # ‘Delete all’.)
         addrow = self._tw(tk.Frame(f), bg="bar")
         addrow.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
         add = tintkit.Button(addrow, self.theme, t("Choose PNG…"), role="primary",
@@ -68,22 +70,23 @@ class LogoMixin:
         add.pack(side="left", fill="x", expand=True)
         tintkit.HoverTip(add.canvas, self.theme,
                          t("Add your own transparent PNG logo"))
-        self._logo_del_btn = tintkit.IconButton(
-            addrow, self.theme, "trash-2", w=36, h=36, icon_px=15, bg="bar",
-            command=self._delete_logo)
-        self._logo_del_btn.pack(side="left", padx=(6, 0))
-        tintkit.HoverTip(self._logo_del_btn.canvas, self.theme,
-                         t("Remove the selected logo from the photo"))
 
-        # Presets live in TWO collapsible, independently scrollable groups: the
-        # shapes bundled with the app and the user's own imported PNGs. Each has a
+        # Presets live in TWO collapsible, independently scrollable groups. The
+        # user's own imported PNGs come FIRST — right under the import button they
+        # belong with — and the shapes bundled with the app follow. Each has a
         # click-to-fold header and a height-capped scroll body (rebuilt on import).
         self._logo_preset_thumbs = []          # PhotoImages kept alive (both groups)
         self._logo_groups = {}                 # key -> {header, body, canvas, inner…}
         self._logo_collapsed = {"preset": False, "user": False}
-        self._build_logo_group(f, "preset", t("Built-in"))
         self._build_logo_group(f, "user", t("Your logos"))
+        self._build_logo_group(f, "preset", t("Built-in"))
         self._refresh_logo_presets()
+
+        # Close the presets list with the same rule that heads each group, so the
+        # button / divider / group rhythm carries down into the cards below (the
+        # last group would otherwise butt straight against the Appearance card).
+        self._tw(tk.Frame(f, height=1), bg="divider").pack(
+            fill="x", padx=EDIT_PAD, pady=(8, 8))
 
         # Appearance card: size / opacity / rotation, then tint + colour swatch.
         # Controls pack WITHOUT EDIT_PAD — the card's own inset aligns them.
@@ -140,7 +143,8 @@ class LogoMixin:
 
         # Footer: Done + Delete all on one row, two equal halves. Done closes the
         # tool (logos stay live); Delete all wipes every logo and dims to disabled
-        # while there's nothing. ('Delete logo' is the trash icon above.)
+        # while there's nothing. (A single logo is deleted by the ✕ chip on its
+        # own selection frame — see layers._draw_layer_chips.)
         foot = self._tw(tk.Frame(f), bg="bar")
         foot.pack(fill="x", padx=EDIT_PAD, pady=(12, 10))
         foot.grid_columnconfigure(0, weight=1, uniform="ft")
@@ -579,7 +583,8 @@ class LogoMixin:
         self._refresh_logo_buttons()
 
     def _refresh_logo_buttons(self):
-        "Disable ‘Delete all’ while there's no logo to wipe."
+        "Disable ‘Delete all’ while there's no logo to wipe (a single logo is"
+        " removed by the ✕ chip on its selection frame)."
         if hasattr(self, "_logo_delall_btn"):
             want = not bool(self.logos)
             if self._logo_delall_btn.disabled != want:
@@ -703,8 +708,8 @@ class LogoMixin:
         return cxs, cys, lw * scale / 2.0, lh * scale / 2.0
 
     def _logo_at(self, x, y):
-        "Topmost logo under screen (x, y): (index, 'resize'|'move'|'layer_up'|"
-        "'layer_down') or (None, None)."
+        "Topmost logo under screen (x, y): (index, 'resize'|'move'|'delete'|"
+        "'layer_up'|'layer_down') or (None, None)."
         # The layer chips + resize handle belong to the selected element only.
         if self.logo_sel is not None and 0 <= self.logo_sel < len(self.logos):
             chip = self._layer_chip_at(x, y)
@@ -733,6 +738,9 @@ class LogoMixin:
         i, hit = self._logo_at(event.x, event.y)
         if hit is None:
             return "break"                     # empty click: keep the selection
+        if hit == "delete":
+            self._delete_logo()                # ✕ chip on the frame removes it
+            return "break"
         if hit in ("layer_up", "layer_down"):
             self._layer_move("logo", 1 if hit == "layer_up" else -1)
             return "break"                     # a chip click reorders, no drag
@@ -786,7 +794,7 @@ class LogoMixin:
         if not self._logo_active() or self._logo_drag is not None:
             return
         _, hit = self._logo_at(event.x, event.y)
-        cur = {"resize": "bottom_right_corner", "move": "fleur",
+        cur = {"resize": "bottom_right_corner", "move": "fleur", "delete": "hand2",
                "layer_up": "hand2", "layer_down": "hand2"}.get(hit, "")
         self.preview.configure(cursor=cur)
 
