@@ -461,13 +461,13 @@ class SettingsMixin:
         win.group(t("Sorting folders"))
         self._set_cull_row(win, t("Keep (keeper) folder"), "keep")
         self._set_cull_row(win, t("Reject folder"), "reject")
-        win.note(t("The keep / reject buttons (and the ↑ / ↓ keys) move "
-                   "the current photo into these folders. Ctrl+Z undoes "
+        win.note(t("The keep / reject buttons (and the Enter / Backspace keys) "
+                   "move the current photo into these folders. Ctrl+Z undoes "
                    "the last move."))
 
         win.group(t("Auto-save while culling"))
         r = win.row(t("Save an edited copy when you move on"),
-                    t("As you ← / → or ↑ / ↓ off an edited photo, silently write "
+                    t("As you step away from or cull an edited photo, silently write "
                       "a copy to the export folder — no prompt. Off shows the "
                       "usual Save / Discard prompt instead."))
         tintkit.Toggle(r, self.theme, value=getattr(self, "autosave_copy", False),

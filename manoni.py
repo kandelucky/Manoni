@@ -317,7 +317,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.restore_photo = True     # …and land on the last photo (else the first)
         self.confirm_reject = False   # ask before the reject (✗) move
         self.warn_unsaved = True      # offer to save when leaving an edited photo
-        self.autosave_copy = False    # cull mode: silently save an edited copy on ←/→ and ↑/↓
+        self.autosave_copy = False    # cull mode: silently save an edited copy on step / cull
         self.confirm_overwrite = True # ask before Ctrl+S overwrites the original in place
         # Where the Save dialog defaults to (Settings → Export → Output):
         #   "subfolder" → a folder named export_subfolder beside each photo,
@@ -496,14 +496,17 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         #   R record an action, Esc cancel it, P replay it, Shift+P over the folder.
         self.root.bind("<KeyPress>", self._on_plain_key)
 
-        # Browse-mode arrow keys (active whether or not the edit panel is open;
-        # leaving an edited photo is guarded by the unsaved-edit prompt). ←/→
-        # step between photos (no wrap: they stop at the folder edges); ↑/↓ sort
-        # the current photo into the keep / reject folders. See nav.py.
-        self.root.bind("<Left>",  lambda e: self._arrow_prev())
-        self.root.bind("<Right>", lambda e: self._arrow_next())
-        self.root.bind("<Up>",    lambda e: self._arrow_keep())
-        self.root.bind("<Down>",  lambda e: self._arrow_reject())
+        # Browse-mode navigation keys (active whether or not the edit panel is
+        # open; leaving an edited photo is guarded by the unsaved-edit prompt).
+        # All four arrows just move between photos — ← / ↑ step back, → / ↓ step
+        # forward — so they follow the vertical thumbnail strip. Culling lives on
+        # Enter (keep) and Backspace (reject) instead. See nav.py.
+        self.root.bind("<Left>",      lambda e: self._arrow_prev())
+        self.root.bind("<Up>",        lambda e: self._arrow_prev())
+        self.root.bind("<Right>",     lambda e: self._arrow_next())
+        self.root.bind("<Down>",      lambda e: self._arrow_next())
+        self.root.bind("<Return>",    lambda e: self._key_keep())
+        self.root.bind("<BackSpace>", lambda e: self._key_reject())
 
         self._setup_drag_drop()      # let the user drop an image onto the window
 

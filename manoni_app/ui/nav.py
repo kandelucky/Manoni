@@ -261,15 +261,16 @@ class NavMixin:
         return choice == "restore"
 
     def _maybe_prompt_save(self):
-        """Before leaving an edited photo (←/→, ↑/↓ cull, folder switch, close):
-        auto-save a copy, ask, or just go. Returns False only to STAY put.
+        """Before leaving an edited photo (arrow step, Enter/Backspace cull,
+        folder switch, close): auto-save a copy, ask, or just go. Returns False
+        only to STAY put.
 
         With 'auto-save copies while culling' on, an edited photo silently drops a
         copy into the export folder and we move on — the fast many-photos flow.
         Otherwise the unsaved-edit prompt offers Save-a-copy / Discard / Cancel
         (unless that warning is switched off, in which case edits are dropped).
-        This runs for BOTH the ← / → step and the ↑ / ↓ cull, so a keep / reject
-        that would move the original off-screen also saves the edit first."""
+        This runs for BOTH the arrow step and the Enter/Backspace cull, so a keep
+        / reject that would move the original off-screen also saves the edit first."""
         if not self._has_unsaved_edits():
             return True
         if getattr(self, "autosave_copy", False):
@@ -334,9 +335,9 @@ class NavMixin:
     def _browse_keys_active(self):
         """True when the arrow shortcuts may act: a photo is shown and no text
         field is focused. Works whether or not the edit panel is open — leaving
-        an edited photo (←/→ and ↑/↓ alike) is guarded by the unsaved-edit
-        prompt. (Modal dialogs grab the keyboard, so an open dialog never
-        reaches these handlers anyway.)"""
+        an edited photo (an arrow step or an Enter/Backspace cull alike) is
+        guarded by the unsaved-edit prompt. (Modal dialogs grab the keyboard, so
+        an open dialog never reaches these handlers anyway.)"""
         if not self.files:
             return False
         focused = self.root.focus_get()
@@ -345,7 +346,7 @@ class NavMixin:
         return True
 
     def _arrow_prev(self):
-        "← previous photo; at the first one, report the folder edge."
+        "← / ↑ previous photo; at the first one, report the folder edge."
         if not self._browse_keys_active():
             return
         if self.index > 0:
@@ -357,7 +358,7 @@ class NavMixin:
             self._folder_edge(-1)
 
     def _arrow_next(self):
-        "→ next photo; at the last one, report the folder edge."
+        "→ / ↓ next photo; at the last one, report the folder edge."
         if not self._browse_keys_active():
             return
         if self.index < len(self.files) - 1:
@@ -549,13 +550,13 @@ class NavMixin:
             return None, False
         return st["action"], st["remember"]
 
-    def _arrow_keep(self):
-        "↑ sort the current photo into the keep (good) folder."
+    def _key_keep(self):
+        "Enter sorts the current photo into the keep (good) folder."
         if self._browse_keys_active():
             self.move_to_folder()
 
-    def _arrow_reject(self):
-        "↓ sort the current photo into the reject (bad) folder."
+    def _key_reject(self):
+        "Backspace sorts the current photo into the reject (bad) folder."
         if self._browse_keys_active():
             self.delete()
 

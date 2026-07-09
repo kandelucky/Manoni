@@ -82,8 +82,8 @@ BORDER    = "#3a3a3a"   # 1px hairline borders, separators, popup edges
 DIVIDER   = "#333333"   # thin divider lines inside panels
 
 # Cull buttons (keep / reject) — near-white with just a hint of colour so they
-# read at a glance without shouting: a greenish-white keep (folder-up) and a
-# reddish-white reject (folder-down). Those near-white tints only read on the
+# read at a glance without shouting: a greenish-white keep (folder-check) and a
+# reddish-white reject (folder-x). Those near-white tints only read on the
 # DARK chrome; the light scheme uses a saturated green/red so the same icons +
 # their info-line text stay legible on a light background (see _cull_tint).
 CULL_KEEP_TINT   = "#cfe9cf"   # dark scheme: greenish white — keep / keeper

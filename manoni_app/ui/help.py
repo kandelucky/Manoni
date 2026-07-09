@@ -187,9 +187,11 @@ class HelpMixin:
         self._help_row(win, "folder-open", "1 · Open a folder",
                        "Pick a folder of photos — thumbnails fill the sidebar.")
         self._help_row(win, "arrow-left-right", "2 · Browse",
-                       "← / → step through the photos; click a thumbnail to jump.")
+                       "The arrow keys step through the photos; click a "
+                       "thumbnail to jump.")
         self._help_row(win, "folder-check", "3 · Cull",
-                       "↑ keeps and ↓ rejects — each photo moves to its folder.")
+                       "Enter keeps and Backspace rejects — each photo moves to "
+                       "its folder.")
         self._help_row(win, "sliders-horizontal", "4 · Edit",
                        "Open the edit panel to adjust light, colour, crop and more.")
         self._help_row(win, "upload", "5 · Save",
@@ -209,9 +211,9 @@ class HelpMixin:
         win.group(t("Sort into two folders"))
         win.note(t("You browse the photos and sort each into a keep folder "
                    "and a discard folder — nothing is deleted, only moved."))
-        self._help_row(win, "folder-up", "Keep",
+        self._help_row(win, "folder-check", "Keep",
                        "Moves the current photo to the keep folder.", tint="keep")
-        self._help_row(win, "folder-down", "Reject",
+        self._help_row(win, "folder-x", "Reject",
                        "Moves the current photo to the discard folder.",
                        tint="reject")
         self._help_row(win, "settings", "Set the folders",
@@ -219,8 +221,8 @@ class HelpMixin:
                        "until then these buttons do nothing.")
 
         win.group(t("Faster with keys"))
-        self._help_key_row(win, "↑  /  ↓",
-                           "Keep / reject the current photo.")
+        self._help_key_row(win, "Enter", "Keep the current photo.")
+        self._help_key_row(win, "Backspace", "Reject the current photo.")
         self._help_key_row(win, "Ctrl + Z", "Undo the last move.")
         win.note(t("At the end of a folder Manoni can loop back to the first "
                    "photo or open the next folder — set this in "
@@ -230,8 +232,10 @@ class HelpMixin:
 
     def _help_tab_keys(self, win):
         win.group(t("Browsing"))
-        self._help_key_row(win, "←  /  →", "Previous / next photo.")
-        self._help_key_row(win, "↑  /  ↓", "Keep / reject the current photo.")
+        self._help_key_row(win, "←  /  ↑", "Previous photo.")
+        self._help_key_row(win, "→  /  ↓", "Next photo.")
+        self._help_key_row(win, "Enter", "Keep the current photo.")
+        self._help_key_row(win, "Backspace", "Reject the current photo.")
         win.note(t("These work whether the edit panel is open or closed; if the "
                    "photo has unsaved edits, Manoni saves a copy or asks first "
                    "(Settings → Culling → Auto-save)."))
@@ -363,8 +367,8 @@ class HelpMixin:
                        "quality and folder. The original is left untouched.")
         self._help_row(win, "folder-check", "Quick copy while culling",
                        "Turn on Settings → Culling → Auto-save, and each time you "
-                       "← / → or ↑ / ↓ off an edited photo Manoni silently drops "
-                       "a copy in the export folder — no clicks. With it off, it "
+                       "step away from or cull an edited photo Manoni silently "
+                       "drops a copy in the export folder — no clicks. With it off, it "
                        "asks (Save a copy / Discard) before you leave.")
 
         win.group(t("Saved, or not?"))

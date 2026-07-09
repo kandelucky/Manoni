@@ -51,7 +51,7 @@ class BrowserMixin:
 
         # RIGHT: navigation arrows, then the position counter. The keep / reject
         # cull buttons sit in the MIDDLE of the arrows (between prev and next) —
-        # tinted green (keep, folder-up) and red (reject, folder-down) so they
+        # tinted green (keep, folder-check) and red (reject, folder-x) so they
         # read at a glance. Each row is (icon, command, tip, color, hint, sub):
         # color None leaves the arrow white. Hovering a button spells out what it
         # does in the bottom info bar (nav._nav_hint); `sub` is an optional
@@ -66,11 +66,11 @@ class BrowserMixin:
              t("Jump to the first photo of this folder"), None),
             ("chevron-left", self._nav_click_prev, t("Previous"), None,
              t("Go to the previous photo  ·  ← key"), None),
-            ("folder-up", self.move_to_folder, t("Keep (keeper)"), "keep",
-             t("Keep — move this photo to the keeper folder  ·  ↑ key"),
+            ("folder-check", self.move_to_folder, t("Keep (keeper)"), "keep",
+             t("Keep — move this photo to the keeper folder  ·  Enter key"),
              lambda: self._cull_hint_line(self.cull_keep)),
-            ("folder-down", self.delete, t("Reject"), "reject",
-             t("Reject — move this photo to the discard folder  ·  ↓ key"),
+            ("folder-x", self.delete, t("Reject"), "reject",
+             t("Reject — move this photo to the discard folder  ·  Backspace key"),
              lambda: self._cull_hint_line(self.cull_reject)),
             ("chevron-right", self._nav_click_next, t("Next"), None,
              t("Go to the next photo  ·  → key"), None),
