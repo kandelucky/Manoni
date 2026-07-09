@@ -8,51 +8,82 @@ AND the font size together. Pure Pillow, no Tk / state.
 """
 
 import math
+import os
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
-# Friendly font name -> candidate Windows font files (first that loads wins).
-# EVERY file here carries BOTH Latin AND Georgian glyphs (verified on Win 10/11),
-# so a Georgian caption renders in any chosen style instead of falling to empty
-# ".notdef" boxes. The old Arial/Times/Consolas set looked fine in Latin but had
-# no Georgian coverage, so Georgian text came out as boxes whatever you picked.
-TEXT_FONT_FILES = {
-    "Sans":       ["segoeui.ttf", "calibri.ttf", "micross.ttf"],   # Segoe UI
-    "Sans Bold":  ["segoeuib.ttf", "calibrib.ttf", "micross.ttf"], # Segoe UI Bold
-    "Light":      ["segoeuil.ttf", "calibril.ttf", "segoeui.ttf"], # Segoe UI Light
-    "Serif":      ["sylfaen.ttf", "micross.ttf"],                  # Sylfaen
-    "Rounded":    ["calibri.ttf", "segoeui.ttf"],                  # Calibri
-    "Script":     ["Gabriola.ttf", "sylfaen.ttf"],                 # Gabriola
+# Friendly font name -> real Windows font files per (bold, italic) style. Georgian
+# coverage was dropped — those faces never actually rendered Georgian here, so this
+# is a curated set of good-looking LATIN faces instead. Every family carries a full
+# Regular / Bold / Italic / Bold-Italic set of true font files, so the Bold + Italic
+# toggles always resolve to a genuine styled face — no synthetic slant or stroke.
+TEXT_FONT_STYLES = {
+    "Sans":    {(0, 0): ["segoeui.ttf"],  (1, 0): ["segoeuib.ttf"],
+                (0, 1): ["segoeuii.ttf"], (1, 1): ["segoeuiz.ttf"]},   # Segoe UI
+    "Serif":   {(0, 0): ["georgia.ttf"],  (1, 0): ["georgiab.ttf"],
+                (0, 1): ["georgiai.ttf"], (1, 1): ["georgiaz.ttf"]},   # Georgia
+    "Elegant": {(0, 0): ["pala.ttf"],     (1, 0): ["palab.ttf"],
+                (0, 1): ["palai.ttf"],    (1, 1): ["palabi.ttf"]},     # Palatino Linotype
+    "Soft":    {(0, 0): ["candara.ttf"],  (1, 0): ["candarab.ttf"],
+                (0, 1): ["candarai.ttf"], (1, 1): ["candaraz.ttf"]},   # Candara
+    "Casual":  {(0, 0): ["trebuc.ttf"],   (1, 0): ["trebucbd.ttf"],
+                (0, 1): ["trebucit.ttf"], (1, 1): ["trebucbi.ttf"]},   # Trebuchet MS
+    "Mono":    {(0, 0): ["consola.ttf"],  (1, 0): ["consolab.ttf"],
+                (0, 1): ["consolai.ttf"], (1, 1): ["consolaz.ttf"]},   # Consolas
 }
-TEXT_FONTS = list(TEXT_FONT_FILES.keys())   # the order shown in the panel
+TEXT_FONTS = list(TEXT_FONT_STYLES.keys())   # the order shown in the panel
 
-# Overlays saved before this set existed may name a dropped family; map those to
-# the nearest survivor so old captions still render (and highlight a chip).
-_FONT_ALIASES = {"Mono": "Sans", "Georgian": "Serif", "Sans Light": "Light"}
+# Overlays saved with an older font set may name a dropped family; map those to the
+# nearest survivor so old captions still render (and highlight a chip). The retired
+# ‘Sans Bold’ becomes plain Sans — its weight now rides on the Bold toggle instead.
+_FONT_ALIASES = {"Sans Bold": "Sans", "Light": "Sans", "Rounded": "Soft",
+                 "Script": "Casual", "Georgian": "Serif", "Sans Light": "Sans"}
 
 
 def resolve_font_family(family):
     "Normalise a stored font name to a current TEXT_FONTS key (handles old saves)."
-    if family in TEXT_FONT_FILES:
+    if family in TEXT_FONT_STYLES:
         return family
     return _FONT_ALIASES.get(family, TEXT_FONTS[0])
 
-_font_cache = {}   # (family, px) -> ImageFont; bounded so a size drag can't grow it
+
+_FONTS_DIR = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+_fonts_index = None
 
 
-def _load_font(family, px):
-    "An ImageFont for `family` at `px`; falls back to a Georgian-capable face."
+def _font_path(name):
+    "Full path to a font file in the Windows fonts dir, matched CASE-INSENSITIVELY"
+    " (e.g. on-disk 'Candara.ttf' vs our 'candara.ttf'). Falls back to the bare"
+    " name so PIL can try its own lookup if the dir listing failed."
+    global _fonts_index
+    if _fonts_index is None:
+        try:
+            _fonts_index = {f.lower(): f for f in os.listdir(_FONTS_DIR)}
+        except OSError:
+            _fonts_index = {}
+    real = _fonts_index.get(name.lower())
+    return os.path.join(_FONTS_DIR, real) if real else name
+
+_font_cache = {}   # (family, px, bold, italic) -> ImageFont; bounded (a size drag grows it)
+
+
+def _load_font(family, px, bold=False, italic=False):
+    "A real ImageFont for `family` at `px` in the given style; regular as a fallback."
     px = max(1, int(round(px)))
     family = resolve_font_family(family)
-    key = (family, px)
+    b, i = int(bool(bold)), int(bool(italic))
+    key = (family, px, b, i)
     font = _font_cache.get(key)
     if font is None:
-        # Final fallbacks are Georgian-capable too, so a missing primary never
-        # drops a Georgian caption back to boxes.
-        for cand in TEXT_FONT_FILES.get(family, []) + ["segoeui.ttf", "micross.ttf"]:
+        styles = TEXT_FONT_STYLES[family]
+        # Prefer the exact style; relax italic, then bold, then plain if a face is
+        # somehow missing. Segoe UI is the final safety net.
+        files = (styles.get((b, i)) or styles.get((b, 0)) or
+                 styles.get((0, i)) or styles[(0, 0)])
+        for cand in files + ["segoeui.ttf"]:
             try:
-                font = ImageFont.truetype(cand, px)
+                font = ImageFont.truetype(_font_path(cand), px)
                 break
             except OSError:
                 continue
@@ -83,7 +114,8 @@ def text_extent(overlay):
     if not text.strip():
         return (0.0, 0.0)
     font = _load_font(overlay.get("font", "Sans"),
-                      max(1.0, overlay.get("size", 48.0)))
+                      max(1.0, overlay.get("size", 48.0)),
+                      overlay.get("bold", False), overlay.get("italic", False))
     d = ImageDraw.Draw(Image.new("L", (1, 1)))
     bbox = d.multiline_textbbox((0, 0), text, font=font,
                                 align=overlay.get("align", "center"))
@@ -111,6 +143,8 @@ def _text_tile(overlay, scale):
         return None
     px = max(1.0, overlay.get("size", 48.0) * scale)
     family = overlay.get("font", "Sans")
+    bold = bool(overlay.get("bold"))
+    italic = bool(overlay.get("italic"))
     align = overlay.get("align", "center")
     color = overlay.get("color", "#ffffff")
     angle = float(overlay.get("angle", 0.0))
@@ -125,14 +159,15 @@ def _text_tile(overlay, scale):
     sh_op = max(0.0, min(1.0, float(overlay.get("shadow_opacity", 0.6))))
     sh_color = overlay.get("shadow_color", "#000000")
     a = int(round(opacity * 255))
-    key = (text, family, round(px), align, color, a, angle and round(angle, 1),
+    key = (text, family, round(px), bold, italic, align, color, a,
+           angle and round(angle, 1),
            shadow and (round(sh_dist, 1), round(sh_angle), round(sh_blur, 1),
                        round(sh_op, 2), sh_color))
     tile = _tile_cache.get(key)
     if tile is not None:
         return tile
 
-    font = _load_font(family, px)
+    font = _load_font(family, px, bold, italic)
     rgb = _hex_to_rgb(color)
     # Draw onto a TIGHT tile with the text's INK box centred in it, so the tile
     # can be rotated about that centre. (Manual centering, not anchor="mm" —

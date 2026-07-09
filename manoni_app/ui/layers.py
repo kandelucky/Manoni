@@ -6,23 +6,26 @@ selected element's frame move it up / down through that combined sequence — so
 a text can sit above a logo and vice versa. Overlays without "z" (saved before
 layers existed) keep the historical order: every text below every logo.
 
-The chips are canvas chrome — two round buttons painted by the text / logo
-overlay painters right above the selection frame. Each is a PIL-rendered disc
-(4× supersampled + LANCZOS, because tk.Canvas ovals are aliased and look
-jagged) with the app's lucide chevron PNG composited dead-centre, blitted as
-one image. Styled from the live tintkit theme (surface / ring / fg tokens), so
-the dark<->light switch and a custom accent restyle them with the rest of the
-app. Hit boxes are remembered per draw and consumed by the tools' hit tests
-(`_text_at` / `_logo_at` return "layer_up" / "layer_down", which the press
-handlers route here). Mixin on the Manoni window — every method uses the
-shared `self`.
+The overlay actions hang off ONE round "…" chip painted above the selected
+element's top-right corner — a PIL-rendered disc (4× supersampled + LANCZOS,
+because tk.Canvas ovals are aliased and look jagged) with the app's lucide
+ellipsis PNG composited dead-centre, blitted as one image. Styled from the live
+tintkit theme (surface / ring / fg tokens), so the dark<->light switch and a
+custom accent restyle it with the rest of the app. Clicking it opens a small
+themed dropdown (reorder ∧ / ∨ when there is a stack + delete) — one tidy
+affordance instead of three chips crowding a small text / logo. The chip's hit
+box is remembered per draw and consumed by the tools' hit tests (`_text_at` /
+`_logo_at` return "menu", which the press handlers route to `_open_layer_menu`).
+Mixin on the Manoni window — every method uses the shared `self`.
 """
 
 import os
+import tkinter as tk
 
 from PIL import Image, ImageDraw, ImageTk
 
 from ..config import ICON_DIR
+from ..i18n import t
 from .. import imaging
 
 
@@ -72,6 +75,10 @@ class LayersMixin:
         self._edits_saved = False
         self._render_preview()
         self._record_edit(before)
+        # Keep the text panel's list in step when a text is reordered from the
+        # on-canvas … chip (the list's own ↑ ↓ already rebuild through here too).
+        if kind == "text" and hasattr(self, "_text_list_host"):
+            self._rebuild_text_list()
 
     # --- Canvas chrome ---------------------------------------------------------
 
@@ -125,14 +132,12 @@ class LayersMixin:
             self._layer_chips[key] = (bx0, by0, bx0 + s, by0 + s)
 
     def _draw_layer_chips(self, kind, x0, y0, x1, y1):
-        """Round buttons above the SELECTED overlay's frame: a ✕ delete chip on
-        the top-LEFT corner (always — a lone overlay is deleted here too) and the
-        ∧ / ∨ reorder chips on the top-RIGHT corner (only with two+ overlays, i.e.
-        a stack to move through). Both flip to just below the frame when it touches
-        the canvas top. Solid, theme-styled discs (see _layer_chip_image) — the
-        dark<->light switch restyles them with the rest of the app. Hit boxes land
-        in `self._layer_chips`; a reorder direction that can't move draws dimmed and
-        takes no clicks."""
+        """One round "…" chip above the SELECTED overlay's top-right corner. It
+        flips to just below the frame when the frame touches the canvas top. Solid,
+        theme-styled disc (see _layer_chip_image) — the dark<->light switch restyles
+        it with the rest of the app. Clicking it opens the dropdown of overlay
+        actions (see _open_layer_menu). Its hit box lands in `self._layer_chips`
+        under 'menu'."""
         self._layer_chips = {}
         idx = self.text_sel if kind == "text" else self.logo_sel
         pos, total = self._layer_pos(kind, idx)
@@ -143,21 +148,87 @@ class LayersMixin:
         cy0 = y0 - gap - s
         if cy0 < 0:                        # frame at the canvas top → flip inside
             cy0 = y0 + gap
-        # Delete: top-left, opposite the arrows, for any selection (even one).
-        self._place_layer_chip("delete", "x", True, min(x0, x1 - s), cy0, s)
-        # Reorder: top-right, only when there is a stack to move through. Keep the
-        # pair clear of the delete chip even on a tiny frame (delete + gap + 2 chips).
-        if total >= 2:
-            cx1 = max(x1, x0 + 3 * s + 2 * gap)
-            xs = {"layer_up": cx1 - 2 * s - gap, "layer_down": cx1 - s}
-            can = {"layer_up": pos < total - 1, "layer_down": pos > 0}
-            for key in ("layer_up", "layer_down"):
-                self._place_layer_chip(key, "chevron-" + key.split("_")[1],
-                                       can[key], xs[key], cy0, s)
+        self._place_layer_chip("menu", "ellipsis", True, max(0, x1 - s), cy0, s)
 
     def _layer_chip_at(self, x, y):
-        "'delete' / 'layer_up' / 'layer_down' when (x, y) sits on an enabled chip."
+        "'menu' when (x, y) sits on the … chip; None otherwise."
         for key, (bx0, by0, bx1, by1) in getattr(self, "_layer_chips", {}).items():
             if bx0 <= x <= bx1 and by0 <= y <= by1:
                 return key
         return None
+
+    # --- The … dropdown --------------------------------------------------------
+
+    def _open_layer_menu(self, kind):
+        """Dropdown off the … chip: reorder up / down (only with a stack to move
+        through, each dimmed when it's already at that end) and delete. Same
+        borderless dark popup the filter … menus use, positioned under the chip."""
+        self._close_layer_menu()
+        box = getattr(self, "_layer_chips", {}).get("menu")
+        if box is None:
+            return
+        idx = self.text_sel if kind == "text" else self.logo_sel
+        pos, total = self._layer_pos(kind, idx)
+        if pos is None:
+            return
+        th = self.theme
+        bar, border, fg = th["bar"], th["border"], th["fg"]
+        fg_dim, hover = th["fg_dim"], th["hover"]
+        pop = tk.Toplevel(self.root)
+        pop.overrideredirect(True)
+        pop.configure(bg=border)              # 1px hairline border via the inset
+        self._layer_popup = pop
+        inner = tk.Frame(pop, bg=bar)
+        inner.pack(padx=1, pady=1)
+
+        def add_row(icon_name, label, command, enabled=True):
+            col = fg if enabled else fg_dim
+            r = tk.Frame(inner, bg=bar, cursor="hand2" if enabled else "arrow")
+            r.pack(fill="x")
+            cells = [r]
+            img = self.icon(icon_name, size=14, color=col)
+            if img is not None:
+                ic = tk.Label(r, image=img, bg=bar)
+                ic.pack(side="left", padx=(10, 8), pady=6)
+                cells.append(ic)
+            lab = tk.Label(r, text=label, bg=bar, fg=col, anchor="w",
+                           font=("Segoe UI", 9))
+            lab.pack(side="left", padx=(0 if img else 12, 18), pady=6)
+            cells.append(lab)
+            if enabled:
+                for w in cells:
+                    w.bind("<Enter>",
+                           lambda e: [c.configure(bg=hover) for c in cells])
+                    w.bind("<Leave>",
+                           lambda e: [c.configure(bg=bar) for c in cells])
+                    w.bind("<Button-1>",
+                           lambda e, c=command: (self._close_layer_menu(), c()))
+
+        if total >= 2:
+            add_row("chevron-up", t("Move up"),
+                    lambda: self._layer_move(kind, 1), pos < total - 1)
+            add_row("chevron-down", t("Move down"),
+                    lambda: self._layer_move(kind, -1), pos > 0)
+            tk.Frame(inner, bg=border, height=1).pack(fill="x")
+        delete = self._delete_text if kind == "text" else self._delete_logo
+        add_row("trash-2", t("Delete"), delete)
+
+        pop.update_idletasks()
+        bx0, by0, bx1, by1 = box
+        rx, ry = self.preview.winfo_rootx(), self.preview.winfo_rooty()
+        x = rx + bx1 - pop.winfo_width()      # right-align the popup under the chip
+        y = ry + by1 + 2
+        pop.geometry(f"+{max(0, int(x))}+{int(y)}")
+        pop.bind("<Escape>", lambda e: self._close_layer_menu())
+        pop.bind("<FocusOut>", lambda e: self._close_layer_menu())
+        pop.focus_force()                     # so clicking elsewhere closes it
+
+    def _close_layer_menu(self):
+        "Tear down the open … dropdown, if any."
+        pop = getattr(self, "_layer_popup", None)
+        if pop is not None:
+            self._layer_popup = None
+            try:
+                pop.destroy()
+            except tk.TclError:
+                pass

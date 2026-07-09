@@ -44,56 +44,94 @@ class TextMixin:
     # --- Panel --------------------------------------------------------------
 
     def _build_text_section(self, parent):
-        "Text panel: the string, then Appearance / Shadow / Alignment foldouts"
-        " (tintkit.Foldout — Unity-style collapsible groups), then the footer."
+        "Text panel, top→bottom: the string box (edits the selected text, or shows a"
+        " dim state-aware placeholder), a ‘New text’ button, the collapsible ‘Texts’"
+        " list, then the selected text's Appearance / Shadow foldouts and a Done"
+        " footer. The list is the spine — the model holds many texts, all visible"
+        " and switchable here instead of only on the canvas."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        # Top row: ‘Add text’ — the ONLY way a text appears (accent primary, full
-        # width). A single text is removed by the ✕ chip on its own selection frame
-        # (see layers._draw_layer_chips); ‘Delete all’ lives in the footer.
-        addrow = self._tw(tk.Frame(f), bg="bar")
-        addrow.pack(fill="x", padx=EDIT_PAD, pady=(12, 8))
-        add = tintkit.Button(addrow, self.theme, t("Add text"), role="primary",
-                             variant="filled", stretch=True, bg="bar",
+        # 1) The string box, at the very top and always visible (tintkit.TextArea — a
+        # themed, focus-accented frame around a real tk.Text; `_text_entry` stays the
+        # tk.Text so every get / insert / state= call is unchanged). It edits the
+        # SELECTED text; with nothing selected — or a still-blank one — it shows a
+        # dim, state-aware placeholder instead (see _refresh_text_placeholder). A
+        # whole typing session is one undo step (snapshot on focus-in, recorded out).
+        self._text_area = tintkit.TextArea(f, self.theme, height=2, bg="bar")
+        self._text_area.pack(fill="x", padx=EDIT_PAD, pady=(12, 10))
+        self._text_entry = self._text_area.text
+        self._text_entry.tag_configure("ph", foreground=self.theme["fg_dim"])
+        self._text_focused = False
+        self._text_ph_on = False
+        self._text_entry.bind("<KeyPress>", self._text_key_press)
+        self._text_entry.bind("<KeyRelease>", self._on_text_typed)
+        self._text_entry.bind("<FocusIn>", lambda e: self._text_focus_in())
+        self._text_entry.bind("<FocusOut>", lambda e: self._text_focus_out())
+
+        # 2) ‘New text’: drop ONE fresh, EMPTY element and focus the box so you type
+        # straight in. An empty text is transient — dropped again on leaving the tool
+        # or picking another (see _prune_empty_texts), so no blank box lingers.
+        add = tintkit.Button(f, self.theme, t("New text"), role="primary",
+                             variant="filled", stretch=True, bg="bar", icon="plus",
                              command=self._add_text)
-        add.pack(side="left", fill="x", expand=True)
+        add.pack(fill="x", padx=EDIT_PAD, pady=(0, 12))
         tintkit.HoverTip(add.canvas, self.theme,
                          t("Drop a new text element on the photo"))
 
-        # The string itself: a small multi-line box (tintkit.TextArea — a themed,
-        # focus-accented frame around a real tk.Text). A whole typing session is
-        # one undo step (snapshot on focus-in, recorded on focus-out). `_text_entry`
-        # stays the tk.Text so every get / insert / state= call is unchanged.
-        self._text_area = tintkit.TextArea(f, self.theme, height=2, bg="bar")
-        self._text_area.pack(fill="x", padx=EDIT_PAD, pady=(0, 8))
-        self._text_entry = self._text_area.text
-        self._text_entry.bind("<KeyRelease>", self._on_text_typed)
-        self._text_entry.bind("<FocusIn>", lambda e: self._edit_snapshot())
-        self._text_entry.bind("<FocusOut>", lambda e: self._edit_commit())
+        # 3) The texts list — a collapsible ‘Texts’ group like every other panel
+        # section (open by default). Its body is rebuilt by _rebuild_text_list: one
+        # plain list row per text (top of the stack first), the selected one marked
+        # with an accent bar + accent label and a per-row ‘…’ menu (reorder /
+        # delete). A dim line stands in when the photo has no text yet.
+        self._text_list_host = self._fold_group(f, "text_list", t("Texts"),
+                                                 pady=(0, 8), default_open=True)
+
+        # 4) The rest — Appearance + Shadow — shown only while a text is selected.
+        # Kept in this one container so packing / unpacking never reorders the footer.
+        self._text_body = self._tw(tk.Frame(f), bg="bar")
+        self._text_body.pack(fill="x")
+        ed = self._text_editor = self._tw(tk.Frame(self._text_body), bg="bar")
 
         # Appearance foldout (open by default — it's the primary group): font,
-        # size / opacity / rotation, then the colour row. Controls pack WITHOUT
-        # EDIT_PAD — the foldout body's own inset aligns them.
-        ap = tintkit.Foldout(f, self.theme, t("Appearance"), open=True,
+        # size / opacity / rotation, then the colour + alignment row. Controls pack
+        # WITHOUT EDIT_PAD — the foldout body's own inset aligns them.
+        ap = tintkit.Foldout(ed, self.theme, t("Appearance"), open=True,
                              bg="bar").pack(fill="x", padx=EDIT_PAD,
                                             pady=(0, 8)).body
         self._text_fonts = list(imaging.TEXT_FONTS)
         self._text_font_dd = tintkit.Dropdown(
             ap, self.theme, [t(fam) for fam in self._text_fonts], selected=0,
-            bg="bar", command=lambda i, _l: self._set_text_font(self._text_fonts[i]))
+            bg="bar", stretch=True,
+            command=lambda i, _l: self._set_text_font(self._text_fonts[i]))
         self._text_font_dd.pack(fill="x", pady=(0, 2))
+        # Bold / italic — two small tiles on ONE row (multi-select: either, both or
+        # neither). Each maps to a REAL styled font file, so the toggle gives a true
+        # bold / italic face, not a synthetic slant. Sits with the font it modifies,
+        # above the numeric sliders. Label on the left, like the ‘Colour’ row.
+        strow = self._tw(tk.Frame(ap), bg="bar")
+        strow.pack(fill="x", pady=(6, 2))
+        self._tw(tk.Label(strow, text=t("Style"), font=("Segoe UI", 8, "bold")),
+                 bg="bar", fg="fg_dim").pack(side="left")
+        self._build_text_style_tiles(strow)
         # Size (% of the photo's short side), opacity and rotation — compact
-        # TitledSliders (the dense strip meant for a stack of minor sliders). The
-        # press/release hooks fold a whole drag into one undo step.
+        # TitledSliders (the dense strip meant for a stack of minor sliders), boxed
+        # in their own bordered block so the three knobs read as one group, set
+        # apart from the font row above and the colour / alignment row below. The
+        # block matches the foldout body's inset (no EDIT_PAD, unlike _panel_card).
+        # The press/release hooks fold a whole drag into one undo step.
+        blk = self._tw(tk.Frame(ap, highlightthickness=1), bg="bar", hl="border")
+        blk.pack(fill="x", pady=(2, 8))
+        sbox = self._tw(tk.Frame(blk), bg="bar")
+        sbox.pack(fill="x", padx=10, pady=(8, 9))
         self.s_text_size = tintkit.TitledSlider(
-            ap, self.theme, t("Size"), value=8, lo=1, hi=50, neutral=8, bg="bar",
+            sbox, self.theme, t("Size"), value=8, lo=1, hi=50, neutral=8, bg="bar",
             compact=True, command=self._set_text_size,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
             on_reset=lambda: self._reset_text_slider("size"))
-        self.s_text_size.pack(fill="x", pady=(3, 0))
+        self.s_text_size.pack(fill="x")
         self.s_text_opacity = tintkit.TitledSlider(
-            ap, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
+            sbox, self.theme, t("Opacity"), value=100, lo=0, hi=100, neutral=100,
             bg="bar", compact=True, command=self._set_text_opacity,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: str(v),
@@ -101,19 +139,21 @@ class TextMixin:
         self.s_text_opacity.pack(fill="x", pady=(3, 0))
         # Rotation: −180…180° (0 = upright). Positive turns clockwise.
         self.s_text_rotation = tintkit.TitledSlider(
-            ap, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
+            sbox, self.theme, t("Rotation"), value=0, lo=-180, hi=180, neutral=0,
             bg="bar", compact=True, command=self._set_text_rotation,
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"), value_fmt=lambda v, n: f"{v}°",
             on_reset=lambda: self._reset_text_slider("rotation"))
         self.s_text_rotation.pack(fill="x", pady=(3, 0))
 
-        # Colour swatch row (the shadow lives in its own foldable group below).
-        cbox = self._tw(tk.Frame(ap), bg="bar")
-        cbox.pack(fill="x", pady=(8, 0))
-        self._tw(tk.Label(cbox, text=t("Colour"), font=("Segoe UI", 8, "bold")),
+        # Colour + alignment on ONE row: the swatch on the left, the three
+        # left / centre / right tiles on the right. (The shadow — with its own
+        # colour — lives in its own foldable group below.)
+        car = self._tw(tk.Frame(ap), bg="bar")
+        car.pack(fill="x", pady=(8, 0))
+        self._tw(tk.Label(car, text=t("Colour"), font=("Segoe UI", 8, "bold")),
                  bg="bar", fg="fg_dim").pack(side="left")
-        self._text_swatch = self._tw(tk.Frame(cbox, bg="#ffffff", cursor="hand2",
+        self._text_swatch = self._tw(tk.Frame(car, bg="#ffffff", cursor="hand2",
                                      width=self._edit_dpi_w(40),
                                      height=self._edit_dpi_w(20),
                                      highlightthickness=1), hl="border")
@@ -121,37 +161,21 @@ class TextMixin:
         self._text_swatch.pack_propagate(False)
         self._text_swatch.bind("<Button-1>", lambda e: self._pick_text_color())
         tintkit.HoverTip(self._text_swatch, self.theme, t("Pick the text colour"))
+        self._build_text_align_tiles(car)      # three compact tiles, packed right
 
         # Shadow foldout — secondary, so it starts collapsed.
-        sh = tintkit.Foldout(f, self.theme, t("Shadow"), bg="bar").pack(
+        sh = tintkit.Foldout(ed, self.theme, t("Shadow"), bg="bar").pack(
             fill="x", padx=EDIT_PAD, pady=(0, 8))
         self._build_text_shadow_body(sh.body)
 
-        # Alignment foldout (collapsed): left / centre / right as three equal
-        # icon tiles — the same boxed-tile look as the logo Flip tiles, the
-        # active one lit accent.
-        lay = tintkit.Foldout(f, self.theme, t("Alignment"), bg="bar").pack(
-            fill="x", padx=EDIT_PAD, pady=(0, 8))
-        self._build_text_align_tiles(lay.body)
-
-        # Footer: Done + Delete all on one row, two equal halves. Done closes the
-        # tool (texts stay live); Delete all wipes every text and dims to disabled
-        # while there's nothing to wipe. ('Delete text' is the trash icon above.)
+        # Footer: a single full-width Done — it closes the tool (texts stay live).
+        # Per-text delete lives on each list row; blank boxes clear themselves.
         foot = self._tw(tk.Frame(f), bg="bar")
         foot.pack(fill="x", padx=EDIT_PAD, pady=(12, 10))
-        foot.grid_columnconfigure(0, weight=1, uniform="ft")
-        foot.grid_columnconfigure(1, weight=1, uniform="ft")
         tintkit.Button(foot, self.theme, t("Done"), role="primary",
                        variant="filled", stretch=True, bg="bar",
-                       command=lambda: self.set_section("basic")).grid(
-                           row=0, column=0, sticky="ew", padx=(0, CHIP_GAP))
-        self._text_delall_btn = tintkit.Button(
-            foot, self.theme, t("Delete all"), role="neutral", variant="outline",
-            icon="x", stretch=True, bg="bar", command=self._delete_all_text)
-        self._text_delall_btn.grid(row=0, column=1, sticky="ew", padx=(CHIP_GAP, 0))
-        tintkit.HoverTip(self._text_delall_btn.canvas, self.theme,
-                         t("Remove every text from the photo"))
-        self._refresh_text_buttons()          # start Delete-all disabled if empty
+                       command=lambda: self.set_section("basic")).pack(fill="x")
+        self._sync_text_controls()            # show the list + right body state
         return f
 
     def _build_text_shadow_body(self, parent):
@@ -231,19 +255,19 @@ class TextMixin:
     ]
 
     def _build_text_align_tiles(self, parent):
-        "Three equal icon-only tiles (left / centre / right), single-select: the"
-        " active one lights accent. Same boxed-tile style + fixed button height as"
-        " the logo Flip tiles; repainted by _paint_text_align_tiles."
+        "Three compact square icon tiles (left / centre / right), single-select:"
+        " the active one lights accent. Packed to the RIGHT of the colour swatch"
+        " (fixed size so they stay a tidy segmented control); repainted by"
+        " _paint_text_align_tiles."
         grid = self._tw(tk.Frame(parent), bg="bar")
-        grid.pack(fill="x")
+        grid.pack(side="right")
         self._text_align_widgets = {}          # key -> (tile, icon-label, icon-name)
-        h = self._edit_dpi_w(36)               # = a tintkit Button's height
+        s = self._edit_dpi_w(26)               # a small square tile
         for i, (icon_name, key, tip) in enumerate(self._TEXT_ALIGN_TILES):
-            grid.columnconfigure(i, weight=1, uniform="al")
             tile = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1,
-                            height=h), bg="chip", hl="border")
-            tile.grid(row=0, column=i, sticky="ew", padx=2)
-            tile.grid_propagate(False)         # hold the height; width fills the cell
+                            width=s, height=s), bg="chip", hl="border")
+            tile.pack(side="left", padx=(0 if i == 0 else 4, 0))
+            tile.pack_propagate(False)         # hold the fixed square size
             ic = tk.Label(tile, bd=0)
             ic.place(relx=0.5, rely=0.5, anchor="center")
             self._text_align_widgets[key] = (tile, ic, icon_name)
@@ -277,6 +301,63 @@ class TextMixin:
         cur = self._text_align_current()
         for key, (tile, ic, icon_name) in self._text_align_widgets.items():
             active = key == cur
+            base = self.theme["accent"] if active else self.theme["chip"]
+            col = self.theme["on_accent"] if active else self.theme["fg"]
+            tile.configure(bg=base)
+            ic.configure(bg=base)
+            img = self.icon(icon_name, 16, col)
+            ic.configure(image=img or "")
+            ic.image = img
+
+    # Bold / italic style tiles — like the alignment tiles, but MULTI-select: each
+    # is an independent on/off, keyed to a boolean on the overlay.
+    _TEXT_STYLE_TILES = [
+        ("bold", "bold", "Bold"),
+        ("italic", "italic", "Italic"),
+    ]
+
+    def _build_text_style_tiles(self, parent):
+        "Two compact icon tiles (bold / italic), MULTI-select: each lights accent"
+        " when its style is on. Packed after the ‘Style’ label; repainted by"
+        " _paint_text_style_tiles."
+        grid = self._tw(tk.Frame(parent), bg="bar")
+        grid.pack(side="left", padx=(8, 0))
+        self._text_style_widgets = {}          # key -> (tile, icon-label, icon-name)
+        sz = self._edit_dpi_w(26)              # match the alignment tiles
+        for i, (icon_name, key, tip) in enumerate(self._TEXT_STYLE_TILES):
+            tile = self._tw(tk.Frame(grid, cursor="hand2", highlightthickness=1,
+                            width=sz, height=sz), bg="chip", hl="border")
+            tile.pack(side="left", padx=(0 if i == 0 else 4, 0))
+            tile.pack_propagate(False)
+            ic = tk.Label(tile, bd=0)
+            ic.place(relx=0.5, rely=0.5, anchor="center")
+            self._text_style_widgets[key] = (tile, ic, icon_name)
+            for w in (tile, ic):
+                w.bind("<Button-1>", lambda e, k=key: self._toggle_text_style(k))
+                w.bind("<Enter>", lambda e, k=key: self._text_style_hover(k, True))
+                w.bind("<Leave>", lambda e, k=key: self._text_style_hover(k, False))
+            tintkit.HoverTip(tile, self.theme, t(tip))
+        self.theme.subscribe(self._paint_text_style_tiles)   # panel built once → safe
+        self._paint_text_style_tiles()
+
+    def _text_style_hover(self, key, on):
+        "Hover a style tile — but leave an active (accent) one alone."
+        ov = self.text_overlay
+        if ov is not None and ov.get(key):
+            return
+        tile, ic, _ = self._text_style_widgets[key]
+        bg = self.theme["hover"] if on else self.theme["chip"]
+        tile.configure(bg=bg)
+        ic.configure(bg=bg)
+
+    def _paint_text_style_tiles(self):
+        "Colour the style tiles: each on-style accent, the rest neutral, its icon"
+        " tinted to match. Re-tints on the dark<->light switch too."
+        if not hasattr(self, "_text_style_widgets"):
+            return
+        ov = self.text_overlay
+        for key, (tile, ic, icon_name) in self._text_style_widgets.items():
+            active = bool(ov is not None and ov.get(key))
             base = self.theme["accent"] if active else self.theme["chip"]
             col = self.theme["on_accent"] if active else self.theme["fg"]
             tile.configure(bg=base)
@@ -321,6 +402,7 @@ class TextMixin:
         return {"text": "", "cx": iw / 2.0, "cy": ih / 2.0,
                 "size": max(12.0, min(iw, ih) * 0.08),
                 "color": "#ffffff", "opacity": 1.0, "font": "Sans",
+                "bold": False, "italic": False,
                 "align": "center", "shadow": True, "angle": 0.0,
                 # A NEW text starts with a gently blurred shadow; overlays saved
                 # before these knobs existed keep the old crisp look (the imaging
@@ -329,13 +411,15 @@ class TextMixin:
                 "shadow_opacity": 0.6, "shadow_color": "#000000"}
 
     def _add_text(self):
-        "‘Add text’: drop ONE new, real, editable text element on the photo and"
-        " select it. This is the ONLY way text appears — nothing is auto-inserted."
+        "‘New text’: drop ONE fresh, EMPTY element and select it, then focus the box"
+        " so you type straight in. A blank text carries no content, so it's excluded"
+        " from _edit_state — this pushes no undo step and doesn't mark the photo"
+        " changed by itself (typing does). Any earlier blank box is cleared first so"
+        " blanks never stack up."
         if self.current_pil is None:
             return
-        before = self._edit_state()
-        ov = self._default_text_overlay()
-        ov["text"] = t("Text")               # a real default you can edit / delete
+        self._prune_empty_texts()            # never leave a second blank box behind
+        ov = self._default_text_overlay()    # text="" — a placeholder box you fill in
         # Cascade each new text down-right of the centre so several don't pile up
         # exactly on top of each other (which leaves only the topmost clickable).
         n = len(self.texts)
@@ -348,13 +432,51 @@ class TextMixin:
         ov["z"] = self._layer_next_z()       # a new text lands on top of everything
         self.texts = self.texts + [ov]       # rebind (never alias an undo snapshot)
         self.text_sel = len(self.texts) - 1
-        self._edits_saved = False
+        # Fresh box: enter type mode and let _sync_text_controls reset the entry.
+        # It wipes whatever was in there (e.g. the text you were just typing into the
+        # PREVIOUS element — the sync guard would otherwise leave it lingering) and
+        # drops in the dim ‘type here’ placeholder, which the first printable key
+        # clears (see _text_key_press). No focus_set-then-clear dance needed.
+        self._text_focused = True            # entering type mode straight away
         self._sync_text_controls()
         self._render_preview()
-        self._record_edit(before)
-        # Focus the box and pre-select the default word so typing replaces it.
+        self._text_entry.focus_set()         # type straight into the empty box
+
+    def _prune_empty_texts(self, keep=None):
+        "Drop transient blank text boxes (added, never typed into). `keep` spares one"
+        " index (the just-selected). Blank texts are excluded from _edit_state, so"
+        " this touches neither undo nor the saved flag — it's pure UI cleanup."
+        texts = getattr(self, "texts", None)
+        if not texts:
+            return
+        keep_ov = (texts[keep] if keep is not None and 0 <= keep < len(texts)
+                   else None)
+        sel_ov = self.text_overlay
+        kept = [ov for ov in texts
+                if (ov.get("text") or "").strip() or ov is keep_ov]
+        if len(kept) == len(texts):
+            return
+        self.texts = kept
+        if sel_ov is not None and any(ov is sel_ov for ov in kept):
+            self.text_sel = next(i for i, ov in enumerate(kept) if ov is sel_ov)
+        else:
+            self.text_sel = (len(kept) - 1) if kept else None
+
+    def _select_text(self, i):
+        "Pick a text from the list: select it, drop any blank box left behind, and"
+        " focus the box so it's ready to edit."
+        if not (0 <= i < len(self.texts)):
+            return
+        self.text_sel = i
+        self._prune_empty_texts(keep=i)      # recomputes text_sel to the picked one
+        self._sync_text_controls()
+        self._render_preview()
         self._text_entry.focus_set()
-        self._text_entry.tag_add("sel", "1.0", "end-1c")
+
+    def _text_reorder(self, delta):
+        "List ↑ / ↓: move the selected text one step through the layer stack."
+        " _layer_move renders, records one undo step and rebuilds this list."
+        self._layer_move("text", delta)
 
     def _delete_text(self):
         "‘Delete text’: remove the SELECTED element from the photo (undoable)."
@@ -369,22 +491,103 @@ class TextMixin:
         self._render_preview()
         self._record_edit(before)
 
-    def _delete_all_text(self):
-        "‘Delete all’: remove every text element from the photo (undoable)."
-        if not self.texts:
+    # --- The texts list -------------------------------------------------------
+
+    def _text_row_label(self, ov):
+        "A one-line preview of a text element for the list (blank → a placeholder)."
+        s = (ov.get("text") or "").strip()
+        if not s:
+            return t("(empty)")
+        s = s.splitlines()[0]
+        return s if len(s) <= 28 else s[:27] + "…"
+
+    def _rebuild_text_list(self):
+        "Repaint the texts list: one clickable row per text, TOP of the stack first,"
+        " the selected row lit accent with reorder ↑ ↓ + delete ✕ controls. A dim"
+        " hint takes its place when the photo has no text yet."
+        host = getattr(self, "_text_list_host", None)
+        if host is None:
             return
-        before = self._edit_state()
-        self.texts = []
-        self.text_sel = None
-        self._text_drag = None
-        self._edits_saved = False
-        self._sync_text_controls()
-        self._render_preview()
-        self._record_edit(before)
+        for w in host.winfo_children():
+            w.destroy()
+        self._text_sel_row_label = None       # the selected row's label, for live typing
+        order = [idx for k, idx in self._layer_seq() if k == "text"]
+        order.reverse()                       # top of the stack first (layers-style)
+        if not order:
+            self._tw(tk.Label(host, text=t("No text yet — add one below."),
+                     anchor="w", font=("Segoe UI", 9)), bg="bar", fg="fg_dim").pack(
+                         fill="x", pady=4)
+        else:
+            for row_pos, idx in enumerate(order):
+                self._add_text_row(host, idx, row_pos, len(order))
+        # The rows are rebuilt after the panel's one-time wheel sweep, so re-arm the
+        # wheel on the fresh rows (see editpanel — filters/actions do the same).
+        if getattr(self, "_sections_wheel_armed", False):
+            for c in host.winfo_children():
+                self._bind_section_wheel(c)
+
+    def _add_text_row(self, parent, idx, row_pos, total):
+        "One plain list row for texts[idx] — NOT a button: a thin accent bar +"
+        " accent label mark the selected one, a hover tint gives feedback, and a"
+        " right-side ‘…’ menu carries reorder / delete. row_pos 0 = top of stack."
+        th = self.theme
+        bar, fg, fg_dim, accent = th["bar"], th["fg"], th["fg_dim"], th["accent"]
+        hover = th["hover"]
+        ov = self.texts[idx]
+        selected = idx == self.text_sel
+        empty = not (ov.get("text") or "").strip()
+        fgc = accent if selected else (fg_dim if empty else fg)
+        row = tk.Frame(parent, bg=bar, cursor="hand2")
+        row.pack(fill="x")
+        # A 3px accent stripe on the left marks the selected row (a bar-coloured
+        # spacer on the rest keeps the labels aligned) — a list cue, not a button.
+        mark = tk.Frame(row, bg=accent if selected else bar,
+                        width=self._edit_dpi_w(3))
+        mark.pack(side="left", fill="y")
+        # The ‘…’ menu is packed (side=right) BEFORE the expanding label so it keeps
+        # its right-edge slot — the same order the filter rows use.
+        self._kebab(row, lambda anchor, i=idx: self._text_row_menu(anchor, i))
+        lab = tk.Label(row, text=self._text_row_label(ov), bg=bar, fg=fgc,
+                       anchor="w", font=("Segoe UI", 9,
+                                         "italic" if empty else "normal"))
+        lab.pack(side="left", fill="x", expand=True, padx=(8, 6), pady=5)
+        if selected:
+            self._text_sel_row_label = lab     # live-updated by _on_text_typed
+        parts = (row, lab)
+
+        def enter(_e=None):
+            for w in parts:
+                w.configure(bg=hover)
+
+        def leave(_e=None):
+            for w in parts:
+                w.configure(bg=bar)
+        for w in parts:
+            w.bind("<Enter>", enter)
+            w.bind("<Leave>", leave)
+            w.bind("<Button-1>", lambda e, i=idx: self._select_text(i))
+
+    def _text_row_menu(self, anchor, i):
+        "The ‘…’ menu on a text row: reorder up / down (only where it can move) +"
+        " delete. Each command first selects that row, then acts on it — so the"
+        " menu works on any row, not just the current selection."
+        pos, total = self._layer_pos("text", i)
+        specs = []
+        if pos is not None and pos < total - 1:
+            specs.append(("chevron-up", t("Move up"),
+                          lambda: (self._select_text(i), self._text_reorder(1))))
+        if pos is not None and pos > 0:
+            specs.append(("chevron-down", t("Move down"),
+                          lambda: (self._select_text(i), self._text_reorder(-1))))
+        if specs:
+            specs.append(("sep",))
+        specs.append(("trash-2", t("Delete text"),
+                      lambda: (self._select_text(i), self._delete_text())))
+        self._popup_menu(anchor, specs)
 
     def _enter_text(self):
         "Open the text tool: fit the photo and show controls. Adds NO text on its"
-        " own — the user clicks ‘Add text’ for that."
+        " own — the user clicks ‘New text’ for that."
         if self.current_pil is None:
             self._render_preview()
             return
@@ -401,7 +604,8 @@ class TextMixin:
 
     def _sync_text_controls(self):
         "Push the selected element's values into the entry, sliders, chips + swatch."
-        " With no selection the entry is disabled and controls show neutral."
+        " The entry edits the selected text; with none selected (or a still-blank"
+        " one) it shows a dim, state-aware placeholder instead."
         if not hasattr(self, "_text_entry"):
             return
         # Keep the selection index valid after deletes / undo.
@@ -409,16 +613,23 @@ class TextMixin:
             self.text_sel = (len(self.texts) - 1) if self.texts else None
         ov = self.text_overlay
         has = ov is not None
-        # The entry edits the SELECTED element; disable it when nothing is selected.
+        # The entry shows the SELECTED element's text (real content wins); when there
+        # is nothing real to show, a placeholder stands in — unless the box is being
+        # actively typed into, which we must not disturb.
+        self._clear_text_placeholder()
         self._text_entry.configure(state="normal")
-        cur = self._text_entry.get("1.0", "end-1c")
         want = ov.get("text", "") if has else ""
-        if cur != want:
-            self._text_entry.delete("1.0", "end")
-            if want:
-                self._text_entry.insert("1.0", want)
-        if not has:
-            self._text_entry.configure(state="disabled")
+        # Leave the box alone ONLY while it's actively being typed into with REAL
+        # content — otherwise (nothing selected, a blank element, or a switch of
+        # element) reset it to the element's text and let the dim placeholder stand
+        # in when that text is blank.
+        if not (self._text_focused and has and want):
+            cur = self._text_entry.get("1.0", "end-1c")
+            if cur != want:
+                self._text_entry.delete("1.0", "end")
+                if want:
+                    self._text_entry.insert("1.0", want)
+            self._refresh_text_placeholder()
         if self.current_pil is not None and has:
             short = max(1, min(self.current_pil.size))
             self.s_text_size.set(round(ov.get("size", 0.0) / short * 100))
@@ -434,6 +645,7 @@ class TextMixin:
                 self._text_font_dd.selected = fidx
                 self._text_font_dd.repaint()
         self._paint_text_align_tiles()         # light the active alignment tile
+        self._paint_text_style_tiles()         # light the on bold / italic tiles
         if hasattr(self, "_text_shadow_tgl"):
             want = bool(has and ov.get("shadow"))
             if self._text_shadow_tgl.value != want:
@@ -449,16 +661,14 @@ class TextMixin:
                 round(ov.get("shadow_opacity", 0.6) * 100) if has else 60)
             self._text_sh_swatch.configure(
                 bg=ov.get("shadow_color", "#000000") if has else "#000000")
-        self._refresh_text_buttons()
-
-    def _refresh_text_buttons(self):
-        "Disable ‘Delete all’ while there's no text to wipe (a single text is"
-        " removed by the ✕ chip on its selection frame)."
-        if hasattr(self, "_text_delall_btn"):
-            want = not bool(self.texts)
-            if self._text_delall_btn.disabled != want:
-                self._text_delall_btn.disabled = want
-                self._text_delall_btn.repaint()
+        # Rebuild the list, and show the editor only while a text is selected (the
+        # ‘Texts’ group itself carries the "no text yet" line when empty).
+        self._rebuild_text_list()
+        if hasattr(self, "_text_editor"):
+            if has:
+                self._text_editor.pack(fill="x")
+            else:
+                self._text_editor.pack_forget()
 
     def _clear_text_for_geometry(self):
         "Drop ALL text when the image geometry changes (rotate / crop / resize /"
@@ -474,13 +684,83 @@ class TextMixin:
 
     # --- Panel controls -----------------------------------------------------
 
+    def _text_focus_in(self):
+        "Entry focused: snapshot for the typing undo. The dim placeholder is LEFT in"
+        " place as a ghost hint — the first printable key clears it (_text_key_press),"
+        " so a freshly-added text shows ‘type here’ even with the box already focused."
+        self._text_focused = True
+        if self.text_overlay is not None:
+            self._edit_snapshot()
+
+    def _text_key_press(self, event):
+        "First real keystroke over the dim placeholder clears it before the key acts"
+        " on it — instance bindings fire ahead of the Text class insert. Printable"
+        " chars then type into an empty box; Backspace/Delete/Return just drop the"
+        " ghost (an empty box has nothing to erase)."
+        if not getattr(self, "_text_ph_on", False):
+            return
+        if event.char and event.char.isprintable():
+            self._clear_text_placeholder()
+        elif event.keysym in ("BackSpace", "Delete", "Return"):
+            self._clear_text_placeholder()
+            return "break"
+
+    def _text_focus_out(self):
+        "Entry blurred: record the typing undo step, then restore the placeholder"
+        " if the (still-selected) text is blank."
+        self._text_focused = False
+        if self.text_overlay is not None:
+            self._edit_commit()
+        self._refresh_text_placeholder()
+
+    def _clear_text_placeholder(self):
+        "Remove the dim placeholder text, if it's currently showing."
+        if getattr(self, "_text_ph_on", False):
+            self._text_entry.configure(state="normal")
+            self._text_entry.delete("1.0", "end")
+            self._text_ph_on = False
+
+    def _refresh_text_placeholder(self):
+        "Show a dim, state-aware placeholder whenever there's no real content: a hint"
+        " to add/pick when no text is selected, or ‘type your text’ when the selected"
+        " one is still blank — shown even while the box is FOCUSED so a freshly-added"
+        " text reads ‘type here’ (the first printable key clears it, _text_key_press)."
+        " It's cosmetic only — never read back as content (the ‘ph’ flag guards"
+        " _on_text_typed)."
+        if not hasattr(self, "_text_entry"):
+            return
+        ov = self.text_overlay
+        content = (ov.get("text") if ov is not None else "") or ""
+        if content:
+            return                               # real content — no placeholder
+        msg = t("Type your text…") if ov is not None else t("Pick or add a text")
+        e = self._text_entry
+        e.configure(state="normal")
+        e.tag_configure("ph", foreground=self.theme["fg_dim"])   # follow dark<->light
+        e.delete("1.0", "end")
+        e.insert("1.0", msg, "ph")
+        self._text_ph_on = True
+        e.mark_set("insert", "1.0")              # cursor at the start, over the hint
+        if ov is None:                           # nothing to edit → read-only hint
+            e.configure(state="disabled")
+
     def _on_text_typed(self, _event=None):
         "Live: copy the entry's content into the selected element (no undo step)."
-        if self.text_overlay is None:           # nothing selected → entry is inert
-            return
-        self.text_overlay = {**self.text_overlay,
-                             "text": self._text_entry.get("1.0", "end-1c")}
+        if self.text_overlay is None or getattr(self, "_text_ph_on", False):
+            return                               # nothing selected / placeholder showing
+        txt = self._text_entry.get("1.0", "end-1c")
+        self.text_overlay = {**self.text_overlay, "text": txt}
         self._edits_saved = False
+        # Update the selected list row's label live (without a full list rebuild,
+        # which would fight the entry for focus and flicker the rows).
+        lab = getattr(self, "_text_sel_row_label", None)
+        if lab is not None:
+            try:
+                lab.configure(text=self._text_row_label(self.text_overlay),
+                              font=("Segoe UI", 9,
+                                    "italic" if not txt.strip() else "normal"))
+            except tk.TclError:
+                self._text_sel_row_label = None
         self._render_preview()
 
     def _set_text_size(self, v):
@@ -547,6 +827,18 @@ class TextMixin:
             return
         before = self._edit_state()
         self.text_overlay = {**self.text_overlay, "align": key}
+        self._sync_text_controls()
+        self._edits_saved = False
+        self._render_preview()
+        self._record_edit(before)
+
+    def _toggle_text_style(self, key):
+        "Flip bold / italic ('bold' | 'italic') on the selected text (undoable)."
+        if self.text_overlay is None:
+            return
+        before = self._edit_state()
+        self.text_overlay = {**self.text_overlay,
+                             key: not self.text_overlay.get(key)}
         self._sync_text_controls()
         self._edits_saved = False
         self._render_preview()
@@ -639,8 +931,8 @@ class TextMixin:
         return cxs, cys, tw * scale / 2.0, th * scale / 2.0
 
     def _text_at(self, x, y):
-        "Topmost text under screen (x, y): (index, 'resize'|'move'|'delete'|"
-        "'layer_up'|'layer_down') or (None, None)."
+        "Topmost text under screen (x, y): (index, 'resize'|'move'|'menu') or"
+        " (None, None)."
         # The layer chips + resize handle belong to the selected element only.
         if self.text_sel is not None and 0 <= self.text_sel < len(self.texts):
             chip = self._layer_chip_at(x, y)
@@ -671,12 +963,9 @@ class TextMixin:
         i, hit = self._text_at(event.x, event.y)
         if hit is None:
             return "break"                   # empty click: keep the selection
-        if hit == "delete":
-            self._delete_text()              # ✕ chip on the frame removes it
+        if hit == "menu":
+            self._open_layer_menu("text")    # … chip → the actions dropdown
             return "break"
-        if hit in ("layer_up", "layer_down"):
-            self._layer_move("text", 1 if hit == "layer_up" else -1)
-            return "break"                   # a chip click reorders, no drag
         if i != self.text_sel:
             self.text_sel = i                # clicking a box selects it
             self._sync_text_controls()
@@ -727,8 +1016,8 @@ class TextMixin:
         if not self._text_active() or self._text_drag is not None:
             return
         _, hit = self._text_at(event.x, event.y)
-        cur = {"resize": "bottom_right_corner", "move": "fleur", "delete": "hand2",
-               "layer_up": "hand2", "layer_down": "hand2"}.get(hit, "")
+        cur = {"resize": "bottom_right_corner", "move": "fleur",
+               "menu": "hand2"}.get(hit, "")
         self.preview.configure(cursor=cur)
 
     # --- Overlay ------------------------------------------------------------

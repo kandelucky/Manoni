@@ -708,8 +708,8 @@ class LogoMixin:
         return cxs, cys, lw * scale / 2.0, lh * scale / 2.0
 
     def _logo_at(self, x, y):
-        "Topmost logo under screen (x, y): (index, 'resize'|'move'|'delete'|"
-        "'layer_up'|'layer_down') or (None, None)."
+        "Topmost logo under screen (x, y): (index, 'resize'|'move'|'menu') or"
+        " (None, None)."
         # The layer chips + resize handle belong to the selected element only.
         if self.logo_sel is not None and 0 <= self.logo_sel < len(self.logos):
             chip = self._layer_chip_at(x, y)
@@ -738,12 +738,9 @@ class LogoMixin:
         i, hit = self._logo_at(event.x, event.y)
         if hit is None:
             return "break"                     # empty click: keep the selection
-        if hit == "delete":
-            self._delete_logo()                # ✕ chip on the frame removes it
+        if hit == "menu":
+            self._open_layer_menu("logo")      # … chip → the actions dropdown
             return "break"
-        if hit in ("layer_up", "layer_down"):
-            self._layer_move("logo", 1 if hit == "layer_up" else -1)
-            return "break"                     # a chip click reorders, no drag
         if i != self.logo_sel:
             self.logo_sel = i                  # clicking a box selects it
             self._sync_logo_controls()
@@ -794,8 +791,8 @@ class LogoMixin:
         if not self._logo_active() or self._logo_drag is not None:
             return
         _, hit = self._logo_at(event.x, event.y)
-        cur = {"resize": "bottom_right_corner", "move": "fleur", "delete": "hand2",
-               "layer_up": "hand2", "layer_down": "hand2"}.get(hit, "")
+        cur = {"resize": "bottom_right_corner", "move": "fleur",
+               "menu": "hand2"}.get(hit, "")
         self.preview.configure(cursor=cur)
 
     # --- Overlay ------------------------------------------------------------

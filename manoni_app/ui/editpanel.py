@@ -183,15 +183,16 @@ class EditPanelMixin:
     # any label living inside a fold body.
     FOLD_BODY_W = EDIT_PANEL_W - 2 * EDIT_PAD - 22
 
-    def _fold_group(self, parent, key, title, pady=(0, 8)):
+    def _fold_group(self, parent, key, title, pady=(0, 8), default_open=False):
         "One collapsible control group (tintkit.Foldout) — the shared visual for"
         " every sectioned tool panel (Basic / Effects / Color mixer / Text). Its"
-        " open state loads from and persists to basic_folds under `key`. Returns"
-        " the body frame for the caller to fill (pack children with pad=0 — the"
-        " body's own inset aligns them)."
+        " open state loads from and persists to basic_folds under `key`"
+        " (`default_open` is the first-run state before the user has toggled it)."
+        " Returns the body frame for the caller to fill (pack children with pad=0 —"
+        " the body's own inset aligns them)."
         fo = tintkit.Foldout(
             parent, self.theme, title, bg="bar",
-            open=self.basic_folds.get(key, False),
+            open=self.basic_folds.get(key, default_open),
             on_toggle=lambda o, k=key: self._on_fold(k, o))
         fo.pack(fill="x", padx=EDIT_PAD, pady=pady)
         return fo.body
@@ -595,6 +596,9 @@ class EditPanelMixin:
             return
         if self.active_section == "focus" and key != "focus":
             self._prompt_keep_focus_if_untouched()  # untouched auto-blur → ask to keep
+        if self.active_section == "text" and key != "text":
+            self._prune_empty_texts()    # drop any blank text box left un-typed
+            self._sync_text_controls()
         self._set_hand_tool(False)   # an edit tool claims the left button — release the hand
         if key in ("crop", "heal", "focus", "perspective", "text", "logo"):
             self._set_compare(False)  # these warp/drag the canvas — compare can't intercept it
