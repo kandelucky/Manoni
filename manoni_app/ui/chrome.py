@@ -602,9 +602,13 @@ class ChromeMixin:
         tk.Label(wrap, text=t("Add your language"), bg=bg, fg=fg,
                  font=("Segoe UI", 13, "bold")).pack(anchor="w")
         steps = t("Manoni can speak any language. Here's how:\n"
-                  "1. Generate a template file — it lists every English text.\n"
-                  "2. Open it in any text editor and fill in your translations.\n"
-                  "3. Import the finished file — your language appears in the menu.")
+                  "1. Generate a template file — every text in the app, with your\n"
+                  "    current language already filled in where it has one.\n"
+                  "2. Open it in any text editor and translate the lines still in English.\n"
+                  "3. Import the finished file — your language appears in the menu.\n"
+                  "\n"
+                  "Updating a pack for a newer Manoni works the same way: generate,\n"
+                  "translate what is new, import.")
         tk.Label(wrap, text=steps, bg=bg, fg=fg_dim, justify="left", anchor="w",
                  font=("Segoe UI", 9), wraplength=self._edit_dpi_w(380)) \
             .pack(anchor="w", pady=(8, 16))
