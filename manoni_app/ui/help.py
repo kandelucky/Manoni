@@ -228,7 +228,7 @@ class HelpMixin:
         self._help_key_row(win, "Ctrl + Z", "Undo the last move.")
         win.note(t("At the end of a folder Manoni can loop back to the first "
                    "photo or open the next folder — set this in "
-                   "Settings → Culling."))
+                   "Settings → Culling."), kind="info")
 
     # --- Keyboard tab -------------------------------------------------------
 
@@ -296,7 +296,7 @@ class HelpMixin:
         self._help_row(win, "type", "Text & Watermark",
                        "Add live text overlays — many per photo, snap to a corner.")
         win.note(t("Ctrl+Z steps back through your edits; the before/after "
-                   "button compares the result with the original."))
+                   "button compares the result with the original."), kind="tip")
 
     # --- Filters tab --------------------------------------------------------
 
@@ -315,7 +315,7 @@ class HelpMixin:
                        "to apply the same look to the next photo, no saving "
                        "needed.")
         win.note(t("“Last” lasts only for this session; its … menu can promote "
-                   "it into a permanent named filter, or clear it."))
+                   "it into a permanent named filter, or clear it."), kind="warn")
 
         win.group(t("Make your own"))
         self._help_row(win, "star", "Save a filter",
@@ -330,7 +330,7 @@ class HelpMixin:
                        "small .mnf file — send it to a friend, and they load it "
                        "from the Import button pinned atop the Filters panel.")
         win.note(t("Sharing works per group, not per single filter: export a "
-                   "group, import the file someone sends you."))
+                   "group, import the file someone sends you."), kind="info")
 
     # --- Actions tab --------------------------------------------------------
 
@@ -344,7 +344,7 @@ class HelpMixin:
                        "Play an action on the open photo, or batch it over a "
                        "whole folder.")
         win.note(t("Heal strokes are not recorded; everything else — light, "
-                   "colour, crop, text, filters — is."))
+                   "colour, crop, text, filters — is."), kind="warn")
 
         win.group(t("Keyboard"))
         self._help_key_row(win, "R", "Start / stop recording an action.")
@@ -403,4 +403,4 @@ class HelpMixin:
                        "The same camera info, date, GPS and colour profile can "
                        "also be kept or removed when you save a copy.")
         win.note(t("The overwrite confirmation and every export default live in "
-                   "Settings → Export."))
+                   "Settings → Export."), kind="info")

@@ -422,7 +422,7 @@ class SettingsMixin:
         win.note(t("Ctrl+E and the copy button write your edits here as a new, "
                    "numbered file — the original is never touched, and an earlier "
                    "copy is never replaced. Left unset, the first copy asks for "
-                   "the folder."))
+                   "the folder."), kind="info")
 
         win.group(t("Overwrite (Ctrl+S)"))
         r = win.row(t("Ask before overwriting the original"),
