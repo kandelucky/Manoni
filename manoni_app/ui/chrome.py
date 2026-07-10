@@ -625,15 +625,23 @@ class ChromeMixin:
         self._place_filter_dialog(dlg)
 
     def _lang_export_template(self):
-        "Write a .mnl template: every English source string, ready to translate."
+        "Write a .mnl template: every source string, ready to translate."
+        # Pre-fill with the language on screen. In English that is a blank slate;
+        # in a translated UI it hands back the existing wording with only the new
+        # strings left in English — so updating a pack for a newer Manoni means
+        # translating the handful that changed, not all of them again.
+        catalog = i18n.catalog(i18n.get_language())
         payload = {
             "manoni_language": 1,
             "_readme": ("Fill in 'code' (e.g. fr) and 'name' (e.g. Francais), "
                         "then translate the right-hand value of each line under "
-                        "'strings'. Leave the left-hand key exactly as it is."),
+                        "'strings'. Leave the left-hand key exactly as it is. "
+                        "Lines already translated carry the language you are "
+                        "using now; the ones still in English are what is left "
+                        "to do."),
             "code": "",
             "name": "",
-            "strings": {s: s for s in i18n.source_strings()},
+            "strings": {s: catalog.get(s, s) for s in i18n.source_strings()},
         }
         path = tkfd.asksaveasfilename(
             parent=self.root, title=t("Save template"),

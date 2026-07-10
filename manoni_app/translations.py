@@ -10,7 +10,7 @@ edited without touching code. Importing this module loads and registers the bund
 pack, then any user packs found in config.LANG_DIR (added via the "Add your
 language" studio — see chrome.py).
 
-Georgian is NOT bundled: it ships as a downloadable languages/manoni-ka.mnl pack
+Georgian is NOT bundled: it ships as a downloadable language-packs/manoni-ka.mnl
 that a user installs through the studio, which is also the shape every community
 translation takes.
 
@@ -39,8 +39,19 @@ def _load_bundled(code):
         i18n.load_pack(json.load(f))
 
 
+def _load_source_list():
+    "Install langs/_source.json: every translatable string, read out of the code by"
+    " tools/check_langs.py. Absent (a stale build), i18n falls back to the packs."
+    try:
+        with open(os.path.join(_LANGS_DIR, "_source.json"), encoding="utf-8") as f:
+            i18n.set_source_strings(json.load(f)["strings"])
+    except Exception:
+        pass
+
+
 # Bundled Polish first, then any user-imported packs on disk (so a language added
 # via the studio survives the relaunch a language switch triggers). English is the
 # default and needs no pack.
 _load_bundled("pl")
 i18n.load_user_packs(LANG_DIR)
+_load_source_list()

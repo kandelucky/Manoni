@@ -35,6 +35,7 @@ LANGUAGES = [
 _lang = DEFAULT_LANG
 _catalogs = {}          # lang code -> {english_source: translation}
 _names = dict(LANGUAGES)  # lang code -> native name (built-ins + user packs)
+_source = None          # the master string list, when langs/_source.json is loaded
 
 
 def register(lang, catalog, name=None):
@@ -67,8 +68,23 @@ def catalog(lang):
     return dict(_catalogs.get(lang, {}))
 
 
+def set_source_strings(strings):
+    "Install the master list of translatable strings (langs/_source.json)."
+    global _source
+    _source = list(strings)
+
+
 def source_strings():
-    "Every English source string known to any pack — the master translatable set."
+    """Every English source string a translator should see — the master set.
+
+    Read from the master list when one is installed, because it is generated from
+    the code itself (tools/check_langs.py) and therefore lists a string the moment
+    it is written. Without it, all we can offer is the union of the packs already
+    installed — which cannot know about a string nobody has translated yet, and so
+    silently hides it from the "Add your language" template.
+    """
+    if _source is not None:
+        return list(_source)
     keys = set()
     for cat in _catalogs.values():
         keys.update(cat.keys())
