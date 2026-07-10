@@ -26,6 +26,7 @@ from tkinter import colorchooser
 
 import tintkit
 
+from .. import win_keyboard
 from ..config import ACCENT, FG_DIM, ON_ACCENT, EDIT_PAD, CHIP_GAP
 from ..i18n import t
 from .. import imaging
@@ -697,6 +698,15 @@ class TextMixin:
         " on it — instance bindings fire ahead of the Text class insert. Printable"
         " chars then type into an empty box; Backspace/Delete/Return just drop the"
         " ghost (an empty box has nothing to erase)."
+        # This <KeyPress> bind replaces the recovery binding win_keyboard installs
+        # on the Text (Tk overwrites a same-sequence instance bind), so redo the
+        # Georgian '?'-to-real-char recovery here — after clearing the placeholder.
+        recovered = win_keyboard.recover_char(event)
+        if recovered is not None:
+            if getattr(self, "_text_ph_on", False):
+                self._clear_text_placeholder()
+            self._text_entry.insert("insert", recovered)
+            return "break"
         if not getattr(self, "_text_ph_on", False):
             return
         if event.char and event.char.isprintable():

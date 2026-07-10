@@ -18,6 +18,11 @@ import json
 import threading
 import tkinter as tk
 
+# Imported for its side effect: monkey-patches tk.Entry/tk.Text so a Georgian
+# keyboard types real letters (not "?") and Ctrl+C/V/X/A work on the Georgian
+# layout. Must run before any widget is built, so it stays with the top imports.
+from manoni_app import win_keyboard  # noqa: F401
+
 import tintkit  # DPI + theme; declares DPI awareness at import, before tk.Tk()
 
 from manoni_app.config import (BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR,
@@ -149,17 +154,17 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
 
         self.root = tk.Tk()
         # Make Tcl/Tk talk Unicode. Tk 8.6 defaults its string bridge to the
-        # Windows ANSI code page ("language for non-Unicode programs") — e.g.
-        # cp1250 here — which has no Georgian, so a Georgian keystroke arrives
-        # in the text box as "?" and typed captions are lost. Forcing UTF-8
-        # fixes input AND display for every script (Tk 9 already defaults to it).
+        # Windows ANSI code page (cp1250 here), which has no Georgian, so strings
+        # Python hands to Tk (labels, .insert/.get) would round-trip to "?".
+        # This fixes THAT path only; live keyboard typing is a separate WM_CHAR
+        # decode fixed in win_keyboard.py (imported at the top). Both are needed.
         try:
             self.root.tk.call("encoding", "system", "utf-8")
         except tk.TclError:
             pass
-        # (A WH_KEYBOARD hook to fix *typed* Georgian was tried and dropped —
-        # it crashed live typing, and a crash is worse than the "?" it fixed.
-        # The encoding call above is the whole fix; don't re-add a keyboard hook.)
+        # (A global WH_KEYBOARD hook for typed Georgian was tried and dropped —
+        # it crashed live typing. win_keyboard.py uses the safe per-widget
+        # <KeyPress>+ToUnicodeEx recovery instead; don't re-add a global hook.)
         # Give TintKit Manoni's own palette + icon set BEFORE the Theme is built,
         # so any panel migrated onto TintKit widgets matches the rest of the app
         # exactly (same colours) and finds the same Lucide icons.
