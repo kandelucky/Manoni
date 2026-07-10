@@ -290,7 +290,9 @@ class HelpMixin:
         self._help_row(win, "frame", "Perspective",
                        "Correct keystoning and straighten converging lines.")
         self._help_row(win, "bandage", "Heal & Clone",
-                       "Paint over blemishes; Alt+click sets a clone source.")
+                       "Remove a blemish or a stray object — paint over it and "
+                       "it's patched from nearby texture; Alt+click sets a clone "
+                       "source.")
         self._help_row(win, "circle-dot", "Focus blur",
                        "Blur the surroundings and keep the subject sharp.")
         self._help_row(win, "type", "Text & Watermark",
@@ -392,7 +394,11 @@ class HelpMixin:
                        "to each photo, or to one fixed folder — set it in "
                        "Settings → Export.")
 
-        win.group(t("Metadata"))
+        win.group(t("Strip GPS & camera data"))
+        win.note(t("Every photo carries hidden data — where it was taken (GPS), "
+                   "the camera and lens, the date. Before you post one publicly "
+                   "you can remove all of it; the picture stays pixel-for-pixel "
+                   "the same."))
         self._help_row(win, "info", "View or delete",
                        "The info button on the bottom bar — the strip showing "
                        "which file you're editing right now — opens the photo's "
