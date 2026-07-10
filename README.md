@@ -111,8 +111,8 @@ below it. The `…` chip beside the selected overlay moves it up or down through
 others, or deletes it.
 
 Undo / redo · a live histogram · before / after compare (a split line, or a
-press-and-hold peek) · dark / light theme with an accent colour · an English,
-Georgian & Polish UI.
+press-and-hold peek) · dark / light theme with an accent colour · an English &
+Polish UI, with Georgian one download away.
 
 ---
 
@@ -193,13 +193,15 @@ the top bar opens a tabbed guide covering all of the above.
 
 ## Any language
 
-The interface ships in **English, Georgian and Polish**, and adding your own is easy —
-no code, no rebuild. **Settings → General → Add your language** generates a
-template listing every phrase in the app; translate the ones you want, then
-import it back. Anything you leave untranslated simply stays English, so even a
-half-finished pack works the moment you load it. Share your pack — or grab
-someone else's — on the
-[Community board](https://github.com/kandelucky/Manoni/discussions/categories/language-packs).
+The interface ships in **English and Polish**. Every other language is a small
+`.mnl` pack you download and double-click — **Georgian** is the first one, up on
+the [Community board](https://github.com/kandelucky/Manoni/discussions/categories/language-packs).
+
+Building your own is easy — no code, no rebuild. **Settings → General → Add your
+language** generates a template listing every phrase in the app; translate the
+ones you want, then import it back. Anything you leave untranslated simply stays
+English, so even a half-finished pack works the moment you load it. Share your
+pack — or grab someone else's — on the same board.
 
 ---
 

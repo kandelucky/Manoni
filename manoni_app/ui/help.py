@@ -200,10 +200,11 @@ class HelpMixin:
 
         win.group(t("Your language"))
         self._help_row(win, "settings", "Add your language",
-                       "The app comes in English and Georgian. Settings → "
-                       "General → Add your language makes a template you "
-                       "translate and import — no code needed, and anything left "
-                       "untranslated simply stays English.")
+                       "The app comes in English and Polish; other languages are "
+                       "packs you download and open. Settings → General → Add "
+                       "your language makes a template you translate and import "
+                       "— no code needed, and anything left untranslated simply "
+                       "stays English.")
 
     # --- Culling tab --------------------------------------------------------
 

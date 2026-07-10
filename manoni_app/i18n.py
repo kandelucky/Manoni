@@ -29,7 +29,6 @@ DEFAULT_LANG = "en"
 # User-imported packs are added on top of these at runtime (see load_user_packs).
 LANGUAGES = [
     ("en", "English"),
-    ("ka", "ქართული"),
     ("pl", "Polski"),
 ]
 
