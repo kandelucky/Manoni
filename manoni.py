@@ -18,11 +18,9 @@ import json
 import threading
 import tkinter as tk
 
-# Imported for its side effect: monkey-patches tk.Entry/tk.Text so a Georgian
-# keyboard types real letters (not "?") and Ctrl+C/V/X/A work on the Georgian
-# layout. Must run before any widget is built, so it stays with the top imports.
-from manoni_app import win_keyboard  # noqa: F401
-
+# tintkit, imported before any widget, monkey-patches tk.Entry/tk.Text so a
+# Georgian keyboard types real letters (not "?") and Ctrl+C/V/X/A work on the
+# Georgian layout — alongside its DPI-awareness setup below.
 import tintkit  # DPI + theme; declares DPI awareness at import, before tk.Tk()
 
 from manoni_app.config import (BG, ACCENT, THUMB_W, STATE_FILE, ROOT_DIR,
