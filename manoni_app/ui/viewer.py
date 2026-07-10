@@ -450,15 +450,27 @@ class ViewerMixin:
         self._has_alpha = imaging.has_alpha(self.current_pil)
         key = (id(self.current_pil), round(scale, 5), sx0, sy0, sx1, sy1)
         if key != self._view_key or self._view_base is None:
-            region = self.current_pil.crop((sx0, sy0, sx1, sy1))
             dw = max(1, round((sx1 - sx0) * scale))
             dh = max(1, round((sy1 - sy0) * scale))
+            box = (sx0, sy0, sx1, sy1)
+            want = "RGBA" if self._has_alpha else "RGB"
+            src = self.current_pil
+            if src.mode != want:
+                # Convert only what is on screen — a full-frame convert of a
+                # 24 MP source is waste when the viewport shows a corner of it.
+                if box != (0, 0, iw, ih):
+                    src = src.crop(box)
+                src = src.convert(want)
+                box = None                   # `src` is already the region
+            # `box=` crops inside the resize, so an unzoomed view needs no
+            # full-size copy at all; `reducing_gap` pre-shrinks cheaply before
+            # LANCZOS. Preview only — the export path is untouched.
+            out = src.resize((dw, dh), Image.LANCZOS, box=box, reducing_gap=2.0)
             if self._has_alpha:
-                rgba = region.convert("RGBA").resize((dw, dh), Image.LANCZOS)
-                self._view_base = rgba.convert("RGB")
-                self._view_alpha = rgba.getchannel("A")
+                self._view_base = out.convert("RGB")
+                self._view_alpha = out.getchannel("A")
             else:
-                self._view_base = region.convert("RGB").resize((dw, dh), Image.LANCZOS)
+                self._view_base = out
                 self._view_alpha = None
             self._view_key = key
             self._view_epoch += 1    # base pixels rebuilt → retire the edit cache
