@@ -40,6 +40,9 @@ previews/
 # Personal planning / spec docs (kept local, not tracked)
 spec/
 TESTING_TODO.md
+# Promotion plan. promo/PLAN.md is the only file to open by default; the long
+# per-step notes live in promo/steps/ and are read only while doing that step.
+promo/
 
 # Local scratch: files not needed to run the app (old prototypes, generated
 # artifacts). Moved here out of the repo root; regenerate/delete freely.
