@@ -5,7 +5,7 @@ Runs on a weak laptop. Pure Python + Tkinter + Pillow (MIT-friendly stack).
 This file is the entry point and the application *shell*: it builds the window,
 holds the shared state, and wires things together. All the behaviour lives in
 the manoni_app package, split by topic into mixins that Manoni composes (see
-spec/05-architecture.md). A new feature goes into the matching module there —
+spec/03-architecture.md). A new feature goes into the matching module there —
 never back into one giant file.
 
 Run:  python manoni.py [optional_folder]
