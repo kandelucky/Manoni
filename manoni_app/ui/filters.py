@@ -43,7 +43,7 @@ import tintkit
 from ..config import EDIT_PAD, FILTER_SHOW_IMG
 from ..widgets import Tooltip
 from ..i18n import t
-from .. import imaging
+from .. import cost, imaging
 from .dialogs import center_over
 
 
@@ -454,6 +454,31 @@ class FiltersMixin:
                 return fl
         return None
 
+    def _filter_dot(self, row, vals, lpad):
+        "The cost-badge column for a filter row, packed just before the name. A"
+        " filter only earns a dot when it switches on an outright heavy slider"
+        " (see cost.preset_dot) — which is most of them left blank. Blank still"
+        " takes the column, so every name starts at the same x. None (and no"
+        " column at all) when the badges are switched off in Settings."
+        if not self.show_cost_dots:
+            return None
+        colour = cost.preset_dot(vals, self._slider_neutral)
+        dot = tintkit.Dot(row, self.theme, colour, bg="bar")
+        dot.pack(side="left", padx=(lpad, 6))
+        if colour:
+            Tooltip(dot.widget,
+                    t("Costly: every later edit pays for it — apply this look last"))
+        return dot
+
+    def _row_bg(self, plain, dot, token):
+        "Repaint a filter row for hover/idle. The dot is anti-aliased against the"
+        " row colour, so it must be re-blended, not merely reconfigured — a plain"
+        " bg swap would leave its old fringe ringing the circle."
+        for w in plain:
+            w.configure(bg=self.theme[token])
+        if dot is not None:
+            dot.set_bg(token)
+
     def _add_flist_row(self, parent, label, vals, fl=None, group_id=None):
         "One filter row: a grip + a small preview + indented name (+ … menu for"
         " user filters, not built-ins); click applies the look onto the photo."
@@ -479,21 +504,27 @@ class FiltersMixin:
                       fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
         name_lpad = 0 if pic is not None else (4 if fl is not None else 26)
-        tx.pack(side="left", fill="x", expand=True, padx=(name_lpad, 6), pady=4)
+        # The badge column leads the name (it only trails the fixed-width grip
+        # and preview), so it lands in the same place on every row. The name no
+        # longer expands: a trailing spacer takes the slack instead, so the …
+        # menu stays where it was.
+        dot = self._filter_dot(row, vals, name_lpad)
+        tx.pack(side="left", padx=(0 if dot is not None else name_lpad, 6), pady=4)
+        spacer = tk.Frame(row, bg=bar)
+        spacer.pack(side="left", fill="x", expand=True)
 
         cell = {"frame": row, "label": tx, "vals": vals, "active": active}
         self._filter_list_rows.append(cell)
-        parts = (row, tx) if pic is None else (row, pic, tx)
+        plain = [row, tx, spacer] + ([pic] if pic is not None else [])
 
         def enter(_e=None):
             if not cell["active"]:
-                for w in parts:
-                    w.configure(bg=self.theme["hover"])
+                self._row_bg(plain, dot, "hover")
 
         def leave(_e=None):
             if not cell["active"]:
-                for w in parts:
-                    w.configure(bg=self.theme["bar"])
+                self._row_bg(plain, dot, "bar")
+        parts = plain + ([dot.widget] if dot is not None else [])
         for w in parts:
             w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
             w.bind("<Enter>", enter)
@@ -967,22 +998,23 @@ class FiltersMixin:
                       fg=self.theme["accent"] if active else self.theme["fg"],
                       anchor="w", font=("Segoe UI", 9))
         name_lpad = 0 if pic is not None else 26
-        tx.pack(side="left", fill="x", expand=True, padx=(name_lpad, 6), pady=4)
+        dot = self._filter_dot(row, vals, name_lpad)
+        tx.pack(side="left", padx=(0 if dot is not None else name_lpad, 6), pady=4)
+        spacer = tk.Frame(row, bg=bar)
+        spacer.pack(side="left", fill="x", expand=True)
 
         cell = {"frame": row, "label": tx, "vals": vals, "active": active}
         self._filter_list_rows.append(cell)
-        parts = (row, tx) if pic is None else (row, pic, tx)
+        plain = [row, tx, spacer] + ([pic] if pic is not None else [])
 
         def enter(_e=None):
             if not cell["active"]:
-                for w in parts:
-                    w.configure(bg=self.theme["hover"])
+                self._row_bg(plain, dot, "hover")
 
         def leave(_e=None):
             if not cell["active"]:
-                for w in parts:
-                    w.configure(bg=self.theme["bar"])
-        for w in parts:
+                self._row_bg(plain, dot, "bar")
+        for w in plain + ([dot.widget] if dot is not None else []):
             w.bind("<Button-1>", lambda e, v=vals: self._apply_filter_values(v))
             w.bind("<Enter>", enter)
             w.bind("<Leave>", leave)

@@ -11,7 +11,7 @@ import tkinter.ttk as ttk
 import tintkit
 
 from ..config import EDIT_PANEL_W, EDIT_RAIL_W, EDIT_PAD
-from .. import imaging
+from .. import cost, imaging
 from ..widgets import Tooltip, Histogram
 from ..i18n import t
 
@@ -46,6 +46,10 @@ class EditPanelMixin:
         panel.grid(row=0, column=3, rowspan=3, sticky="ns")   # full height: clips the strips
         panel.pack_propagate(False)
         self.edit_panel = panel
+        # The Foldouts that wear a cost dot on their header (the colour mixer's
+        # three). Sliders are reachable through `self.sliders`; groups are not,
+        # so `_refresh_cost_dots` needs them kept.
+        self._cost_folds = []
         if not self.panel_open:      # hidden until the toolbar toggle opens it
             panel.grid_remove()
 
@@ -183,18 +187,30 @@ class EditPanelMixin:
     # any label living inside a fold body.
     FOLD_BODY_W = EDIT_PANEL_W - 2 * EDIT_PAD - 22
 
-    def _fold_group(self, parent, key, title, pady=(0, 8), default_open=False):
+    def _fold_group(self, parent, key, title, pady=(0, 8), default_open=False,
+                    dot_for=None):
         "One collapsible control group (tintkit.Foldout) — the shared visual for"
         " every sectioned tool panel (Basic / Effects / Color mixer / Text). Its"
         " open state loads from and persists to basic_folds under `key`"
         " (`default_open` is the first-run state before the user has toggled it)."
+        " `dot_for` grades the whole group from one representative slider — for a"
+        " group whose sliders all drive the SAME pipeline stage (the colour mixer),"
+        " so one header dot says what a dot on each of its rows would repeat."
         " Returns the body frame for the caller to fill (pack children with pad=0 —"
         " the body's own inset aligns them)."
+        dot, dot_tip = self._cost_dot(dot_for) if dot_for else (None, "")
         fo = tintkit.Foldout(
-            parent, self.theme, title, bg="bar",
+            parent, self.theme, title, bg="bar", dot=dot, dot_tip=dot_tip,
             open=self.basic_folds.get(key, default_open),
             on_toggle=lambda o, k=key: self._on_fold(k, o))
         fo.pack(fill="x", padx=EDIT_PAD, pady=pady)
+        # Only a GRADED group has a dot to hide; an ungraded one (every group in
+        # crop, resize, text…) never builds the column, so its caption keeps its
+        # place whatever the preference says.
+        if dot is not None:
+            self._cost_folds.append(fo)
+            if not self.show_cost_dots:
+                fo.set_dot_slot(False)
         return fo.body
 
     def _build_basic_section(self, parent):
@@ -337,13 +353,17 @@ class EditPanelMixin:
         " they share the edit pipeline, undo and reset."
         f = self._tw(tk.Frame(parent), bg="bar")
 
-        sat = self._fold_group(f, "mix_sat", t("Saturation"), pady=(8, 8))
+        # Every band, gold and skin slider drives the one `mixer` stage at the
+        # same cost, so the badge goes on the group headers — a dot on all
+        # fourteen rows would grade nothing and drown the colour chips.
+        sat = self._fold_group(f, "mix_sat", t("Saturation"), pady=(8, 8),
+                               dot_for="sat_red")
         for attr, label, chip in self.COLOR_BANDS:
             self.sliders[attr] = self._color_slider(sat, t(label), attr, chip)
 
         # Gold gets its own three-slider mini-HSL — the special treatment for
         # golden tones, unlike the plain (saturation-only) bands above.
-        gold = self._fold_group(f, "mix_gold", t("Gold"))
+        gold = self._fold_group(f, "mix_gold", t("Gold"), dot_for="gold_sat")
         self.sliders["gold_hue"] = self._color_slider(
             gold, t("Gold hue"), "gold_hue", "#d4af37")
         self.sliders["gold_sat"] = self._color_slider(
@@ -353,7 +373,7 @@ class EditPanelMixin:
 
         # Skin: the same targeted mini-HSL for skin tones (hue + saturation gated
         # so only skin moves, not the warm walls behind it).
-        skin = self._fold_group(f, "mix_skin", t("Skin"))
+        skin = self._fold_group(f, "mix_skin", t("Skin"), dot_for="skin_sat")
         self.sliders["skin_hue"] = self._color_slider(
             skin, t("Skin hue"), "skin_hue", "#e0ac8b")
         self.sliders["skin_sat"] = self._color_slider(
@@ -659,20 +679,49 @@ class EditPanelMixin:
             else:
                 ic.configure(fg=self.theme[itok])
 
+    def _cost_dot(self, attr):
+        "The (colour, hover text) badge a slider has EARNED, whether or not the"
+        " badges are currently shown. Cheap sliders get (None, '') — no badge,"
+        " so the marked ones stand out."
+        colour = cost.dot_color(attr)
+        if colour is None:
+            return None, ""
+        tip = (t("Costly: every later edit pays for it — switch it on last")
+               if colour == cost.DOT_HEAVY else
+               t("Adds cost to later edits — better switched on late"))
+        return colour, tip
+
+    def _refresh_cost_dots(self):
+        "Show or hide the cost badges in place (the Settings toggle). Every row"
+        " keeps a dot object from the start — hiding is one pack_forget per row,"
+        " so the panels never have to be torn down and rebuilt. Sliders that"
+        " never earned a badge (the colour mixer's, whose grade lives on the"
+        " group header) were built without a dot and ignore this."
+        on = self.show_cost_dots
+        for s in self.sliders.values():
+            s.set_dot_slot(on)
+        for fo in self._cost_folds:
+            fo.set_dot_slot(on)
+        self._refresh_filter_list()   # the filter rows are rebuilt, dots and all
+
     def _slider(self, parent, label, attr, lo=0, hi=200, neutral=100,
                 pad=EDIT_PAD):
         "A labeled live TitledSlider bound to an attribute, with its own reset icon."
         " Default 0–200 → factor 0.0–2.0 (neutral 1.0). Effects pass hi=100,"
         " neutral=0 → 0.0–1.0 (off→full). Pass pad=0 inside a Foldout body —"
         " the body's own inset already aligns the control."
+        dot, dot_tip = self._cost_dot(attr)
         s = tintkit.TitledSlider(
             parent, self.theme, label, value=neutral, lo=lo, hi=hi,
-            neutral=neutral, bg="bar", compact=True,
+            neutral=neutral, bg="bar", compact=True, dot=dot, dot_tip=dot_tip,
+            dot_slot=True,     # even ungraded: the column keeps the labels level
             command=lambda v, a=attr: self._on_slider(a, v),
             on_press=self._edit_gesture_start, on_release=self._edit_gesture_end,
             reset_tip=t("Reset this slider"),
             value_fmt=self._slider_fmt(lo, hi, neutral),
             on_reset=lambda a=attr: self._reset_slider(a))
+        if not self.show_cost_dots:
+            s.set_dot_slot(False)
         s.pack(fill="x", padx=pad, pady=(1, 2))
         return s
 

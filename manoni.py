@@ -426,6 +426,8 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.fast_preview = True  # drop heavy filters during a slider drag; persisted
         self.async_render = True  # render off the UI thread so a heavy edit can't
                                   # freeze the window; persisted (Settings → General)
+        self.show_cost_dots = True  # the coloured cost badges on the sliders and
+                                    # filter rows (see cost.py); persisted
         self._message = None     # placeholder text shown when no photo is loaded
         self.icons = {}          # name -> PhotoImage (kept alive)
         # Virtualized thumbnail strip: only the cells in (or near) the viewport are
@@ -616,6 +618,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
                  "basic_folds": self.basic_folds,
                  "fast_preview": self.fast_preview,
                  "async_render": self.async_render,
+                 "show_cost_dots": self.show_cost_dots,
                  "restore_session": self.restore_session,
                  "restore_photo": self.restore_photo,
                  "confirm_reject": self.confirm_reject,
@@ -699,7 +702,7 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         for key in ("restore_session", "restore_photo", "confirm_reject",
                     "warn_unsaved", "autosave_copy", "confirm_overwrite",
                     "show_filter_strip", "show_histogram",
-                    "fast_preview", "async_render"):
+                    "fast_preview", "async_render", "show_cost_dots"):
             val = state.get(key)
             if isinstance(val, bool):
                 setattr(self, key, val)

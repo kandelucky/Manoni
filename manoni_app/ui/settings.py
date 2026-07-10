@@ -280,6 +280,17 @@ class SettingsMixin:
         tintkit.Toggle(r, self.theme, value=getattr(self, "async_render", True),
                 command=lambda on: self._set_pref("async_render", on)).pack()
 
+        r = win.row(t("Show cost dots"),
+                    t("A small coloured dot beside the sliders and filters that "
+                      "make every later edit slower — red for the heaviest, "
+                      "amber for the rest. Switch those on last."))
+
+        def pick_cost_dots(on):
+            self._set_pref("show_cost_dots", on)
+            self._refresh_cost_dots()        # shows / hides them in place
+        tintkit.Toggle(r, self.theme, value=getattr(self, "show_cost_dots", True),
+                command=pick_cost_dots).pack()
+
     def _set_pref(self, key, val):
         "Set a simple on/off General preference attribute and persist it."
         setattr(self, key, val)
@@ -787,6 +798,8 @@ class SettingsMixin:
         self._refresh_histogram()
         self._repaint_view_toggles()                 # sync the toolbar toggles
         self.fast_preview = True                      # fast preview default = on
+        self.show_cost_dots = True                    # cost dots default = on
+        self._refresh_cost_dots()
         self.last_save = {"dir": "", "fmt": "JPEG", "quality": 95,
                           "keep_meta": True, "to_srgb": False}
         self._save_state()

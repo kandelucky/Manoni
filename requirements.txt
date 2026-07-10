@@ -2,4 +2,4 @@
 # tkinter is part of the Python standard library (no install needed)
 pillow
 tkinterdnd2
-tintkit
+tintkit>=0.2.2      # Dot + TitledSlider/Foldout `dot=`: the slider cost badges
