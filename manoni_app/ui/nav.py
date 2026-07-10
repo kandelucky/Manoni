@@ -219,11 +219,15 @@ class NavMixin:
         wrap = self._tw(tk.Frame(dlg, padx=self._edit_dpi_w(22),
                                  pady=self._edit_dpi_w(18)), bg="bg")
         wrap.pack(fill="both", expand=True)
-        self._tw(tk.Label(wrap, text=title, font=("Segoe UI", 11, "bold")),
-                 bg="bg", fg="fg").pack(anchor="w")
-        self._tw(tk.Label(wrap, text=message, font=("Segoe UI", 9), justify="left",
-                 wraplength=self._edit_dpi_w(width)), bg="bg", fg="fg_dim").pack(
-            anchor="w", pady=(self._edit_dpi_w(4), self._edit_dpi_w(15)))
+        # The kit's hero line: a 3px accent bar + the title, on the native UI
+        # font (a hardcoded "Segoe UI" here used to bypass tintkit's font
+        # resolution and mismatch every other heading in the app).
+        tintkit.hero_line(wrap, self.theme, title, bg="bg").pack(anchor="w",
+                                                                 fill="x")
+        self._tw(tk.Label(wrap, text=message, font=tintkit.font(9),
+                 justify="left", wraplength=self._edit_dpi_w(width)),
+                 bg="bg", fg="fg_dim").pack(
+            anchor="w", pady=(self._edit_dpi_w(8), self._edit_dpi_w(15)))
 
         if checkbox:
             def toggled(s):

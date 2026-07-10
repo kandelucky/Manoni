@@ -21,7 +21,7 @@ class EditPanelMixin:
 
     # --- Edit area: Fotor-style section panel (col 2) + icon rail (col 3) ----
 
-    # The rail's selectable tools and their blue-header titles (Save is a
+    # The rail's selectable tools and their panel-heading titles (Save is a
     # separate bottom action, not a section, so it is not listed here).
     SECTION_TITLES = {"basic": "Basic Edits", "crop": "Crop", "resize": "Resize",
                       "perspective": "Perspective",
@@ -31,6 +31,18 @@ class EditPanelMixin:
                       "logo": "Logo",
                       "filters": "Filters",
                       "actions": "Actions"}
+
+    # Each section's heading icon — the SAME glyph as its rail tile, so the tile
+    # you clicked and the heading you land on name the tool twice over. Kept
+    # beside the titles (not read back out of `rail_groups`) because the heading
+    # is built before the rail is.
+    SECTION_ICONS = {"basic": "sliders-horizontal", "color": "palette",
+                     "effects": "wand-sparkles", "filters": "blend",
+                     "crop": "crop", "resize": "scaling",
+                     "perspective": "frame",
+                     "heal": "bandage", "focus": "circle-dot",
+                     "text": "type", "logo": "image",
+                     "actions": "circle-play"}
 
     def _edit_dpi_w(self, logical):
         "Logical px → physical px for the edit area (so DPI-scaled text fits)."
@@ -53,12 +65,17 @@ class EditPanelMixin:
         if not self.panel_open:      # hidden until the toolbar toggle opens it
             panel.grid_remove()
 
-        # Blue header that names the open section (Fotor "Basic Edits" tab look).
-        self.section_title = self._tw(tk.Label(panel, text=t(self.SECTION_TITLES["basic"]),
-                                      anchor="w",
-                                      font=("Segoe UI", 10, "bold"),
-                                      padx=14, pady=8), bg="accent", fg="on_accent")
+        # The kit's hero line names the open section: a 3px accent bar, the
+        # section's own rail icon, then the title. It replaces an accent-FILLED
+        # bar, which spent the accent on a heading that never changes and left
+        # the panel's real accents — the primary button, the active rail tile —
+        # competing with it. A hairline seats it against the content below.
+        self.section_title = tintkit.hero_line(
+            panel, self.theme, t(self.SECTION_TITLES["basic"]),
+            icon=self.SECTION_ICONS["basic"], bg="bar", size=11, pad=(0, 9))
         self.section_title.pack(side="top", fill="x")
+        self._tw(tk.Frame(panel, height=1), bg="border").pack(side="top",
+                                                              fill="x")
 
         # Live histogram: sits under the header, above the swappable content, so
         # every tool shows the edited photo's tonal spread. It re-renders from
@@ -635,7 +652,8 @@ class EditPanelMixin:
         # new content height.
         self._sec_canvas.yview_moveto(0)
         self.root.after_idle(self._sync_section_scroll)
-        self.section_title.configure(text=t(self.SECTION_TITLES[key]))
+        self.section_title.set_title(t(self.SECTION_TITLES[key]))
+        self.section_title.set_icon(self.SECTION_ICONS[key])
         self._update_rail()
         if key == "crop":
             self._enter_crop()       # init a box + fit so the whole photo is seen
