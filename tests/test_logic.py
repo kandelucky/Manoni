@@ -35,6 +35,7 @@ class FakeApp(FiltersMixin, ActionsMixin, ResizeMixin, CropMixin, SaveMixin):
     def __init__(self):
         self.user_filters = []
         self.filter_groups = []
+        self._builtin_collapsed = {}
         self._last_filter = None
         self.user_actions = []
         self.current_pil = None
@@ -140,6 +141,35 @@ def group_normalize_order_and_others():
     a.user_filters = [{"name": "a", "group": "My filters", "values": {}}]
     a._normalize_groups()
     assert "Others" not in [g["name"] for g in a.filter_groups], "empty Others kept"
+
+
+@check
+def builtin_groups_standard_and_bw():
+    a = app()
+    # Both code-defined sets are always shown, in order, even with no user filters.
+    ids = [g["id"] for g in a._strip_groups()]
+    assert ids[:2] == [a.GROUP_STANDARD, a.GROUP_BW], "built-in sets missing / misordered"
+    std, bw = a._strip_groups()[0], a._strip_groups()[1]
+    assert len(std["items"]) == len(a.BUILTIN_FILTERS)
+    assert len(bw["items"]) == len(a.BW_FILTERS) and bw["items"], "B&W set empty"
+    # Every B&W look is a full desaturate — that is what makes it the B&W set.
+    assert all(v.get("bw") == 1.0 for _, v in a.BW_FILTERS), "a B&W look is not mono"
+    # _builtin_items resolves the tuples; a user group id resolves to None.
+    assert a._builtin_items(a.GROUP_BW) is a.BW_FILTERS
+    assert a._builtin_items("My filters") is None
+    # The B&W group id is reserved, so a user can't shadow it.
+    assert a._unique_group_name("Black & white") == "Black & white 2"
+
+
+@check
+def builtin_collapse_roundtrips_per_group():
+    a = app()
+    a._save_filters = lambda: None          # never touch the real store on disk
+    a._set_group_collapsed(a.GROUP_BW, True)
+    assert a._group_collapsed(a.GROUP_BW) and not a._group_collapsed(a.GROUP_STANDARD)
+    # A legacy store with the old bool folds only Standard (migration path).
+    a._builtin_collapsed = {a.GROUP_STANDARD: True}
+    assert a._group_collapsed(a.GROUP_STANDARD) and not a._group_collapsed(a.GROUP_BW)
 
 
 # ---- the "Last" filter (session-only slot) ---------------------------------

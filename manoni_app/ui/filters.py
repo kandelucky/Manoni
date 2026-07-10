@@ -69,28 +69,77 @@ class FiltersMixin:
     # any key left out falls back to its neutral value when applied. Names go
     # through t() in the strip, so the descriptive ones translate. Tuned against
     # the real pipeline in imaging.py (temperature k≈±0.3, tone push ±70, etc.).
+    # Strip order is deliberate: the first four visible are the DRAMATIC ones
+    # (Vivid, Golden hour, Mono, Warm) because the strip shows in every
+    # screenshot; the quieter looks trail behind. Golden hour / Skin glow /
+    # Faded film lean on subsystems no other app exposes (the gold and skin
+    # mini-HSLs, split-tone + grain), so they can be written about honestly.
     BUILTIN_FILTERS = (
-        ("Clarendon", {"brightness": 1.06, "contrast": 1.18, "color": 1.12,
-                       "vibrance": 1.22, "temperature": 0.94, "clarity": 1.12,
-                       "blacks": 0.96}),
         ("Vivid", {"contrast": 1.24, "clarity": 1.38, "vibrance": 1.32,
                    "color": 1.1, "texture": 1.15, "whites": 1.08,
                    "blacks": 0.9, "vignette": 1.08}),
+        # Golden hour: the gold mini-HSL is the point — gold_sat/light lift only
+        # genuinely golden pixels (the sat gate keeps it off skin and pale stone),
+        # over a warm, gently-vignetted base.
+        ("Golden hour", {"temperature": 1.24, "brightness": 1.04, "contrast": 1.05,
+                         "highlights": 0.95, "shadows": 1.07, "vibrance": 1.08,
+                         "gold_hue": 1.06, "gold_sat": 1.35, "gold_light": 1.28,
+                         "vignette": 1.06}),
+        ("Mono", {"bw": 1.0, "contrast": 1.22, "clarity": 1.2,
+                  "whites": 1.05, "blacks": 0.94}),
         ("Warm", {"temperature": 1.34, "brightness": 1.05, "vibrance": 1.16,
                   "shadows": 1.1, "contrast": 1.04, "tint": 1.05,
                   "highlights": 0.97}),
+        # Pop (was Clarendon): a bright, punchy everyday look.
+        ("Pop", {"brightness": 1.06, "contrast": 1.18, "color": 1.12,
+                 "vibrance": 1.22, "temperature": 0.94, "clarity": 1.12,
+                 "blacks": 0.96}),
         ("Cool", {"temperature": 0.78, "contrast": 1.14, "color": 0.96,
                   "vibrance": 1.1, "shadows": 1.08, "blacks": 0.92,
                   "vignette": 1.16}),
+        # Skin glow: the skin mini-HSL warms and lifts skin only (its own sat gate
+        # leaves warm walls behind it alone); clarity/texture come down to soften.
+        ("Skin glow", {"brightness": 1.03, "contrast": 0.98, "clarity": 0.94,
+                       "texture": 0.9, "highlights": 0.98, "shadows": 1.05,
+                       "vibrance": 1.05, "skin_hue": 1.05, "skin_sat": 1.12,
+                       "skin_light": 1.18}),
+        # Faded film: lifted blacks + split-tone (warm highlights, teal shadows) +
+        # grain — the classic matte-film look, lighting up two unused subsystems.
+        ("Faded film", {"contrast": 0.9, "color": 0.92, "highlights": 0.95,
+                        "shadows": 1.06, "blacks": 1.2, "split_hi": 1.16,
+                        "split_sh": 0.85, "grain": 0.25, "vignette": 1.05}),
         ("Vintage", {"contrast": 0.9, "color": 0.85, "temperature": 1.28,
                      "blacks": 1.18, "shadows": 1.1, "highlights": 0.95,
                      "clarity": 0.95, "vignette": 1.12}),
         ("Matte", {"contrast": 0.88, "blacks": 1.22, "shadows": 1.05,
                    "highlights": 0.95, "color": 0.92, "clarity": 0.96}),
-        ("Mono", {"bw": 1.0, "contrast": 1.22, "clarity": 1.2,
-                  "whites": 1.05, "blacks": 0.94}),
         ("Sepia", {"sepia": 0.85, "contrast": 0.96, "brightness": 1.03,
                    "clarity": 0.95, "vignette": 1.14}),
+    )
+
+    # A second built-in group: a dedicated black-and-white set (like Fotor's own
+    # B&W category). All are full `bw` conversions differentiated by TONE only —
+    # contrast / blacks / grain / vignette, plus split-tone, which the pipeline
+    # runs AFTER bw so it colour-tones the finished grey (warm / cool / selenium).
+    # There is no channel-mix here (our `bw` is a flat luminance desaturate), so a
+    # true "red-filter darkens the sky" look is deliberately absent.
+    BW_FILTERS = (
+        ("B&W Noir", {"bw": 1.0, "contrast": 1.35, "clarity": 1.25,
+                      "blacks": 0.82, "whites": 1.1}),
+        ("B&W Soft", {"bw": 1.0, "contrast": 0.9, "blacks": 1.08,
+                      "highlights": 0.96, "clarity": 0.95}),
+        ("B&W Matte", {"bw": 1.0, "contrast": 0.9, "blacks": 1.22,
+                       "shadows": 1.06, "highlights": 0.95}),
+        ("B&W Film", {"bw": 1.0, "contrast": 1.12, "clarity": 1.1,
+                      "blacks": 0.92, "grain": 0.25, "vignette": 1.08}),
+        # Selenium: cool-toned shadows (split_sh < 1.0 = cool), highlights left near
+        # neutral — the classic blue-grey darkroom tone.
+        ("B&W Selenium", {"bw": 1.0, "contrast": 1.15, "blacks": 0.9,
+                          "split_hi": 0.98, "split_sh": 0.85}),
+        # Warm / platinum: split-tone warm on both ends for a soft sepia-adjacent
+        # grey (subtler than the full Sepia look).
+        ("B&W Warm", {"bw": 1.0, "contrast": 1.05, "blacks": 0.95,
+                      "split_hi": 1.14, "split_sh": 1.06}),
     )
 
     # --- Filter groups (organising the saved filters) -----------------------
@@ -99,9 +148,26 @@ class FiltersMixin:
     # orphan a filter; the reserved names below are translated only for DISPLAY
     # via t(). Custom group names are free text — stored and shown verbatim.
     GROUP_STANDARD = "Standard"     # the built-in looks (code-defined, never in the store)
+    GROUP_BW       = "Black & white"  # the built-in B&W set (also code-defined)
     GROUP_MINE     = "My filters"   # default home for filters the user creates
     GROUP_OTHERS   = "Others"       # default home for imported filters with no group
-    RESERVED_GROUPS = (GROUP_STANDARD, GROUP_MINE, GROUP_OTHERS)
+    RESERVED_GROUPS = (GROUP_STANDARD, GROUP_BW, GROUP_MINE, GROUP_OTHERS)
+
+    def _builtin_groups(self):
+        "The code-defined groups, in strip / manager order: (group_id, filters)."
+        return ((self.GROUP_STANDARD, self.BUILTIN_FILTERS),
+                (self.GROUP_BW, self.BW_FILTERS))
+
+    def _builtin_group_ids(self):
+        "The reserved ids that hold code-defined (never stored) filters."
+        return tuple(gid for gid, _ in self._builtin_groups())
+
+    def _builtin_items(self, gid):
+        "The filter tuple for a built-in group id, or None if it is a user group."
+        for g, items in self._builtin_groups():
+            if g == gid:
+                return items
+        return None
 
     # --- Filter store (persisted to FILTERS_FILE) ---------------------------
 
@@ -110,7 +176,7 @@ class FiltersMixin:
         from ..config import FILTERS_FILE
         self.user_filters = []
         self.filter_groups = []           # [{"name", "collapsed"}] — user/custom only
-        self._standard_collapsed = False  # the built-in 'Standard' group's fold state
+        self._builtin_collapsed = {}      # built-in group id -> fold state
         try:
             with open(FILTERS_FILE, encoding="utf-8") as f:
                 data = json.load(f)
@@ -124,7 +190,12 @@ class FiltersMixin:
                 self.user_filters.append(it)
             self._load_groups(data)
             if isinstance(data, dict):
-                self._standard_collapsed = bool(data.get("standard_collapsed"))
+                # New key is a per-group dict; the legacy bool folded 'Standard'.
+                bc = data.get("builtin_collapsed")
+                if isinstance(bc, dict):
+                    self._builtin_collapsed = {k: bool(v) for k, v in bc.items()}
+                elif data.get("standard_collapsed"):
+                    self._builtin_collapsed[self.GROUP_STANDARD] = True
         self._normalize_groups()
 
     def _load_groups(self, data):
@@ -140,7 +211,7 @@ class FiltersMixin:
                 collapsed = bool(g.get("collapsed"))
             else:
                 continue
-            if name and name != self.GROUP_STANDARD and not self._group(name):
+            if name and name not in self._builtin_group_ids() and not self._group(name):
                 self.filter_groups.append({"name": name, "collapsed": collapsed})
 
     def _save_filters(self):
@@ -149,7 +220,7 @@ class FiltersMixin:
         from ..storage import save_json
         ok = save_json(FILTERS_FILE, {"manoni_filters": 2,
                                       "groups": self.filter_groups,
-                                      "standard_collapsed": self._standard_collapsed,
+                                      "builtin_collapsed": self._builtin_collapsed,
                                       "filters": self.user_filters})
         if not ok:
             self.toast(t("Could not save filters"))
@@ -191,7 +262,7 @@ class FiltersMixin:
         used = {fl["group"] for fl in self.user_filters}
         # Any group a filter references but the list is missing → add it.
         for name in used:
-            if name != self.GROUP_STANDARD and not self._group(name):
+            if name not in self._builtin_group_ids() and not self._group(name):
                 self.filter_groups.append({"name": name, "collapsed": False})
         # 'Others' is automatic: keep it only while some filter lives there.
         self.filter_groups = [g for g in self.filter_groups
@@ -209,16 +280,16 @@ class FiltersMixin:
         self.filter_groups = mine + custom + others
 
     def _group_collapsed(self, gid):
-        "Whether a group (built-in 'Standard' or a user group) is folded."
-        if gid == self.GROUP_STANDARD:
-            return self._standard_collapsed
+        "Whether a group (a built-in set or a user group) is folded."
+        if gid in self._builtin_group_ids():
+            return bool(self._builtin_collapsed.get(gid))
         g = self._group(gid)
         return bool(g and g["collapsed"])
 
     def _set_group_collapsed(self, gid, value):
         "Set a group's fold state and persist it (shared by strip + manager)."
-        if gid == self.GROUP_STANDARD:
-            self._standard_collapsed = value
+        if gid in self._builtin_group_ids():
+            self._builtin_collapsed[gid] = value
         else:
             g = self._group(gid)
             if g is None:
@@ -410,7 +481,7 @@ class FiltersMixin:
         "The list's own caption: just the running total (Import is the pinned"
         " full-width button above the list — see _build_filter_list)."
         bar, fg_dim = self.theme["bar"], self.theme["fg_dim"]
-        total = len(self.user_filters) + len(self.BUILTIN_FILTERS)
+        total = len(self.user_filters) + sum(len(i) for _, i in self._builtin_groups())
         row = tk.Frame(parent, bg=bar)
         row.pack(fill="x", pady=(0, 4))
         tk.Label(row, text=f"{t('All filters')}  ({total})", bg=bar, fg=fg_dim,
@@ -420,7 +491,7 @@ class FiltersMixin:
     def _add_flist_group(self, parent, grp):
         "A foldable caption (chevron + name + count + … menu); when open, its rows."
         bar, fg, fg_dim = self.theme["bar"], self.theme["fg"], self.theme["fg_dim"]
-        builtin = grp["id"] == self.GROUP_STANDARD
+        builtin = grp["id"] in self._builtin_group_ids()
         header = tk.Frame(parent, bg=bar, cursor="hand2")
         header.pack(fill="x", pady=(6, 0))
         # The … menu sits at the right; pack it first so the title can expand.
@@ -631,13 +702,15 @@ class FiltersMixin:
             scrollregion=self.filter_strip_canvas.bbox("all"))
 
     def _strip_groups(self):
-        "Ordered groups for the strip: 'Standard' (built-ins) first, then every"
-        " user group that has filters. Each is {id,label,collapsed,items}; items"
-        " is a list of (cell_label, values). Empty user groups stay hidden here."
-        groups = [{"id": self.GROUP_STANDARD,
-                   "label": self._group_display(self.GROUP_STANDARD),
-                   "collapsed": self._standard_collapsed,
-                   "items": [(t(n), v) for n, v in self.BUILTIN_FILTERS]}]
+        "Ordered groups for the strip: the built-in sets (Standard, Black & white)"
+        " first, then every user group that has filters. Each is"
+        " {id,label,collapsed,items}; items is a list of (cell_label, values)."
+        " Empty user groups stay hidden here; built-in sets always show."
+        groups = [{"id": gid,
+                   "label": self._group_display(gid),
+                   "collapsed": self._group_collapsed(gid),
+                   "items": [(t(n), v) for n, v in items]}
+                  for gid, items in self._builtin_groups()]
         for g in self.filter_groups:
             items = [(fl["name"], fl["values"]) for fl in self.user_filters
                      if fl["group"] == g["name"]]
@@ -1260,10 +1333,11 @@ class FiltersMixin:
         redraw()
 
     def _export_group(self, name):
-        "Export every filter in a group (built-ins for 'Standard') to a file."
-        if name == self.GROUP_STANDARD:
-            filters = [{"name": n, "group": self.GROUP_STANDARD, "values": dict(v)}
-                       for n, v in self.BUILTIN_FILTERS]
+        "Export every filter in a group (code-defined for the built-in sets) to a file."
+        builtin = self._builtin_items(name)
+        if builtin is not None:
+            filters = [{"name": n, "group": name, "values": dict(v)}
+                       for n, v in builtin]
         else:
             filters = [fl for fl in self.user_filters if fl["group"] == name]
         if not filters:
