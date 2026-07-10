@@ -167,26 +167,46 @@ def apply_vignette(img, amount, scale, src_box, full_size, cache=None):
 
 # --- Film grain --------------------------------------------------------------
 
+# One noise field per (size, cell), kept so the grain does not re-roll on every
+# render — otherwise dragging any other slider makes an enabled grain crawl.
+_grain_field = {}
+
+
+def _grain_noise(w, h, cell):
+    "The grain field for this size: 'L', Gaussian around 128 at GRAIN_MAX_SIGMA."
+    key = (w, h, cell)
+    noise = _grain_field.get(key)
+    if noise is None:
+        nw, nh = max(1, w // cell), max(1, h // cell)
+        noise = Image.effect_noise((nw, nh), GRAIN_MAX_SIGMA)
+        if (nw, nh) != (w, h):
+            noise = noise.resize((w, h), Image.BILINEAR)  # clump + smooth the specks
+        _grain_field.clear()             # keep only the latest size (single slot)
+        _grain_field[key] = noise
+    return noise
+
+
 def apply_grain(img, amount, scale):
     """Lay monochrome film grain over the finished image: Gaussian luminance
     noise added equally to R/G/B (so it reads as grain, not colour speckle).
-    `amount` 0..1 = strength (the noise sigma). The grain CELL is GRAIN_SIZE
-    full-res source px scaled to the preview's display px, so the preview's
-    grain matches what the saved full-res file gets — like blur/clarity. Pure
-    Pillow: the noise is split into a positive and a negative offset and
-    added / subtracted per channel, no numpy."""
+    `amount` 0..1 = strength. The grain CELL is GRAIN_SIZE full-res source px
+    scaled to the preview's display px, so the preview's grain matches what the
+    saved full-res file gets — like blur/clarity. Pure Pillow: the noise is
+    split into a positive and a negative offset and added / subtracted per
+    channel, no numpy.
+
+    The noise field is generated once at full strength and cached; `amount`
+    scales its deviation from 128. So the slider intensifies one fixed grain
+    instead of shuffling a new one on every render."""
     img = img.convert("RGB")
     w, h = img.size
     if w < 1 or h < 1 or amount <= 0.0:
         return img
-    sigma = amount * GRAIN_MAX_SIGMA
     cell = max(1, int(round(GRAIN_SIZE * scale)))    # grain clump in display px
-    nw, nh = max(1, w // cell), max(1, h // cell)
-    noise = Image.effect_noise((nw, nh), sigma)      # "L", Gaussian around 128
-    if (nw, nh) != (w, h):
-        noise = noise.resize((w, h), Image.BILINEAR)  # clump + smooth the specks
-    hi = noise.point(lambda x: x - 128 if x > 128 else 0).convert("RGB")
-    lo = noise.point(lambda x: 128 - x if x < 128 else 0).convert("RGB")
+    noise = _grain_noise(w, h, cell)
+    k = min(1.0, amount)
+    hi = noise.point(lambda x: int((x - 128) * k) if x > 128 else 0).convert("RGB")
+    lo = noise.point(lambda x: int((128 - x) * k) if x < 128 else 0).convert("RGB")
     return ImageChops.subtract(ImageChops.add(img, hi), lo)
 
 
