@@ -145,10 +145,10 @@ file**. There is no backup, so it asks you to confirm — the one save that alte
 an original.
 
 <img src="assets/readme/folder-output.png" width="18" alt=""> **Save a copy**
-(<kbd>Ctrl</kbd>+<kbd>E</kbd>) drops the same edits into your **quick-copy folder**
-as a new, numbered file — no dialog. Neither the original nor an earlier copy is
-replaced; a second copy of the same photo lands beside the first. Choose the folder
-in **Settings → Export** (or the first copy asks for it).
+(<kbd>Ctrl</kbd>+<kbd>E</kbd>) drops the same edits into a **subfolder beside the
+photo** (`_edited/` by default) as a new, numbered file — no dialog, no folder to
+pick. Neither the original nor an earlier copy is replaced; a second copy of the
+same photo lands beside the first. Set the subfolder in **Settings → Export**.
 
 <img src="assets/readme/save-all.png" width="18" alt=""> **Save as…**
 (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) opens a dialog — pick the format
@@ -175,7 +175,7 @@ location — and can **wipe GPS & EXIF** from a file before you share it.
 | <kbd>Backspace</kbd> | Reject the current photo |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a folder of photos |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save — **overwrite** the open file |
-| <kbd>Ctrl</kbd>+<kbd>E</kbd> | Save a copy — a numbered file in the quick-copy folder |
+| <kbd>Ctrl</kbd>+<kbd>E</kbd> | Save a copy — a numbered file in a subfolder beside the photo |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save as… — pick format, quality and folder |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo *(or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>)* |

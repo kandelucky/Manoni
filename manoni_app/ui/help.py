@@ -246,7 +246,7 @@ class HelpMixin:
         self._help_key_row(win, "Ctrl + O", "Open a folder of photos.")
         self._help_key_row(win, "Ctrl + S", "Save — overwrite the open file.")
         self._help_key_row(win, "Ctrl + E",
-                           "Save a copy — a numbered file in the quick-copy folder.")
+                           "Save a copy — a numbered file in a subfolder beside the photo.")
         self._help_key_row(win, "Ctrl + Shift + S", "Save as… — write a new copy.")
         self._help_key_row(win, "Ctrl + Z", "Undo.")
         self._help_key_row(win, "Ctrl + Y", "Redo  (or Ctrl + Shift + Z).")
@@ -369,9 +369,9 @@ class HelpMixin:
                        "backup, so the first time it asks you to confirm.")
         self._help_row(win, "folder-output", "Save a copy — no overwrite",
                        "Ctrl+E (or the copy button in the top bar) saves the same "
-                       "edits as a NEW, numbered file in your quick-copy folder — "
-                       "no dialog, and neither the original nor an earlier copy is "
-                       "replaced. Pick the folder in Settings → Export.")
+                       "edits as a NEW, numbered file in a subfolder beside the "
+                       "photo — no dialog, and neither the original nor an earlier "
+                       "copy is replaced. Set the subfolder in Settings → Export.")
         self._help_row(win, "upload", "Save as… — a copy",
                        "Ctrl+Shift+S (or Save as… in the top bar) opens a dialog "
                        "to write a NEW file — pick the format (JPEG / PNG / WEBP), "

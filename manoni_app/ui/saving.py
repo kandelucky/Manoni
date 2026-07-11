@@ -1,6 +1,6 @@
 """Saving, in three flavours — overwrite the original in place (Ctrl+S), drop a
-numbered copy into the quick-copy folder (Ctrl+E), or open the full 'Save as...'
-dialog (Ctrl+Shift+S). Only the first one replaces an existing file.
+numbered copy into a subfolder beside the photo (Ctrl+E), or open the full
+'Save as...' dialog (Ctrl+Shift+S). Only the first one replaces an existing file.
 
 Mixin on the Manoni window — every method uses the shared `self`, so the
 behaviour is identical to when it lived directly on the class.
@@ -225,23 +225,12 @@ class SaveMixin:
 
     # --- Quick copy: the third save — no overwrite, no dialog ----------------
 
-    def _quick_copy_dir(self):
-        """The one folder every quick copy lands in, asked for on first use and
-        then remembered. Returns "" if it is unset and the picker was cancelled."""
-        if self.quick_copy_dir:
-            return self.quick_copy_dir
-        self.toast(t("Choose the folder your copies go to"))
-        d = tkfd.askdirectory(parent=self.root, title=t("Quick-copy folder"),
-                              initialdir=self.folder or os.path.expanduser("~"))
-        if not d:
-            return ""
-        self.quick_copy_dir = d
-        self._save_state()
-        return d
-
     def quick_copy_save(self):
-        """Ctrl+E / the top-bar copy button: write the edits into the quick-copy
-        folder as a fresh, numbered file. Returns True if written.
+        """Ctrl+E / the top-bar copy button: write the edits as a fresh, numbered
+        file into a subfolder beside the current photo — the Export output folder
+        (<image folder>/_edited by default). No dialog, no picker: the destination
+        simply follows the photo, so a copy always lands next to its source.
+        Returns True if written.
 
         This is the overwrite save without the overwrite — same precondition (no
         edits means there is nothing to save, so nothing is written), but the
@@ -254,10 +243,8 @@ class SaveMixin:
         if not self._has_any_edits():
             self.toast(t("No edits to save"))
             return False
-        dest = self._quick_copy_dir()
-        if not dest:
-            return False                   # unset, and the user cancelled the picker
-        out = self._write_save(self._copy_cfg(dest), self._save_basename())
+        out = self._write_save(self._copy_cfg(self._default_export_dir()),
+                               self._save_basename())
         if not out:
             return False
         self.toast(t("Copy saved → {name}").format(name=os.path.basename(out)))

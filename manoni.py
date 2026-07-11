@@ -328,10 +328,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         self.export_dir_mode = "subfolder"
         self.export_subfolder = "_edited"   # subfolder name (mode "subfolder")
         self.export_fixed_dir = ""          # absolute folder (mode "fixed")
-        # Quick copy (Ctrl+E): one folder every "save a copy" lands in, chosen
-        # once. Deliberately its OWN setting — the culling / Save-as export dirs
-        # above answer a different question and must stay free to differ.
-        self.quick_copy_dir = ""            # absolute folder; "" = not set yet
         # Crop tool: a non-destructive selection drawn over the preview, stored in
         # SOURCE-image pixels so it stays anchored through zoom/pan. None = no box.
         self.crop_rect = None         # [x0, y0, x1, y1] in source px, or None
@@ -645,8 +641,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         state["export_subfolder"] = self.export_subfolder
         if self.export_fixed_dir:
             state["export_fixed_dir"] = self.export_fixed_dir
-        if self.quick_copy_dir:
-            state["quick_copy_dir"] = self.quick_copy_dir   # Ctrl+E destination
         if self.crop_sizes:
             state["crop_sizes"] = self.crop_sizes    # user's saved crop sizes
         if self.folder:
@@ -720,12 +714,14 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         lang = state.get("language")
         if isinstance(lang, str):
             i18n.set_language(lang)
-        # Save-as dialog defaults (folder/format/quality/metadata), remembered
-        # across sessions so the dialog reopens the way you last left it.
+        # Save-as dialog defaults (format/quality/metadata), remembered across
+        # sessions so the dialog reopens the way you last left it. The output
+        # FOLDER is deliberately NOT restored — a new session always defaults to
+        # the current photo's folder (via _default_export_dir), never wherever the
+        # last save happened to land. Within a session it still remembers.
         ls = state.get("last_save")
-        if isinstance(ls, dict) and isinstance(ls.get("dir"), str) \
-                and ls.get("fmt") in ("JPEG", "PNG", "WEBP"):
-            self.last_save = {"dir": ls["dir"], "fmt": ls["fmt"],
+        if isinstance(ls, dict) and ls.get("fmt") in ("JPEG", "PNG", "WEBP"):
+            self.last_save = {"dir": "", "fmt": ls["fmt"],
                               "quality": int(ls.get("quality", 95)),
                               "keep_meta": bool(ls.get("keep_meta", True)),
                               "to_srgb": bool(ls.get("to_srgb", False))}
@@ -751,9 +747,6 @@ class Manoni(ChromeMixin, EditPanelMixin, SaveMixin, BrowserMixin,
         efd = state.get("export_fixed_dir")
         if isinstance(efd, str):
             self.export_fixed_dir = efd
-        qcd = state.get("quick_copy_dir")
-        if isinstance(qcd, str):
-            self.quick_copy_dir = qcd
         # User's saved custom crop sizes. Keep only well-formed {name,w,h} with
         # positive dimensions, so a hand-edited state file can't break the panel.
         cs = state.get("crop_sizes")
