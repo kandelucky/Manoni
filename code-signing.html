@@ -108,18 +108,21 @@
     </div>
 
     <h2>What you can verify</h2>
-    <p>Every release is built on GitHub's servers from the public source, so the
-    installer you download is not something I could have quietly altered on my own
-    machine. You can open the build that produced your exact file, read the workflow
-    that made it, and read every line of source that went into it.</p>
+    <p>The installer is built on GitHub's servers from the public source, so it is not
+    something I could have quietly altered on my own machine. You can open the build
+    that produced your exact file, read the workflow that made it, and read every line
+    of source that went into it.</p>
 
     <h2>How releases are built</h2>
-    <p>Every release of Manoni is compiled from the public source code in the
-    <a href="https://github.com/kandelucky/Manoni">GitHub repository</a> by an automated
-    <a href="https://github.com/kandelucky/Manoni/actions">GitHub Actions build</a> —
-    not on a private machine. The workflow file
+    <p>Every release <b>from 1.2.0 onward</b> is compiled from the public source code in
+    the <a href="https://github.com/kandelucky/Manoni">GitHub repository</a> by an
+    automated <a href="https://github.com/kandelucky/Manoni/actions">GitHub Actions
+    build</a> — not on a private machine. The workflow file
     (<code>.github/workflows/build.yml</code>) is part of the repository, so anyone can
     see exactly how the executable and the installer are produced.</p>
+    <p>Two older releases, <b>0.9 and 1.1.0</b>, are still on the releases page and
+    predate that workflow — they were built by hand on my own machine. They are left up
+    for history; download the current release instead.</p>
 
     <h2>Team &amp; roles</h2>
     <p>Manoni is developed and maintained by a single person:</p>

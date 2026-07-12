@@ -333,9 +333,9 @@
       </div>
       <div class="tools reveal">
         <button class="tool" type="button" data-tool="basic"><div class="ic"><img src="assets/readme/sliders-horizontal.png" alt=""></div><h3>Basic</h3><p>White balance, tone, and detail — clarity, texture, denoise, dehaze, sharpen — plus vibrance and saturation.</p><span class="more">Details →</span></button>
-        <button class="tool" type="button" data-tool="color"><div class="ic"><img src="assets/readme/palette.png" alt=""></div><h3>Color mixer</h3><p>Per-hue HSL bands, plus dedicated gold and skin mini-HSLs so only that material moves.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="color"><div class="ic"><img src="assets/readme/palette.png" alt=""></div><h3>Color mixer</h3><p>Eight per-hue saturation bands, plus dedicated gold and skin mini-HSLs so only that material moves.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="effects"><div class="ic"><img src="assets/readme/wand-sparkles.png" alt=""></div><h3>Effects</h3><p>Vignette, grain and split-tone for finishing a look.</p><span class="more">Details →</span></button>
-        <button class="tool" type="button" data-tool="filters"><div class="ic"><img src="assets/readme/blend.png" alt=""></div><h3>Filters</h3><p>Saved slider presets, previewed live on the current photo in a clickable strip.</p><span class="more">Details →</span></button>
+        <button class="tool" type="button" data-tool="filters"><div class="ic"><img src="assets/readme/blend.png" alt=""></div><h3>Filters</h3><p>Saved slider presets, each previewed on a reference photo in a clickable strip.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="crop"><div class="ic"><img src="assets/readme/crop.png" alt=""></div><h3>Crop</h3><p>Trim, straighten a tilted horizon, rotate and flip — with ratio and social presets.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="resize"><div class="ic"><img src="assets/readme/scaling.png" alt=""></div><h3>Resize</h3><p>Resize one photo, or every photo in a folder and its subfolders in one batch.</p><span class="more">Details →</span></button>
         <button class="tool" type="button" data-tool="perspective"><div class="ic"><img src="assets/readme/frame.png" alt=""></div><h3>Perspective</h3><p>Fix keystoning and straighten converging lines.</p><span class="more">Details →</span></button>
@@ -460,14 +460,15 @@
         <div class="q" id="safe">
           <h3>How do I know it's safe?<a class="permalink" href="#safe" aria-label="Link to this answer">#</a></h3>
           <p>Don't trust me. Check.</p>
-          <p class="tight">Every release is built <b>on GitHub's servers from the public source</b> — not on my machine, where I could have quietly slipped something in. You can open the <a href="https://github.com/kandelucky/Manoni/actions">build that produced your exact file</a>, read the <a href="https://github.com/kandelucky/Manoni/blob/main/.github/workflows/build.yml">workflow</a> that made it, and read <a href="https://github.com/kandelucky/Manoni">every line of source</a> that went into it.</p>
-          <p>Or skip all of that and build it yourself: Python 3.14, <code>pip install -r requirements.txt</code>, run it. No compilation step, no binary blobs. <a href="code-signing.html">More on how releases are built →</a></p>
+          <p class="tight">Every release from <b>1.2.0 onward</b> is built <b>on GitHub's servers from the public source</b> — not on my machine, where I could have quietly slipped something in. You can open the <a href="https://github.com/kandelucky/Manoni/actions">build that produced your exact file</a>, read the <a href="https://github.com/kandelucky/Manoni/blob/main/.github/workflows/build.yml">workflow</a> that made it, and read <a href="https://github.com/kandelucky/Manoni">every line of source</a> that went into it. (The two oldest releases still on the page, 0.9 and 1.1.0, predate that workflow and were built by hand. Take the current one.)</p>
+          <p>Or skip all of that and build it yourself: Python 3.14, <code>pip install -r requirements.txt</code>, run it. Manoni's own code is pure Python — no compilation step. One dependency, <code>tkinterdnd2</code>, does ship a compiled Tcl extension for drag &amp; drop; if that bothers you, it's the one piece to look at. <a href="code-signing.html">More on how releases are built →</a></p>
         </div>
 
         <div class="q" id="privacy">
           <h3>Does it phone home?<a class="permalink" href="#privacy" aria-label="Link to this answer">#</a></h3>
           <p>No telemetry, no analytics, no account, no ads.</p>
-          <p>Manoni makes exactly <b>one</b> network request in its entire life, and only if you click <b>Settings → About → Check for updates</b>: it asks GitHub what the latest release number is and compares it to yours. It does not check at launch, it does not check in the background, and it sends nothing about you or your photos. Never click it, and Manoni never touches the network.</p>
+          <p>Manoni sends exactly <b>one</b> request to the internet in its entire life, and only if you click <b>Settings → About → Check for updates</b>: it asks GitHub what the latest release number is and compares it to yours. It does not check at launch, it does not check in the background, and it sends nothing about you or your photos.</p>
+          <p>One honest footnote: at launch Manoni opens a socket on <code>127.0.0.1</code> — your own machine, talking to itself — so that opening a second photo reuses the window you already have instead of starting a second copy. It listens on loopback only. Nothing goes out.</p>
         </div>
 
         <div class="q" id="free">
@@ -495,7 +496,8 @@
 
         <div class="q" id="catalog">
           <h3>Do I need to manage a catalog or a library?<a class="permalink" href="#catalog" aria-label="Link to this answer">#</a></h3>
-          <p>No. No catalog, no database, no import step, no sidecar files scattered next to your photos. You point Manoni at a folder and it shows you the folder. Close it and nothing is left behind except your settings, in <code>%APPDATA%\Manoni</code>.</p>
+          <p>No catalog to build, no import step, and no sidecar files scattered next to your photos. You point Manoni at a folder and it shows you the folder.</p>
+          <p>To be exact, because "no database" would be a lie: Manoni keeps one SQLite file — a <b>thumbnail cache</b>, in <code>%LOCALAPPDATA%\Manoni\Cache</code> — so a folder you've opened before comes back instantly. It holds thumbnails, not a record of your library; it never sits next to your photos; and you can delete it any time at the cost of one slower redraw.</p>
           <p>This is the deliberate difference from Lightroom. The catalog is what makes Lightroom powerful — and it's also what makes it heavy.</p>
         </div>
 
@@ -508,14 +510,14 @@
         <div class="q" id="lightroom">
           <h3>Is this a Lightroom replacement?<a class="permalink" href="#lightroom" aria-label="Link to this answer">#</a></h3>
           <p>For a lot of people, honestly, yes. For some, honestly, no.</p>
-          <p><b>What it does:</b> cull a folder fast with two keys · tone and colour, including an 8-band colour mixer with dedicated skin and gold controls · remove a blemish or a stray object · crop, straighten, mirror, fix keystoning · one-click filters you can save yourself · resize a whole folder, subfolders included · strip GPS and camera data before you post · text and logo watermarks, on one photo or a whole folder.</p>
-          <p><b>What it doesn't:</b> RAW, tethering, printing, HDR merge, panorama stitching, local masks beyond the retouch brush — and there's no catalog. If you need those, you need Lightroom, and I'd tell you so.</p>
+          <p><b>What it does:</b> cull a folder fast with two keys · tone and colour, including an 8-band colour mixer with dedicated skin and gold controls · remove a blemish or a stray object · crop, straighten, mirror, fix keystoning · one-click filters you can save yourself · text and logo watermarks · strip GPS and camera data before you post · resize a whole folder, subfolders included · record your slider, filter and crop edits as a macro and replay it over a whole folder.</p>
+          <p><b>What it doesn't:</b> RAW, tethering, printing, HDR merge, panorama stitching, local masks beyond the retouch brush — and there's no catalog. Batch work covers resizing and the recorded edits above; it does <b>not</b> stamp a watermark across a folder for you. If you need what's missing, you need Lightroom, and I'd tell you so.</p>
         </div>
 
         <div class="q" id="oldlaptop">
           <h3>Will it run on my old laptop?<a class="permalink" href="#oldlaptop" aria-label="Link to this answer">#</a></h3>
           <p>That's the entire reason it exists. Manoni is Python, Tkinter and Pillow — no GPU requirement, no .NET, no Electron, no Chromium. It opens in about a second on the nine-year-old machine I wrote it on.</p>
-          <p>The heavy effects (denoise, clarity, texture, grain) are the only slow ones, and Manoni marks them with a coloured dot so you know which sliders cost you. Leave them alone and everything stays instant.</p>
+          <p>Some effects genuinely are slow, so Manoni puts a <b>coloured dot</b> next to the sliders that cost you — denoise and grain are the heaviest, then sharpen, vignette, and the colour-mixer bands. Leave the dotted ones alone and everything stays instant.</p>
         </div>
 
         <div class="q" id="platform">
@@ -525,13 +527,13 @@
 
         <div class="q" id="install">
           <h3>How do I install and uninstall it?<a class="permalink" href="#install" aria-label="Link to this answer">#</a></h3>
-          <p>Download the <code>Setup.exe</code> from the <a href="https://github.com/kandelucky/Manoni/releases">releases page</a> and run it (see <a href="#smartscreen">the SmartScreen answer</a>). It installs per-user — no admin rights needed.</p>
-          <p>To uninstall: Settings → Apps, like anything else. Your photos are never in the install folder, so nothing of yours goes with it. Your settings stay in <code>%APPDATA%\Manoni</code> — delete that folder too if you want no trace left.</p>
+          <p>Download the <code>Setup.exe</code> from the <a href="https://github.com/kandelucky/Manoni/releases">releases page</a> and run it (see <a href="#smartscreen">the SmartScreen answer</a>). It installs into Program Files, so Windows will ask you for <b>administrator rights</b>.</p>
+          <p>To uninstall: Settings → Apps, like anything else. Your photos are never in the install folder, so nothing of yours leaves with it. Two things stay behind on purpose, and both are safe to delete by hand: your settings in <code>%APPDATA%\Manoni</code>, and a thumbnail cache in <code>%LOCALAPPDATA%\Manoni\Cache</code>.</p>
         </div>
 
         <div class="q" id="language">
           <h3>Can I get it in my language?<a class="permalink" href="#language" aria-label="Link to this answer">#</a></h3>
-          <p>It ships in <b>English and Polish</b>. Any other language is a JSON file: open <b>Settings → Language → Add your language</b>, and Manoni generates a template with every string in the app for you to fill in.</p>
+          <p>It ships in <b>English and Polish</b>. Any other language is a JSON file: open <b>Settings → General → Add your language</b>, and Manoni generates a template with every string in the app for you to fill in.</p>
           <p>Translate one and send it, and it ships with the next release with your name on it. <a href="https://github.com/kandelucky/Manoni/discussions/categories/language-packs">Georgian is already on the board</a>.</p>
         </div>
 
@@ -588,16 +590,16 @@
     basic:{icon:IC+'sliders-horizontal.png',title:'Basic',body:
       '<p>White balance, tone and detail on one panel — the everyday adjustments you reach for on almost every photo.</p>'+
       '<h4>What it does</h4><ul>'+
-      '<li><b>White balance</b> — temperature and tint, or pick a neutral to set it.</li>'+
+      '<li><b>White balance</b> — temperature and tint sliders.</li>'+
       '<li><b>Tone</b> — exposure, contrast, highlights, shadows, whites and blacks.</li>'+
       '<li><b>Detail</b> — clarity, texture, denoise, dehaze and sharpen.</li>'+
       '<li><b>Colour</b> — vibrance and saturation.</li></ul>'},
     color:{icon:IC+'palette.png',title:'Color mixer',body:
-      '<p>A full HSL mixer that moves one colour without dragging the rest with it.</p>'+
+      '<p>Move one colour without dragging the rest with it.</p>'+
       '<h4>What it does</h4><ul>'+
-      '<li><b>Eight per-hue bands</b> — shift the saturation of each colour family on its own.</li>'+
-      '<li><b>Gold &amp; skin mini-HSLs</b> — dedicated controls for the two tones that matter most.</li>'+
-      '<li>Each band is <b>gated by hue and saturation</b>, so only that material moves — skin stays put when you push the golds.</li></ul>'},
+      '<li><b>Eight per-hue saturation bands</b> — red, orange, yellow, green, aqua, blue, purple, magenta. Each one lifts or drops the saturation of that colour family alone, keyed off hue.</li>'+
+      '<li><b>Gold &amp; skin mini-HSLs</b> — the two tones that matter most get the full set: hue, saturation and lightness.</li>'+
+      '<li>Gold and skin are gated by <b>hue and saturation</b> together, so only that material moves — skin stays put when you push the golds.</li></ul>'},
     effects:{icon:IC+'wand-sparkles.png',title:'Effects',body:
       '<p>Finishing touches that give a photo its final character.</p>'+
       '<h4>What it does</h4><ul>'+
@@ -650,15 +652,16 @@
     filters:{icon:IC+'blend.png',title:'Filters',body:
       '<p>A filter is a <b>saved slider preset</b> — one click applies the whole look at once.</p>'+
       '<h4>What it does</h4><ul>'+
-      '<li><b>One-click looks</b> — the strip of previews under the photo shows each filter on the current photo; click one to apply it.</li>'+
+      '<li><b>One-click looks</b> — the strip under the photo previews every filter on the <b>same reference shot</b>, on purpose: a look reads the same way whatever you happen to have open, so you can compare them at a glance. Click one and it applies to your photo.</li>'+
       '<li><b>The “Last” slot</b> — the moment you save a photo, its edit is pinned as “Last”, so you can apply the same look to the next shot with no saving. It lasts for the session; its … menu can make it a permanent filter or clear it.</li>'+
       '<li><b>Make your own</b> — dial in an edit you like and save it as a filter; rename, reorder or delete from the Filters panel.</li>'+
       '<li><b>Share a group</b> — a group’s … menu exports it to a small <b>.mnf</b> file; a friend loads it from the Import button atop the panel. Sharing works per group, not per single filter.</li></ul>'},
     actions:{icon:IC+'circle-play.png',title:'Actions',body:
       '<p>Record a sequence of edits once, then replay it anywhere.</p>'+
       '<h4>What it does</h4><ul>'+
-      '<li><b>Record</b> a macro of your steps as you work.</li>'+
-      '<li><b>Replay</b> it on the current photo — or the <b>whole folder</b> as a batch.</li></ul>'}
+      '<li><b>Record</b> your slider, filter and focus edits, plus a crop, as you work. Crops replay proportionally, so an action recorded on one photo lands correctly on a photo of a different size.</li>'+
+      '<li><b>Replay</b> it on the current photo — or the <b>whole folder</b> as a batch.</li>'+
+      '<li>What it does <b>not</b> record: retouch strokes, text, logos, rotate / straighten and perspective. A retouch is tied to the pixels under it, so it cannot be meaningfully replayed on a different photo.</li></ul>'}
   };
   var modal=document.getElementById('modal');
   var mic=document.getElementById('mic'), mtitle=document.getElementById('mtitle'), mbody=document.getElementById('mbody');
