@@ -71,5 +71,36 @@ Root: HKA; Subkey: "Software\Classes\Manoni.Language"; ValueType: string; ValueN
 Root: HKA; Subkey: "Software\Classes\Manoni.Language\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\mnl.ico"
 Root: HKA; Subkey: "Software\Classes\Manoni.Language\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
 
+; --- Photos: "Open with Manoni" -------------------------------------------
+; Manoni is registered as an application that CAN open photos — it does not take
+; the association. Whatever opens your .jpg today still opens it tomorrow; Manoni
+; simply appears in the Open-with list, and the app already handles being handed a
+; file path (manoni.py, single-instance forwarding included).
+;
+; Two keys do the work. SupportedTypes is what makes Manoni offer itself for these
+; types in "Choose another app"; OpenWithList is what puts it in the right-click
+; Open-with menu directly. FriendlyAppName is the name Windows shows there —
+; without it the list reads "Manoni.exe".
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+; The formats Manoni actually opens — keep in step with config.SUPPORTED.
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".jpg";  ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".jpeg"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".png";  ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".webp"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".bmp";  ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".gif";  ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".tif";  ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".tiff"; ValueData: ""
+; Offer Manoni in each type's Open-with menu (uninsdeletekey removes only OUR entry).
+Root: HKA; Subkey: "Software\Classes\.jpg\OpenWithList\{#AppExe}";  Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.jpeg\OpenWithList\{#AppExe}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.png\OpenWithList\{#AppExe}";  Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.webp\OpenWithList\{#AppExe}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.bmp\OpenWithList\{#AppExe}";  Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.gif\OpenWithList\{#AppExe}";  Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.tif\OpenWithList\{#AppExe}";  Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\.tiff\OpenWithList\{#AppExe}"; Flags: uninsdeletekey
+
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
