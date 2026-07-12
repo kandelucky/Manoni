@@ -41,18 +41,24 @@ You'll feel at home if you:
 - shoot in **volume** and need to sort keepers from rejects quickly;
 - want **real edits** — tone, colour, crop, heal, filters — without a heavy install;
 - work on a **weak or old laptop** and want it to stay fast;
-- care that your **originals stay untouched** — culling only *moves* files, and edits
-  go to exported copies unless you deliberately reach for Overwrite.
+- care that your **originals stay untouched** — edits go to exported copies, and the
+  three ways to change an original (Overwrite, wiping its metadata, and the delete in
+  the thumbnail menu) each ask you first.
 
 ---
 
 ## Run
 
 **Most people — install it.** Download the **Windows installer**
-(`Manoni-Setup.exe`) from the
+(`Manoni-<version>-Setup.exe`) from the
 [Releases page](https://github.com/kandelucky/Manoni/releases/latest), run it,
-and launch Manoni from the Start menu. No Python needed — and it registers
-`.mnf` / `.mnl` files so a double-click opens them in Manoni.
+and launch Manoni from the Start menu. No Python needed. It installs into Program
+Files, so Windows asks for administrator rights. Manoni is not code-signed yet, so
+SmartScreen will warn you first — [here's why, and what you can check instead](https://kandelucky.github.io/Manoni#smartscreen).
+
+The installer registers `.mnf` / `.mnl` files so a double-click opens them in Manoni,
+and adds Manoni to the **Open with** menu for photos — without taking the association,
+so whatever opens your `.jpg` today still opens it tomorrow.
 
 Manoni never phones home on its own. **Settings → About → Check for updates** asks
 GitHub for the latest release only when you click it.
@@ -69,8 +75,12 @@ python -m venv .venv
 .venv\Scripts\python manoni.py "C:\path\to\photos"
 ```
 
-- Requires Python 3.14.
-- The only dependency is **Pillow**. `tkinter` ships with Python.
+- Developed on Python 3.14. There is no version gate in the code, but older versions
+  are untested.
+- Three dependencies, all in `requirements.txt`: **Pillow** (imaging), **tintkit** (the
+  widget kit), and **tkinterdnd2** (drag & drop — the only one that is optional; without
+  it Manoni starts fine and simply won't accept dropped files). `tkinter` ships with
+  Python.
 
 ---
 
@@ -82,8 +92,10 @@ thumbnail, or walk the strip with the **arrow keys** — <kbd>←</kbd> / <kbd>�
 back, <kbd>→</kbd> / <kbd>↓</kbd> forward. <kbd>Enter</kbd> keeps the photo and
 <kbd>Backspace</kbd> rejects it, each into a configurable **keep** / **reject**
 folder. Info bar (name, size, date), before/after compare, and your session is
-restored on the next launch. Nothing is deleted — culling only *moves* files, and
-<kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes any move.
+restored on the next launch. Culling never deletes — it only *moves* files, and
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes any move. (A thumbnail's right-click menu does
+offer a permanent delete, behind a confirm. It is the one thing in Manoni you cannot
+undo, and it is the only way a photo leaves your disk.)
 
 ---
 
@@ -94,7 +106,7 @@ A tool rail on the right — click a tool to open its panel.
 | | Tool | What it does |
 |:--:|---|---|
 | <img src="assets/readme/sliders-horizontal.png" width="22" alt=""> | **Basic** | White balance · tone (highlights / shadows / whites / blacks) · detail (clarity / texture / denoise / dehaze / sharpen) · colour (vibrance / saturation) |
-| <img src="assets/readme/palette.png" width="22" alt=""> | **Color mixer** | Per-hue HSL bands, plus dedicated gold & skin mini-HSLs |
+| <img src="assets/readme/palette.png" width="22" alt=""> | **Color mixer** | Eight per-hue saturation bands, plus dedicated gold & skin mini-HSLs (hue, saturation and lightness) |
 | <img src="assets/readme/wand-sparkles.png" width="22" alt=""> | **Effects** | Vignette · grain · split-tone |
 | <img src="assets/readme/crop.png" width="22" alt=""> | **Crop** | Trim, straighten a tilted horizon (±45°), rotate 90°, flip H / V — with ratio and social presets |
 | <img src="assets/readme/scaling.png" width="22" alt=""> | **Resize** | Resize one photo, or every photo in a folder and its subfolders in one batch |
@@ -144,20 +156,21 @@ Three ways to save, at full resolution. **Only the first one replaces a file.**
 file**. There is no backup, so it asks you to confirm — the one save that alters
 an original.
 
-<img src="assets/readme/folder-output.png" width="18" alt=""> **Save a copy**
+<img src="assets/readme/copy-plus.png" width="18" alt=""> **Save a copy**
 (<kbd>Ctrl</kbd>+<kbd>E</kbd>) drops the same edits into a **subfolder beside the
 photo** (`_edited/` by default) as a new, numbered file — no dialog, no folder to
 pick. Neither the original nor an earlier copy is replaced; a second copy of the
-same photo lands beside the first. Set the subfolder in **Settings → Export**.
+same photo lands beside the first. Set the subfolder in **Settings → Export** — or
+point that setting at one fixed folder, and every copy lands there instead.
 
 <img src="assets/readme/save-all.png" width="18" alt=""> **Save as…**
 (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) opens a dialog — pick the format
 (JPEG / PNG / WEBP), quality and folder, either an `_edited/` subfolder or one
 fixed folder. The original is left untouched.
 
-For every save, metadata (camera info, date, GPS, colour profile) is kept or
-stripped per your choice, and colours can be **converted to sRGB** so a wide-gamut
-photo still looks right on the web.
+For every save — Overwrite included — metadata (camera info, date, GPS, colour
+profile) is kept or stripped per your choice in **Settings → Export**, and colours
+can be **converted to sRGB** so a wide-gamut photo still looks right on the web.
 
 <img src="assets/readme/circle-help.png" width="18" alt=""> An **info** button in
 the top bar shows a photo's full metadata — camera, capture, colour profile and
@@ -211,11 +224,14 @@ pack — or grab someone else's — on the same board.
   `.mnl`; opening or dropping one on the window imports it.
 - [x] **Register the file types with Windows** — double-click a `.mnf` / `.mnl`
   opens Manoni, with their own file icons *(in the installer)*.
-- [x] **Windows installer** — single-instance, "Open with Manoni", drag & drop, a
-  PyInstaller build and an Inno Setup installer *(ships as Setup.exe)*.
+- [x] **Windows installer** — single-instance, drag & drop, a PyInstaller build and
+  an Inno Setup installer *(ships as Setup.exe)*.
+- [x] **"Open with Manoni"** — the installer adds Manoni to the Open-with menu for
+  the photo formats it can open, without taking the association from whatever you
+  use today.
 - [x] **Community sharing** — a
   [Discussions board](https://github.com/kandelucky/Manoni/discussions) for
-  swapping language packs and filter groups, with a how-to pinned in each category.
+  swapping language packs and filter groups, with a how-to in each category.
 - [ ] **In-app sharing** — share / receive buttons inside Manoni, so you can
   publish or grab a pack without leaving the app.
 - [ ] **RAW support** — an optional add-on (installer tick-box or on-demand
