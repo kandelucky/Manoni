@@ -201,11 +201,12 @@ class NavMixin:
         a self._tw-threaded Toplevel (follows dark<->light), DPI-scaled padding,
         centered with keyboard nav.
 
-        `buttons` is a list of (key, label, role) in VISUAL left-to-right order,
-        the primary first; they pack right-to-left so the primary sits leftmost and
-        Cancel rightmost (the house order), and Enter fires the primary. `checkbox`
-        is an optional (label, key) tick. Returns (choice_key, checkbox_on);
-        closing / Escape gives ("cancel", False), so pass a "cancel" button."""
+        `buttons` is a list of (key, label, role) — or (key, label, role, icon) to
+        put an icon on it — in VISUAL left-to-right order, the primary first; they
+        pack right-to-left so the primary sits leftmost and Cancel rightmost (the
+        house order), and Enter fires the primary. `checkbox` is an optional
+        (label, key) tick. Returns (choice_key, checkbox_on); closing / Escape
+        gives ("cancel", False), so pass a "cancel" button."""
         state = {"choice": "cancel", "chk": False}
         dlg = self._tw(tk.Toplevel(self.root), bg="bg")
         dlg.title(title)
@@ -238,8 +239,10 @@ class NavMixin:
 
         row = self._tw(tk.Frame(wrap), bg="bg")
         row.pack(anchor="e", pady=(self._edit_dpi_w(16), 0))
-        for key, label, role in reversed(buttons):     # cancel packs first → rightmost
-            tintkit.Button(row, self.theme, label, role=role,
+        for spec in reversed(buttons):             # cancel packs first → rightmost
+            key, label, role = spec[0], spec[1], spec[2]
+            icon = spec[3] if len(spec) > 3 else None      # optional 4th element
+            tintkit.Button(row, self.theme, label, role=role, icon=icon,
                            variant="filled" if role == "primary" else "outline",
                            command=lambda k=key: choose(k), bg="bg").pack(
                 side="right", padx=(self._edit_dpi_w(8), 0))
@@ -303,17 +306,20 @@ class NavMixin:
         return choice
 
     def _ask_overwrite(self, fname):
-        """Ask what Ctrl+S should do: overwrite the original in place, save a copy
-        instead (Save as…), or cancel. Returns 'overwrite', 'saveas' or 'cancel'.
-        A 'Don't ask again' tick — only meaningful for Overwrite — turns the
-        confirmation off for good (persisted)."""
+        """Ask what Ctrl+S should do. All three saves are offered here, so the way
+        out of an overwrite is one click rather than a remembered shortcut: keep the
+        original and drop a quick copy beside it ('copy'), overwrite it in place
+        ('overwrite'), pick format/name/folder ('saveas'), or 'cancel'. A "Don't ask
+        again" tick — only meaningful for Overwrite — turns the confirmation off for
+        good (persisted)."""
         choice, dont = self._confirm_dialog(
             t("Overwrite the original?"),
             t("Write your edits straight onto {fname}, replacing it — no backup, "
               "can't be undone. Or save a copy instead.").format(fname=fname),
-            [("overwrite", t("Overwrite"), "primary"),
-             ("saveas", t("Save as…"), "neutral"),
-             ("cancel", t("Cancel"), "neutral")],
+            [("overwrite", t("Overwrite"), "primary", "save"),
+             ("copy", t("Save a copy"), "neutral", "copy-plus"),
+             ("saveas", t("Save as…"), "neutral", "save-all"),
+             ("cancel", t("Cancel"), "neutral", "x")],
             checkbox=(t("Don't ask again"), "dont"), width=380)
         if choice == "overwrite" and dont:
             self.confirm_overwrite = False       # honoured next time; persist it now

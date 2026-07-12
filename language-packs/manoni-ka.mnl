@@ -695,7 +695,8 @@
     "Your logos": "შენი ლოგოები",
     "Ctrl+E (or the copy button in the top bar) saves the same edits as a NEW, numbered file in a subfolder beside the photo — no dialog, and neither the original nor an earlier copy is replaced. Set the subfolder in Settings → Export.": "Ctrl+E (ან ზედა ზოლის ასლის ღილაკი) იმავე ცვლილებებს ახალ, დანომრილ ფაილად შეინახავს ფოტოს გვერდით ქვესაქაღალდეში — დიალოგის გარეშე; არც ორიგინალი და არც ადრინდელი ასლი იცვლება. ქვესაქაღალდე მიუთითე: პარამეტრები → ექსპორტი.",
     "Ctrl+E and the copy button also save here — a new, numbered file next to the photo. The original is never touched, and an earlier copy is never replaced.": "Ctrl+E და ასლის ღილაკიც აქ ინახავს — ახალ, დანომრილ ფაილს ფოტოს გვერდით. ორიგინალს არ ეხება და ადრინდელ ასლს არ ცვლის.",
-    "Save a copy — a numbered file in a subfolder beside the photo (Ctrl+E)": "ასლის შენახვა — დანომრილი ფაილი ფოტოს გვერდით ქვესაქაღალდეში (Ctrl+E)",
-    "Save a copy — a numbered file in a subfolder beside the photo.": "ასლის შენახვა — დანომრილი ფაილი ფოტოს გვერდით ქვესაქაღალდეში."
+    "Save a copy — a numbered file in a subfolder beside the photo.": "ასლის შენახვა — დანომრილი ფაილი ფოტოს გვერდით ქვესაქაღალდეში.",
+    "Quick copy — in the same folder as the photo (Ctrl+E)": "სწრაფი ასლი — იმავე საქაღალდეში, სადაც სურათია (Ctrl+E)",
+    "Save a copy": "ასლის შენახვა"
   }
 }

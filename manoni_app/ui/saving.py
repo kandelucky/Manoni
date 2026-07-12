@@ -189,9 +189,13 @@ class SaveMixin:
             self.toast(t("Can't overwrite this file type — use Save as…"))
             return self._save_as_dialog()
         if getattr(self, "confirm_overwrite", True):
-            choice = self._ask_overwrite(fname)    # Overwrite / Save as… / Cancel
+            # Overwrite / Save a copy / Save as… / Cancel — the other two saves are
+            # offered right here, so declining an overwrite still saves the work.
+            choice = self._ask_overwrite(fname)
             if choice == "cancel":
                 return False
+            if choice == "copy":
+                return self.quick_copy_save()      # numbered copy beside the photo
             if choice == "saveas":
                 return self._save_as_dialog()      # write a copy instead
         if not self._write_overwrite(target):

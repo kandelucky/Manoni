@@ -695,7 +695,8 @@
     "Your logos": "Twoje logo",
     "Ctrl+E (or the copy button in the top bar) saves the same edits as a NEW, numbered file in a subfolder beside the photo — no dialog, and neither the original nor an earlier copy is replaced. Set the subfolder in Settings → Export.": "Ctrl+E (lub przycisk kopii na górnym pasku) zapisuje te same zmiany jako NOWY, numerowany plik w podfolderze obok zdjęcia — bez okna dialogowego; ani oryginał, ani wcześniejsza kopia nie zostaje zastąpiona. Podfolder ustawisz w Ustawienia → Eksport.",
     "Ctrl+E and the copy button also save here — a new, numbered file next to the photo. The original is never touched, and an earlier copy is never replaced.": "Ctrl+E i przycisk kopii również zapisują tutaj — nowy, numerowany plik obok zdjęcia. Oryginał pozostaje nietknięty, a wcześniejsza kopia nigdy nie zostaje zastąpiona.",
-    "Save a copy — a numbered file in a subfolder beside the photo (Ctrl+E)": "Zapisz kopię — numerowany plik w podfolderze obok zdjęcia (Ctrl+E)",
-    "Save a copy — a numbered file in a subfolder beside the photo.": "Zapisz kopię — numerowany plik w podfolderze obok zdjęcia."
+    "Save a copy — a numbered file in a subfolder beside the photo.": "Zapisz kopię — numerowany plik w podfolderze obok zdjęcia.",
+    "Quick copy — in the same folder as the photo (Ctrl+E)": "Szybka kopia — w tym samym folderze co zdjęcie (Ctrl+E)",
+    "Save a copy": "Zapisz kopię"
   }
 }

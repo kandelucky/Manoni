@@ -468,17 +468,20 @@ class ChromeMixin:
         left.pack(side="left", padx=8)
         self._tool_button(left, "folder-open", self.open_folder,
                           t("Open folder")).pack(side="left", padx=4, pady=8)
-        # The three saves sit next to Open — all file operations, one click away,
-        # ordered by how much they ask of you. Save overwrites the open file in
-        # place (Ctrl+S); Save a copy drops a numbered file into a subfolder
-        # beside the photo without a dialog (Ctrl+E); Save as… opens the full copy
-        # dialog (Ctrl+Shift+S). Distinct icons so the three don't read as one.
+        # A separator sets Open apart from the saves: opening a folder READS, the
+        # three that follow WRITE. Same treatment (and spacing) as the one before
+        # the view toggles, so the bar reads as groups rather than a row of icons.
+        self._sep(left).pack(side="left", fill="y", padx=18, pady=10)
+        # The three saves, ordered by how much they ask of you. Save overwrites the
+        # open file in place (Ctrl+S); Save a copy drops a numbered file into a
+        # subfolder beside the photo without a dialog (Ctrl+E); Save as… opens the
+        # full copy dialog (Ctrl+Shift+S). Distinct icons so they don't read as one.
         self._tool_button(left, "save", self.overwrite_save,
                           t("Save — overwrite the original (Ctrl+S)")).pack(
                               side="left", padx=4, pady=8)
-        self._tool_button(left, "folder-output", self.quick_copy_save,
-                          t("Save a copy — a numbered file in a subfolder beside "
-                            "the photo (Ctrl+E)")).pack(
+        self._tool_button(left, "copy-plus", self.quick_copy_save,
+                          t("Quick copy — in the same folder as the photo "
+                            "(Ctrl+E)")).pack(
                               side="left", padx=4, pady=8)
         self._tool_button(left, "save-all", self._save_as_dialog,
                           t("Save as… — a new copy (Ctrl+Shift+S)")).pack(
