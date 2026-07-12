@@ -579,6 +579,48 @@ def overwrite_writes_in_place_never_a_copy():
 
 
 @check
+def overwrite_obeys_the_strip_metadata_setting():
+    """Ctrl+S must honour Settings → Export → "Keep metadata", like the copy saves.
+
+    It used to call _export_meta() unconditionally, so a user who had ticked
+    "strip metadata" and pressed Ctrl+S wrote their GPS coordinates straight back
+    into the file. A privacy bug, and it made the README's "for every save …
+    per your choice" a lie. Both directions are asserted: strip when asked, and —
+    just as important — keep when asked, so a fix in one direction can't quietly
+    break the other."""
+    import tempfile
+
+    def overwrite_with(keep_meta):
+        d = tempfile.mkdtemp()
+        target = os.path.join(d, "photo.jpg")
+        img = Image.new("RGB", (16, 16), (200, 100, 50))
+        ex = img.getexif()
+        ex[0x8825] = {1: "N", 2: (51.0, 30.0, 0.0)}    # GPSInfo — the user's location
+        ex[0x010F] = "Canon"                           # Make
+        img.save(target, "JPEG", exif=ex.tobytes(), quality=95)
+
+        a = app()
+        a.folder, a.files, a.index = d, ["photo.jpg"], 0
+        a.current_pil = Image.open(target)
+        a.current_pil.load()
+        a.last_save = {"dir": "", "fmt": "JPEG", "quality": 95,
+                       "keep_meta": keep_meta, "to_srgb": False}
+        a._apply_edits = lambda im: im
+        a._capture_last_filter = lambda: None
+        a._refresh_saved_indicator = lambda: None
+        assert a._write_overwrite(target) is True, "overwrite reported failure"
+        return Image.open(target).getexif()
+
+    stripped = overwrite_with(False)
+    assert 0x8825 not in stripped, "GPS survived Ctrl+S despite keep_meta=False"
+    assert 0x010F not in stripped, "camera EXIF survived Ctrl+S despite keep_meta=False"
+
+    kept = overwrite_with(True)
+    assert 0x8825 in kept, "GPS was dropped by Ctrl+S despite keep_meta=True"
+    assert 0x010F in kept, "camera EXIF was dropped by Ctrl+S despite keep_meta=True"
+
+
+@check
 def overwrite_refuses_unhandled_type():
     a = app()
     a.folder, a.files, a.index = ".", ["photo.tif"], 0

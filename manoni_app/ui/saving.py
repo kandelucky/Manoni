@@ -85,6 +85,34 @@ class SaveMixin:
         except Exception:
             return img, icc
 
+    def _render_for_save(self, keep_meta=True, to_srgb=False):
+        """The edited FULL-RES image, plus the metadata kwargs to write beside it.
+
+        The single place that decides what a saved file carries, so EVERY save —
+        quick copy, Save as… and overwrite alike — obeys the same two Export
+        settings. It is deliberately not inlined into the writers: when each
+        writer decided for itself, the overwrite path quietly kept the EXIF (GPS
+        included) of a user who had asked in Settings for it to be stripped.
+
+        Returns (img, extra) ready to hand to Image.save(**extra)."""
+        extra = self._export_meta() if keep_meta else {}
+        img = self._apply_edits(self.current_pil.convert("RGB"))
+        # Convert wide-gamut colours into sRGB for the web, if asked. Needs the
+        # source profile to convert FROM; an untagged photo is already sRGB.
+        if to_srgb:
+            icc = (self.current_pil.info or {}).get("icc_profile")
+            if icc:
+                img, srgb_icc = self._to_srgb(img, icc)
+                if keep_meta:
+                    extra["icc_profile"] = srgb_icc    # re-tag as sRGB
+                # stripped metadata → leave untagged (viewers assume sRGB)
+        return img, extra
+
+    def _export_prefs(self):
+        "The (keep_meta, to_srgb) the user set in Settings → Export."
+        ls = getattr(self, "last_save", None) or {}
+        return bool(ls.get("keep_meta", True)), bool(ls.get("to_srgb", False))
+
     def _write_save(self, cfg, base):
         """Apply the live edits to the FULL-RES original and write ONE file using
         cfg = {dir, fmt, quality}, named `base` + the format's extension. The
@@ -96,18 +124,8 @@ class SaveMixin:
             # Never silently overwrite an existing file (a clashing name, or a
             # second save of the same photo) — number it instead.
             out = unique_path(os.path.join(cfg["dir"], base + self.FMT_EXT[fmt]))
-            # Carry ICC profile + EXIF across, unless this save strips metadata.
-            extra = self._export_meta() if cfg.get("keep_meta", True) else {}
-            img = self._apply_edits(self.current_pil.convert("RGB"))
-            # Convert wide-gamut colours into sRGB for the web, if asked. Needs the
-            # source profile to convert FROM; an untagged photo is already sRGB.
-            if cfg.get("to_srgb"):
-                icc = (self.current_pil.info or {}).get("icc_profile")
-                if icc:
-                    img, srgb_icc = self._to_srgb(img, icc)
-                    if cfg.get("keep_meta", True):
-                        extra["icc_profile"] = srgb_icc   # re-tag as sRGB
-                    # stripped metadata → leave untagged (viewers assume sRGB)
+            img, extra = self._render_for_save(cfg.get("keep_meta", True),
+                                               cfg.get("to_srgb", False))
             if fmt == "PNG":
                 img.save(out, "PNG", **extra)      # lossless; quality not applicable
             else:
@@ -131,8 +149,12 @@ class SaveMixin:
 
     def _write_overwrite(self, target):
         """Apply the live edits to the FULL-RES original and write them BACK OVER
-        `target` — the open file itself — in its own format. Metadata is carried
-        across (Orientation forced to 1). Returns True on success.
+        `target` — the open file itself — in its own format. Returns True on success.
+
+        Metadata follows Settings → Export, exactly as the copy saves do: tick
+        "strip metadata" and the GPS in the original is gone once this returns.
+        (It used to carry EXIF across unconditionally, which silently wrote a
+        user's location back into a file they had asked to have it stripped from.)
 
         This is the one save that DELIBERATELY replaces an existing file, so it
         skips unique_path. It is still crash-safe: the bytes go to a temp file in
@@ -145,8 +167,8 @@ class SaveMixin:
             return False
         tmp = None
         try:
-            extra = self._export_meta()            # ICC + EXIF, Orientation → 1
-            img = self._apply_edits(self.current_pil.convert("RGB"))
+            keep_meta, to_srgb = self._export_prefs()
+            img, extra = self._render_for_save(keep_meta, to_srgb)
             directory = os.path.dirname(target) or "."
             # Temp file in the SAME folder so os.replace is a true atomic rename.
             fd, tmp = tempfile.mkstemp(suffix=os.path.splitext(target)[1],
