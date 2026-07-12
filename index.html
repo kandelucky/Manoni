@@ -185,6 +185,31 @@
     background:var(--chip);border:var(--hair) solid var(--border2);
     border-bottom-width:2px;border-radius:5px;padding:6px 8px;min-width:11px;text-align:center}
 
+  /* ---------------- faq ----------------
+     Answers are always visible, never behind an accordion: most readers arrive
+     from a link straight to one anchor (#raw, #smartscreen) and must see the
+     answer on landing, not a button to press. :target tints the one they came
+     for so it is obvious which question the link meant. */
+  .faq{display:grid;gap:2px;max-width:760px}
+  .faq .q{scroll-margin-top:90px;padding:22px 20px;border-radius:10px;
+    border:var(--hair) solid transparent;transition:background .35s ease,border-color .35s ease}
+  .faq .q:target{background:var(--panel);border-color:var(--border2)}
+  .faq .q + .q{border-top:var(--hair) solid var(--divider);border-radius:10px}
+  .faq h3{font-size:18px;font-weight:620;letter-spacing:-.01em;display:flex;
+    align-items:baseline;gap:9px}
+  .faq h3 .permalink{font-family:var(--mono);font-size:14px;color:var(--border2);
+    opacity:0;transition:opacity .2s ease}
+  .faq .q:hover h3 .permalink{opacity:1}
+  .faq h3 .permalink:hover{color:var(--acc)}
+  .faq .q p{color:var(--fg2);font-size:15px;line-height:1.62;margin:12px 0 0}
+  .faq .q p.tight{margin-top:8px}
+  .faq .q b{color:var(--fg)}
+  .faq .lede{color:var(--dim);font-size:13.5px;margin-top:10px}
+  .faq table{border-collapse:collapse;margin-top:14px;width:100%;font-size:14.5px}
+  .faq td{padding:9px 12px 9px 0;border-bottom:var(--hair) solid var(--divider);
+    color:var(--fg2);vertical-align:top}
+  .faq td:first-child{white-space:nowrap;color:var(--fg);width:1%;padding-right:22px}
+
   /* ---------------- footer ---------------- */
   .foot{border-top:var(--hair) solid var(--border);padding:46px 0 60px;color:var(--dim)}
   .foot .wrap{display:block}
@@ -235,6 +260,7 @@
       <a href="#cull" class="hide">Browse &amp; cull</a>
       <a href="#keys" class="hide">Keyboard</a>
       <a href="#share" class="hide">Share</a>
+      <a href="#faq" class="hide">FAQ</a>
       <a href="https://github.com/kandelucky/Manoni">GitHub</a>
       <button class="tt" id="tt" title="Toggle theme" aria-label="Toggle theme">◐</button>
     </nav>
@@ -254,7 +280,7 @@
         <a class="btn2" href="https://github.com/kandelucky/Manoni">View on GitHub</a>
       </div>
       <div class="tech">Pure Python + Tkinter + Pillow · open source · GPL-3.0</div>
-      <div class="tech" style="margin-top:8px">Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a> · <a href="code-signing.html">code signing policy</a></div>
+      <div class="tech" style="margin-top:8px">Not code-signed yet, so Windows will warn you — <a href="#smartscreen">here's why, and how to check it yourself</a> · <a href="code-signing.html">how releases are built</a></div>
 
       <div class="flow">
         <span class="step"><img src="assets/readme/folder-open.png" alt=""> Browse</span>
@@ -410,6 +436,108 @@
       </div>
     </div>
   </section>
+
+  <div class="rule"></div>
+
+  <!-- ===================== FAQ ===================== -->
+  <section class="section" id="faq">
+    <div class="wrap">
+      <div class="head reveal">
+        <div class="eyebrow">Questions</div>
+        <h2>The honest answers</h2>
+        <p>Including the ones that don't flatter Manoni. Every question has its own link — hover a question to grab it.</p>
+      </div>
+
+      <div class="faq reveal">
+
+        <div class="q" id="smartscreen">
+          <h3>Why does Windows warn me when I open the installer?<a class="permalink" href="#smartscreen" aria-label="Link to this answer">#</a></h3>
+          <p>Because Manoni is <b>not code-signed</b>, and Windows SmartScreen warns about every unsigned program it hasn't seen before. It's a "we don't know who wrote this" warning, not a virus warning.</p>
+          <p>A code-signing certificate costs a few hundred dollars a year. SignPath Foundation gives them to open-source projects for free — I applied, and they turned me down for now, because the project is too new to show the public track record they ask for. Windows itself asks for no such thing; SignPath does, because it gives the certificate away.</p>
+          <p>So the honest answer: the warning goes away once enough people use Manoni for it to qualify. Until then, click <b>More info → Run anyway</b> — or don't take my word for any of it, and read the next answer instead.</p>
+        </div>
+
+        <div class="q" id="safe">
+          <h3>How do I know it's safe?<a class="permalink" href="#safe" aria-label="Link to this answer">#</a></h3>
+          <p>Don't trust me. Check.</p>
+          <p class="tight">Every release is built <b>on GitHub's servers from the public source</b> — not on my machine, where I could have quietly slipped something in. You can open the <a href="https://github.com/kandelucky/Manoni/actions">build that produced your exact file</a>, read the <a href="https://github.com/kandelucky/Manoni/blob/main/.github/workflows/build.yml">workflow</a> that made it, and read <a href="https://github.com/kandelucky/Manoni">every line of source</a> that went into it.</p>
+          <p>Or skip all of that and build it yourself: Python 3.14, <code>pip install -r requirements.txt</code>, run it. No compilation step, no binary blobs. <a href="code-signing.html">More on how releases are built →</a></p>
+        </div>
+
+        <div class="q" id="privacy">
+          <h3>Does it phone home?<a class="permalink" href="#privacy" aria-label="Link to this answer">#</a></h3>
+          <p>No telemetry, no analytics, no account, no ads.</p>
+          <p>Manoni makes exactly <b>one</b> network request in its entire life, and only if you click <b>Settings → About → Check for updates</b>: it asks GitHub what the latest release number is and compares it to yours. It does not check at launch, it does not check in the background, and it sends nothing about you or your photos. Never click it, and Manoni never touches the network.</p>
+        </div>
+
+        <div class="q" id="free">
+          <h3>Is it really free? What's the catch?<a class="permalink" href="#free" aria-label="Link to this answer">#</a></h3>
+          <p>Free, and there's no catch. No trial, no watermark, no locked features, no "Pro" tier, no subscription, no account. GPL-3.0 open source.</p>
+          <p>I wrote it because Lightroom wouldn't open on my old laptop. It scratched my own itch — giving it away costs me nothing.</p>
+        </div>
+
+        <div class="q" id="commercial">
+          <h3>Can I use it for paid client work?<a class="permalink" href="#commercial" aria-label="Link to this answer">#</a></h3>
+          <p>Yes. GPL-3.0 restricts what you may do with <b>Manoni's source code</b> if you redistribute a modified version — it says nothing about the photos you edit with it. Those are yours. Use it in a business, charge for the results, no licence to buy and nobody to ask.</p>
+        </div>
+
+        <div class="q" id="originals">
+          <h3>Will it touch my originals?<a class="permalink" href="#originals" aria-label="Link to this answer">#</a></h3>
+          <p>Two answers, because two different things are going on.</p>
+          <p><b>Editing: no.</b> Every slider, crop, filter, text and logo is non-destructive — they live in memory and are only written when you choose to save. There are three saves, and only one replaces a file:</p>
+          <table>
+            <tr><td><b>Save a copy</b> · Ctrl+E</td><td>A new, numbered file in a subfolder next to the photo. The original is untouched, and an earlier copy is never overwritten.</td></tr>
+            <tr><td><b>Save as…</b> · Ctrl+Shift+S</td><td>The same, but you pick format, quality, name and folder.</td></tr>
+            <tr><td><b>Save</b> · Ctrl+S</td><td><b>Overwrites the open file.</b> No backup. Manoni asks you to confirm first, and offers to save a copy instead.</td></tr>
+          </table>
+          <p><b>Culling: yes — and this is the part to know.</b> When you mark a photo as a keeper or a reject, Manoni <b>moves the original file</b> into the folder you chose for keepers or rejects. That's the point of culling — it's how a folder of 1000 shots becomes a folder of 60. But it does mean the file leaves where it was. Nothing is deleted, it's a move, and you pick both folders yourself.</p>
+        </div>
+
+        <div class="q" id="catalog">
+          <h3>Do I need to manage a catalog or a library?<a class="permalink" href="#catalog" aria-label="Link to this answer">#</a></h3>
+          <p>No. No catalog, no database, no import step, no sidecar files scattered next to your photos. You point Manoni at a folder and it shows you the folder. Close it and nothing is left behind except your settings, in <code>%APPDATA%\Manoni</code>.</p>
+          <p>This is the deliberate difference from Lightroom. The catalog is what makes Lightroom powerful — and it's also what makes it heavy.</p>
+        </div>
+
+        <div class="q" id="raw">
+          <h3>Does it open RAW files?<a class="permalink" href="#raw" aria-label="Link to this answer">#</a></h3>
+          <p><b>Not yet</b> — and I'd rather say so here than have you find out after the download. Manoni currently opens JPEG, PNG, WEBP, BMP, GIF and TIFF.</p>
+          <p>RAW is on the roadmap as an <b>optional</b> add-on, because the library that decodes it is bigger than the whole rest of the app. Shipping it by default would break the one promise Manoni makes: that it opens instantly on a weak machine.</p>
+        </div>
+
+        <div class="q" id="lightroom">
+          <h3>Is this a Lightroom replacement?<a class="permalink" href="#lightroom" aria-label="Link to this answer">#</a></h3>
+          <p>For a lot of people, honestly, yes. For some, honestly, no.</p>
+          <p><b>What it does:</b> cull a folder fast with two keys · tone and colour, including an 8-band colour mixer with dedicated skin and gold controls · remove a blemish or a stray object · crop, straighten, mirror, fix keystoning · one-click filters you can save yourself · resize a whole folder, subfolders included · strip GPS and camera data before you post · text and logo watermarks, on one photo or a whole folder.</p>
+          <p><b>What it doesn't:</b> RAW, tethering, printing, HDR merge, panorama stitching, local masks beyond the retouch brush — and there's no catalog. If you need those, you need Lightroom, and I'd tell you so.</p>
+        </div>
+
+        <div class="q" id="oldlaptop">
+          <h3>Will it run on my old laptop?<a class="permalink" href="#oldlaptop" aria-label="Link to this answer">#</a></h3>
+          <p>That's the entire reason it exists. Manoni is Python, Tkinter and Pillow — no GPU requirement, no .NET, no Electron, no Chromium. It opens in about a second on the nine-year-old machine I wrote it on.</p>
+          <p>The heavy effects (denoise, clarity, texture, grain) are the only slow ones, and Manoni marks them with a coloured dot so you know which sliders cost you. Leave them alone and everything stays instant.</p>
+        </div>
+
+        <div class="q" id="platform">
+          <h3>Windows only?<a class="permalink" href="#platform" aria-label="Link to this answer">#</a></h3>
+          <p>The installer is Windows-only, yes. The code is pure Python with no Windows-only dependencies, so it will very likely run from source on macOS and Linux — but I don't test it there, and I'm not going to claim it works. A Mac build is on the list, not on a date.</p>
+        </div>
+
+        <div class="q" id="install">
+          <h3>How do I install and uninstall it?<a class="permalink" href="#install" aria-label="Link to this answer">#</a></h3>
+          <p>Download the <code>Setup.exe</code> from the <a href="https://github.com/kandelucky/Manoni/releases">releases page</a> and run it (see <a href="#smartscreen">the SmartScreen answer</a>). It installs per-user — no admin rights needed.</p>
+          <p>To uninstall: Settings → Apps, like anything else. Your photos are never in the install folder, so nothing of yours goes with it. Your settings stay in <code>%APPDATA%\Manoni</code> — delete that folder too if you want no trace left.</p>
+        </div>
+
+        <div class="q" id="language">
+          <h3>Can I get it in my language?<a class="permalink" href="#language" aria-label="Link to this answer">#</a></h3>
+          <p>It ships in <b>English and Polish</b>. Any other language is a JSON file: open <b>Settings → Language → Add your language</b>, and Manoni generates a template with every string in the app for you to fill in.</p>
+          <p>Translate one and send it, and it ships with the next release with your name on it. <a href="https://github.com/kandelucky/Manoni/discussions/categories/language-packs">Georgian is already on the board</a>.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer class="foot">
@@ -424,13 +552,14 @@
         <a href="#cull">Browse &amp; cull</a>
         <a href="#keys">Keyboard</a>
         <a href="#share">Community</a>
+        <a href="#faq">FAQ</a>
         <a href="https://github.com/kandelucky/Manoni">GitHub</a>
         <a href="https://github.com/kandelucky/Manoni/releases">Download</a>
-        <a href="code-signing.html">Code signing</a>
+        <a href="code-signing.html">How releases are built</a>
       </nav>
     </div>
     <div class="fbase">
-      <span class="mono">© 2026 Manoni · <a href="https://github.com/kandelucky/Manoni/blob/main/LICENSE">GPL-3.0</a> · <a href="code-signing.html">Code signing policy</a></span>
+      <span class="mono">© 2026 Manoni · <a href="https://github.com/kandelucky/Manoni/blob/main/LICENSE">GPL-3.0</a> · <a href="code-signing.html">How releases are built</a></span>
       <span class="road">On the way: optional RAW support, and a dedicated home for shared language packs &amp; filters.</span>
     </div>
   </div>

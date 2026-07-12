@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Code signing policy — Manoni</title>
-<meta name="description" content="How Manoni's Windows releases are built and signed: GitHub Actions builds from public source, free code signing by SignPath.io with a certificate by SignPath Foundation.">
+<title>How releases are built — Manoni</title>
+<meta name="description" content="Manoni is not code-signed yet, so Windows SmartScreen warns about it. Here is why, and what you can verify instead: every release is built by GitHub Actions from the public source.">
 <link rel="icon" href="manoni-icon.png">
 <style>
   :root{
@@ -91,13 +91,27 @@
 <main>
   <div class="wrap">
     <div class="eyebrow">Trust &amp; releases</div>
-    <h1>Code signing policy</h1>
-    <p class="lead">How Manoni's Windows releases are built, signed and kept honest.</p>
+    <h1>How releases are built</h1>
+    <p class="lead">Manoni is not code-signed yet. Here is exactly what that means,
+    and what you can check instead of taking my word for it.</p>
 
     <div class="card">
-      <p>Free code signing provided by <a href="https://signpath.io">SignPath.io</a>,
-      certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+      <p><b>Manoni is not code-signed</b>, so Windows SmartScreen warns about it. That
+      is a "we don't know who wrote this" warning, not a virus warning.</p>
+      <p>A code-signing certificate costs a few hundred dollars a year. SignPath
+      Foundation gives them to open-source projects for free — I applied, and they
+      turned me down for now because the project is too new to show the public track
+      record they ask for. Windows itself asks for no such thing; SignPath does,
+      because it gives the certificate away. So the warning goes away once Manoni is
+      established enough to qualify, and not before.</p>
+      <p>In the meantime, you do not have to trust me — see below.</p>
     </div>
+
+    <h2>What you can verify</h2>
+    <p>Every release is built on GitHub's servers from the public source, so the
+    installer you download is not something I could have quietly altered on my own
+    machine. You can open the build that produced your exact file, read the workflow
+    that made it, and read every line of source that went into it.</p>
 
     <h2>How releases are built</h2>
     <p>Every release of Manoni is compiled from the public source code in the
@@ -111,10 +125,10 @@
     <p>Manoni is developed and maintained by a single person:</p>
     <ul>
       <li><b>Lasha Kandelaki</b> (<a href="https://github.com/kandelucky">@kandelucky</a>) —
-      committer, reviewer, and release / signing approver.</li>
+      committer, reviewer, and release approver.</li>
     </ul>
     <p>Two-factor authentication is enforced on the accounts used for the source
-    repository and for signing.</p>
+    repository and for publishing releases.</p>
 
     <h2>Privacy</h2>
     <p>Manoni runs entirely on your computer. It does <b>not</b> collect, transmit or
