@@ -45,9 +45,16 @@ jobs:
           path: installer/*.exe
           if-no-files-found: error
 
-      - name: Attach installer to draft release
+      # The .mnl language packs ride along on EVERY release, because the download
+      # link handed out on the Discussions board is the version-less
+      #   /releases/latest/download/manoni-ka.mnl
+      # which resolves against whatever the newest release happens to be. Leave a
+      # pack off one release and that link 404s for everyone.
+      - name: Attach installer + language packs to draft release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: installer/*.exe
+          files: |
+            installer/*.exe
+            language-packs/*.mnl
